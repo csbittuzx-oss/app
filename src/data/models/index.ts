@@ -15,7 +15,10 @@ export interface Song {
   duration: number;       // seconds
   trackNumber?: number;
   genre?: string;
+  language?: string;
   year?: number;
+  playCount?: number;
+  popularity?: number;
   explicit?: boolean;
   provider: MusicProvider;
   externalUrl?: string;   // link to original source
@@ -26,7 +29,8 @@ export interface Song {
 export interface Artist {
   id: string;
   name: string;
-  image: string;
+  profileImage?: string;  // Dedicated official artist profile photo
+  image: string;         // Alias to profileImage for backward compatibility
   imageLg?: string;
   genre?: string;
   bio?: string;

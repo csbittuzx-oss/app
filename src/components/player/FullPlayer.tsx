@@ -624,11 +624,7 @@ export function FullPlayer() {
             YouTube Music HD Stream
           </p>
         )}
-        {currentSong.provider === 'saavn' && (
-          <p style={{ textAlign: 'center', fontSize: 'var(--text-xs)', color: 'var(--color-accent)', paddingBottom: 8, opacity: 0.9 }}>
-            High Quality Stream · Musify Engine
-          </p>
-        )}
+
         {currentSong.provider === 'itunes' && (
           <p style={{ textAlign: 'center', fontSize: 'var(--text-xs)', color: 'var(--color-text-muted)', paddingBottom: 8 }}>
             30s preview via iTunes

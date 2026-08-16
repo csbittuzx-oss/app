@@ -6,6 +6,7 @@ import { ArtistCard } from '../components/cards/ArtistCard';
 import { EmptyState } from '../components/shared/ErrorState';
 import { SpotifyImportModal } from '../components/library/SpotifyImportModal';
 import { PlaylistActionModal } from '../components/library/PlaylistActionModal';
+import { filterSpotifyAvailableTracksSync } from '../services/SpotifyAvailabilityService';
 import type { Playlist } from '../data/models';
 
 type LibTab = 'playlists' | 'songs' | 'artists';
@@ -467,8 +468,9 @@ export function LibraryScreen() {
         )}
 
         {/* Liked Songs tab */}
-        {activeTab === 'songs' && (
-          state.favorites.length === 0 ? (
+        {activeTab === 'songs' && (() => {
+          const visibleFavorites = filterSpotifyAvailableTracksSync(state.favorites);
+          return visibleFavorites.length === 0 ? (
             <EmptyState
               icon={<svg width="48" height="48" viewBox="0 0 24 24" fill="none"><path d="M20.84 4.61a5.5 5.5 0 00-7.78 0L12 5.67l-1.06-1.06a5.5 5.5 0 00-7.78 7.78l1.06 1.06L12 21.23l7.78-7.78 1.06-1.06a5.5 5.5 0 000-7.78z" stroke="var(--color-text-muted)" strokeWidth="1.5"/></svg>}
               title="No liked songs yet"
@@ -476,12 +478,12 @@ export function LibraryScreen() {
             />
           ) : (
             <div style={{ paddingTop: 8 }}>
-              {state.favorites.map((song, i) => (
-                <SongCard key={song.id} song={song} queue={state.favorites} index={i} />
+              {visibleFavorites.map((song, i) => (
+                <SongCard key={song.id} song={song} queue={visibleFavorites} index={i} />
               ))}
             </div>
-          )
-        )}
+          );
+        })()}
 
         {/* Artists tab */}
         {activeTab === 'artists' && (

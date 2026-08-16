@@ -1,7 +1,7 @@
 <?xml version='1.0' encoding='utf-8'?>
 <resources>
-    <string name="app_name">AuraMusic</string>
-    <string name="title_activity_main">AuraMusic</string>
+    <string name="app_name">Soundwave</string>
+    <string name="title_activity_main">Soundwave</string>
     <string name="package_name">com.auramusic.app</string>
     <string name="custom_url_scheme">com.auramusic.app</string>
 </resources>

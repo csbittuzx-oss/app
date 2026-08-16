@@ -2,21 +2,22 @@ import { useEffect, useState } from 'react';
 import { useApp } from '../state/AppContext';
 import { usePlayer } from '../state/PlayerContext';
 import { getArtistDetails } from '../data/repository/musicRepository';
+import { getArtistProfileImageSync, getArtistAvatarPlaceholder } from '../services/ArtistProfileService';
 import type { Artist, Song } from '../data/models';
 import { SongCard } from '../components/cards/SongCard';
 import { ArtistCard } from '../components/cards/ArtistCard';
 import { SkeletonList } from '../components/shared/SkeletonCard';
 import { ErrorState } from '../components/shared/ErrorState';
 import { formatNumber } from '../core/utils';
-import { CONFIG } from '../config';
 
 export function ArtistScreen() {
   const { nav: { nav, goBack }, isFavoriteArtist, toggleFavoriteArtist } = useApp();
   const { playSong: _playSong } = usePlayer();
 
   const artistName = String(nav.params?.artistName || '');
+  const initialArtist = nav.params?.artist as Artist | undefined;
 
-  const [artist, setArtist] = useState<Artist | null>(null);
+  const [artist, setArtist] = useState<Artist | null>(initialArtist || null);
   const [topTracks, setTopTracks] = useState<Song[]>([]);
   const [similarArtists, setSimilarArtists] = useState<Artist[]>([]);
   const [loading, setLoading] = useState(true);
@@ -37,6 +38,7 @@ export function ArtistScreen() {
   }, [artistName]);
 
   const isFollowed = artist ? isFavoriteArtist(artist.id) : false;
+  const heroPhoto = artist?.profileImage || artist?.image || getArtistProfileImageSync(artistName);
 
   return (
     <div style={{ display: 'flex', flexDirection: 'column', height: '100%' }}>
@@ -66,25 +68,27 @@ export function ArtistScreen() {
         ) : (
           <>
             {/* Hero */}
-            <div style={{ position: 'relative', height: 240 }}>
+            <div style={{ position: 'relative', height: 260 }}>
               <img
-                src={artist?.imageLg || artist?.image || CONFIG.ARTWORK_PLACEHOLDER}
+                src={heroPhoto}
                 alt={artist?.name ? `${artist.name} photo` : 'Artist photo'}
                 loading="eager"
-                onError={(e) => { (e.target as HTMLImageElement).src = CONFIG.ARTWORK_PLACEHOLDER; }}
-                style={{ width: '100%', height: 240, objectFit: 'cover', display: 'block' }}
+                onError={(e) => {
+                  (e.target as HTMLImageElement).src = getArtistAvatarPlaceholder(artist?.name || artistName);
+                }}
+                style={{ width: '100%', height: 260, objectFit: 'cover', display: 'block' }}
               />
               {/* gradient overlay */}
               <div style={{
                 position: 'absolute', inset: 0,
-                background: 'linear-gradient(to bottom, rgba(0,0,0,0.2) 0%, var(--color-bg) 100%)',
+                background: 'linear-gradient(to bottom, rgba(0,0,0,0.1) 0%, rgba(0,0,0,0.6) 65%, var(--color-bg) 100%)',
               }} aria-hidden="true" />
               {/* Artist name */}
               <div style={{ position: 'absolute', bottom: 16, left: 20, right: 20 }}>
-                {loading ? (
-                  <div className="skeleton" style={{ height: 28, width: '60%', borderRadius: 6 }} />
+                {loading && !artist ? (
+                  <div className="skeleton" style={{ height: 32, width: '60%', borderRadius: 6 }} />
                 ) : (
-                  <h1 style={{ margin: 0, fontFamily: 'var(--font-display)', fontSize: 'var(--text-3xl)', color: '#fff', textShadow: '0 2px 8px rgba(0,0,0,0.6)', lineHeight: 1.1 }}>
+                  <h1 style={{ margin: 0, fontFamily: 'var(--font-display)', fontSize: 'var(--text-3xl)', color: '#fff', textShadow: '0 2px 10px rgba(0,0,0,0.7)', lineHeight: 1.15, fontWeight: 800 }}>
                     {artist?.name || artistName}
                   </h1>
                 )}

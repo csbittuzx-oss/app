@@ -16,6 +16,7 @@ import { userProfileTracker } from '../recommendation/UserProfileTracker';
 
 export interface PlaybackSession {
   song: Song;
+  trackId: string;
   playbackPosition: number;
   duration: number;
   progress: number;
@@ -52,14 +53,14 @@ class AudioPlayer {
   private _audioQuality: AudioQuality = 'high';
   private callbacks: Set<AudioPlayerCallback> = new Set();
 
-
-
   // AutoPlay & Recommendation state
   private isAutoPlayFetching = false;
   private lastPrefetchedSongId: string | null = null;
   private lastTimeUpdateSecond = 0;
 
-  // Continue Listening state
+  // Continue Listening & Resume state (Restored from previous session exclusively for resume)
+  private savedResumeTrackId: string | null = null;
+  private savedResumePosition = 0;
   private pendingSeekPosition = 0;
   private lastSavedPositionTime = 0;
 
@@ -89,7 +90,8 @@ class AudioPlayer {
   }
 
   /**
-   * Restores the exact previous song, queue, and playback position on launch.
+   * Restores the previous song and queue metadata on launch for Resume.
+   * Position is bound to savedResumeTrackId so new song plays always start at 0:00.
    */
   private restoreSavedSession() {
     try {
@@ -101,7 +103,11 @@ class AudioPlayer {
       this._queue = session.queue && session.queue.length > 0 ? session.queue : [session.song];
       this._originalQueue = [...this._queue];
       this._queueIndex = session.queueIndex !== undefined && session.queueIndex < this._queue.length ? session.queueIndex : 0;
-      this.pendingSeekPosition = session.playbackPosition || 0;
+      
+      // Save trackId and position ONLY for explicit Resume
+      this.savedResumeTrackId = session.trackId || session.song.id;
+      this.savedResumePosition = session.playbackPosition || 0;
+      this.pendingSeekPosition = 0;
 
       if (session.song.previewUrl) {
         this.audio.src = session.song.previewUrl;
@@ -120,8 +126,8 @@ class AudioPlayer {
 
     const duration = this.audio.duration || song.duration || 0;
     let currentTime = this.audio.currentTime || 0;
-    if (this.pendingSeekPosition > 0 && currentTime === 0) {
-      currentTime = this.pendingSeekPosition;
+    if (this.savedResumePosition > 0 && currentTime === 0 && this.savedResumeTrackId === song.id) {
+      currentTime = this.savedResumePosition;
     }
 
     const progress = duration > 0 ? currentTime / duration : 0;
@@ -130,6 +136,7 @@ class AudioPlayer {
 
     const session: PlaybackSession = {
       song,
+      trackId: song.id,
       playbackPosition: savedPosition,
       duration,
       progress: duration > 0 ? savedPosition / duration : 0,
@@ -206,13 +213,13 @@ class AudioPlayer {
         this.lastTimeUpdateSecond = currentSec;
       }
 
-      // Proactively pre-fetch next recommendations when 60% through the song and near queue end
+      // Proactively pre-fetch context-pure recommendations when 50% through the song and near queue end
       if (
         this._autoPlay &&
-        progress > 0.60 &&
+        progress > 0.50 &&
         this.currentSong &&
         this.lastPrefetchedSongId !== this.currentSong.id &&
-        this._queueIndex >= this._queue.length - 1
+        this._queueIndex >= this._queue.length - 2
       ) {
         this.lastPrefetchedSongId = this.currentSong.id;
         this.triggerSmartPreload(this.currentSong);
@@ -272,7 +279,7 @@ class AudioPlayer {
     try {
       const context = this.getRecommendationContext();
       const nextTracks = await smartRecommendationEngine.getSmartNextTracks(currentSong, 5, context);
-      if (nextTracks && nextTracks.length > 0 && this._queueIndex >= this._queue.length - 1) {
+      if (nextTracks && nextTracks.length > 0 && this._queueIndex >= this._queue.length - 2) {
         this._queue.push(...nextTracks);
         this._originalQueue.push(...nextTracks);
         this.emit({ type: 'queuechange' });
@@ -405,12 +412,19 @@ class AudioPlayer {
         : 0;
     }
 
-    if (seekToSeconds !== undefined) {
-      this.pendingSeekPosition = seekToSeconds;
-    }
-
     const targetSong = song || this._queue[this._queueIndex];
     if (!targetSong) return;
+
+    // ── Correct Playback State Rules ──
+    if (seekToSeconds !== undefined) {
+      // Explicit seek requested (e.g. from explicit Resume action)
+      this.pendingSeekPosition = seekToSeconds;
+    } else {
+      // User tapped/played a song (from Home, Search, Playlist, Liked Songs, etc.) -> ALWAYS start at 0:00!
+      this.pendingSeekPosition = 0;
+      this.savedResumePosition = 0;
+      this.savedResumeTrackId = null;
+    }
 
     this.lastTimeUpdateSecond = 0;
     userProfileTracker.recordPlay(targetSong);
@@ -500,6 +514,8 @@ class AudioPlayer {
     if (this.pendingSeekPosition > 0) {
       this.audio.currentTime = this.pendingSeekPosition;
       this.pendingSeekPosition = 0;
+    } else {
+      this.audio.currentTime = 0;
     }
 
     this.emit({ type: 'songchange', song: targetSong });
@@ -528,30 +544,31 @@ class AudioPlayer {
 
   togglePlay() {
     if (this.audio.paused) {
-      if (!this.audio.src && this.currentSong) {
-        this.play(this.currentSong, this._queue, this._queueIndex, this.pendingSeekPosition);
-      } else {
-        if (this.pendingSeekPosition > 0 && Math.abs(this.audio.currentTime - this.pendingSeekPosition) > 1) {
-          this.audio.currentTime = this.pendingSeekPosition;
-          this.pendingSeekPosition = 0;
-        }
-        this.audio.play().catch(() => {});
-      }
+      this.resume();
     } else {
       this.audio.pause();
     }
   }
 
   pause() { this.audio.pause(); }
+
   resume() {
     if (this.audio.paused) {
-      if (!this.audio.src && this.currentSong) {
-        this.play(this.currentSong, this._queue, this._queueIndex, this.pendingSeekPosition);
-      } else {
-        if (this.pendingSeekPosition > 0 && Math.abs(this.audio.currentTime - this.pendingSeekPosition) > 1) {
-          this.audio.currentTime = this.pendingSeekPosition;
-          this.pendingSeekPosition = 0;
+      const current = this.currentSong;
+      // If user explicitly resumes the restored session from previous app launch
+      if (current && this.savedResumeTrackId === current.id && this.savedResumePosition > 0) {
+        const resumePos = this.savedResumePosition;
+        this.savedResumePosition = 0;
+        this.savedResumeTrackId = null;
+        if (!this.audio.src) {
+          this.play(current, this._queue, this._queueIndex, resumePos);
+        } else {
+          this.audio.currentTime = resumePos;
+          this.audio.play().catch(() => {});
         }
+      } else if (!this.audio.src && this.currentSong) {
+        this.play(this.currentSong, this._queue, this._queueIndex);
+      } else {
         this.audio.play().catch(() => {});
       }
     }
@@ -562,6 +579,8 @@ class AudioPlayer {
     if (!isNaN(dur) && dur > 0) {
       this.audio.currentTime = progress * dur;
       this.pendingSeekPosition = 0;
+      this.savedResumePosition = 0;
+      this.savedResumeTrackId = null;
       this.saveCurrentSession();
     }
   }
@@ -569,6 +588,8 @@ class AudioPlayer {
   seekToTime(seconds: number) {
     this.audio.currentTime = seconds;
     this.pendingSeekPosition = 0;
+    this.savedResumePosition = 0;
+    this.savedResumeTrackId = null;
     this.saveCurrentSession();
   }
 

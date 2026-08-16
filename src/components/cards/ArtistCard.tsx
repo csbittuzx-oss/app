@@ -1,6 +1,6 @@
 import type { Artist } from '../../data/models';
 import { useApp } from '../../state/AppContext';
-import { CONFIG } from '../../config';
+import { getArtistProfileImageSync, getArtistAvatarPlaceholder } from '../../services/ArtistProfileService';
 
 interface ArtistCardProps {
   artist: Artist;
@@ -13,10 +13,11 @@ export function ArtistCard({ artist, size = 80, onClick }: ArtistCardProps) {
 
   const handleClick = () => {
     if (onClick) { onClick(artist); return; }
-    navigate('artist', { artistName: artist.name });
+    navigate('artist', { artistName: artist.name, artist });
   };
 
   const isFollowed = isFavoriteArtist(artist.id);
+  const photoUrl = artist.profileImage || artist.image || getArtistProfileImageSync(artist.name);
 
   return (
     <div
@@ -33,21 +34,23 @@ export function ArtistCard({ artist, size = 80, onClick }: ArtistCardProps) {
     >
       <div style={{ position: 'relative' }}>
         <img
-          src={artist.image}
+          src={photoUrl}
           alt={`${artist.name} photo`}
           width={size}
           height={size}
           loading="lazy"
-          onError={(e) => { (e.target as HTMLImageElement).src = CONFIG.ARTWORK_PLACEHOLDER; }}
+          onError={(e) => {
+            (e.target as HTMLImageElement).src = getArtistAvatarPlaceholder(artist.name);
+          }}
           style={{
             borderRadius: '50%',
             objectFit: 'cover',
             display: 'block',
             width: size,
             height: size,
-            border: isFollowed ? '2px solid var(--color-accent)' : '2px solid var(--color-border)',
-            boxShadow: isFollowed ? 'var(--shadow-accent)' : 'none',
-            transition: 'border-color 200ms var(--ease-standard)',
+            border: isFollowed ? '2.5px solid var(--color-accent)' : '2px solid var(--color-border)',
+            boxShadow: isFollowed ? 'var(--shadow-accent)' : '0 4px 12px rgba(0,0,0,0.3)',
+            transition: 'border-color 200ms var(--ease-standard), transform 150ms ease',
           }}
         />
         {isFollowed && (
@@ -66,10 +69,11 @@ export function ArtistCard({ artist, size = 80, onClick }: ArtistCardProps) {
       </div>
       <div style={{ textAlign: 'center', width: '100%' }}>
         <p style={{
-          margin: 0, fontSize: 'var(--text-xs)', fontWeight: 500,
+          margin: 0, fontSize: 'var(--text-xs)', fontWeight: 600,
           color: 'var(--color-text-primary)',
           overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap',
           maxWidth: size + 16,
+          letterSpacing: '-0.01em',
         }}>
           {artist.name}
         </p>

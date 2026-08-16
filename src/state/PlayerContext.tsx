@@ -168,7 +168,9 @@ export function PlayerProvider({ children }: { children: React.ReactNode }) {
 
   const playSong = useCallback((song: Song, queue?: Song[], startIndex?: number) => {
     audioPlayer.play(song, queue || [song], startIndex);
+    dispatch({ type: 'SET_SONG', payload: song });
     dispatch({ type: 'SET_QUEUE', payload: { queue: queue || [song], queueIndex: startIndex || 0 } });
+    dispatch({ type: 'SET_PROGRESS', payload: { currentTime: 0, duration: song.duration || 0, progress: 0 } });
   }, []);
 
   const togglePlay = useCallback(() => audioPlayer.togglePlay(), []);

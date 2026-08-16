@@ -237,6 +237,11 @@ body {
 
 .scroll-x::-webkit-scrollbar { display: none; }
 
+.playlist-shelf-card:active {
+  transform: scale(0.96);
+  opacity: 0.88;
+}
+
 /* ─── Skeleton / Shimmer ─── */
 
 @keyframes shimmer {

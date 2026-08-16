@@ -77,6 +77,8 @@ export async function searchJioSaavn(query: string, limit = 20): Promise<SearchR
         songs = deepData.results.map((item: any) => {
           const fullAudioUrl = decryptMediaUrl(item.encrypted_media_url) || item.vlink || item.more_info?.vlink || null;
           const durationSec = parseInt(item.duration, 10) || 0;
+          const rawPlayCount = item.play_count || item.more_info?.play_count;
+          const playCount = rawPlayCount ? parseInt(String(rawPlayCount), 10) : undefined;
           return {
             id: `saavn_${item.id}`,
             title: decodeHtmlEntities(item.song || item.title || ''),
@@ -90,7 +92,10 @@ export async function searchJioSaavn(query: string, limit = 20): Promise<SearchR
             isLiked: false,
             isDownloaded: false,
             year: item.year ? parseInt(item.year, 10) : undefined,
+            playCount,
+            popularity: playCount && playCount > 1000000 ? 90 : playCount && playCount > 100000 ? 75 : 60,
             genre: item.language || 'Music',
+            language: (item.language || item.more_info?.language || '').toLowerCase(),
           };
         });
       }
@@ -149,6 +154,7 @@ export async function searchJioSaavn(query: string, limit = 20): Promise<SearchR
                   isDownloaded: false,
                   year: item.year ? parseInt(item.year, 10) : undefined,
                   genre: item.language || 'Music',
+                  language: (item.language || item.more_info?.language || '').toLowerCase(),
                 };
               });
             }
@@ -197,6 +203,8 @@ export async function getJioSaavnTrending(limit = 20): Promise<Song[]> {
       
       const durationSec = parseInt(item.more_info?.duration || item.duration, 10) || 0;
 
+      const rawPlayCount = item.more_info?.play_count || item.play_count;
+      const playCount = rawPlayCount ? parseInt(String(rawPlayCount), 10) : undefined;
       return {
         id: `saavn_${item.id}`,
         title: decodeHtmlEntities(item.title || item.song || ''),
@@ -210,7 +218,10 @@ export async function getJioSaavnTrending(limit = 20): Promise<Song[]> {
         isLiked: false,
         isDownloaded: false,
         year: item.year ? parseInt(item.year, 10) : undefined,
+        playCount,
+        popularity: 95, // High trending rank
         genre: item.language || 'Trending',
+        language: (item.language || item.more_info?.language || '').toLowerCase(),
       };
     });
 

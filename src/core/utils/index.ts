@@ -10,6 +10,17 @@ export function formatDuration(seconds: number): string {
   return `${m}:${s.toString().padStart(2, '0')}`;
 }
 
+/** Format playlist total seconds → '2 hr 04 min' or '48 min' */
+export function formatPlaylistDuration(seconds: number): string {
+  if (!seconds || isNaN(seconds) || seconds <= 0) return '0 min';
+  const hours = Math.floor(seconds / 3600);
+  const minutes = Math.floor((seconds % 3600) / 60);
+  if (hours > 0) {
+    return `${hours} hr ${minutes.toString().padStart(2, '0')} min`;
+  }
+  return `${minutes} min`;
+}
+
 /** Format a large number with K/M suffix */
 export function formatNumber(n: number): string {
   if (n >= 1_000_000) return `${(n / 1_000_000).toFixed(1)}M`;

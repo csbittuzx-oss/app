@@ -3,9 +3,11 @@ import { useApp } from '../state/AppContext';
 import { usePlayer } from '../state/PlayerContext';
 import { SongCard } from '../components/cards/SongCard';
 import { EmptyState } from '../components/shared/ErrorState';
-import { formatDuration } from '../core/utils';
+import { formatPlaylistDuration } from '../core/utils';
+import { filterSpotifyAvailableTracksSync } from '../services/SpotifyAvailabilityService';
 import { CONFIG } from '../config';
 import { getOfflineBackupPlaylist } from '../services/OfflineBackupService';
+import { getCuratedPlaylistById } from '../services/CuratedPlaylistsService';
 import { enrichSpotifyTracksArtwork } from '../data/api/spotifyApi';
 import type { Playlist } from '../data/models';
 
@@ -14,6 +16,7 @@ export function PlaylistScreen() {
   const { playSong } = usePlayer();
 
   const playlistId = String(nav.params?.playlistId || '');
+  const playlistParam = nav.params?.playlist as Playlist | undefined;
   const [offlinePlaylist, setOfflinePlaylist] = useState<Playlist | null>(null);
 
   useEffect(() => {
@@ -22,7 +25,10 @@ export function PlaylistScreen() {
     }
   }, [playlistId]);
 
-  const playlist = state.userPlaylists.find(p => p.id === playlistId) || (playlistId === 'offline_backup_mix' ? offlinePlaylist : null);
+  const playlist = playlistParam
+    || state.userPlaylists.find(p => p.id === playlistId)
+    || (playlistId === 'offline_backup_mix' ? offlinePlaylist : null)
+    || getCuratedPlaylistById(playlistId);
 
   // Automatically enrich songs with their distinct album artworks if they were sharing playlist cover
   useEffect(() => {
@@ -46,17 +52,18 @@ export function PlaylistScreen() {
     );
   }
 
-  const totalDuration = playlist.tracks.reduce((sum, s) => sum + s.duration, 0);
-  const artworkSrc = playlist.artwork || (playlist.tracks[0]?.artwork) || CONFIG.ARTWORK_PLACEHOLDER;
+  const verifiedTracks = filterSpotifyAvailableTracksSync(playlist.tracks);
+  const totalDuration = verifiedTracks.reduce((sum, s) => sum + s.duration, 0);
+  const artworkSrc = playlist.artwork || (verifiedTracks[0]?.artwork) || CONFIG.ARTWORK_PLACEHOLDER;
 
   const handlePlay = () => {
-    if (playlist.tracks.length) playSong(playlist.tracks[0], playlist.tracks, 0);
+    if (verifiedTracks.length) playSong(verifiedTracks[0], verifiedTracks, 0);
   };
 
   const handleShuffle = () => {
-    if (!playlist.tracks.length) return;
-    const idx = Math.floor(Math.random() * playlist.tracks.length);
-    playSong(playlist.tracks[idx], playlist.tracks, idx);
+    if (!verifiedTracks.length) return;
+    const shuffled = [...verifiedTracks].sort(() => Math.random() - 0.5);
+    playSong(shuffled[0], shuffled, 0);
   };
 
   return (
@@ -76,7 +83,7 @@ export function PlaylistScreen() {
         </button>
       </div>
 
-      <div className="scroll-area" style={{ flex: 1, paddingBottom: 'var(--content-bottom-pad)' }}>
+      <div className="scroll-area" style={{ flex: 1, paddingBottom: 'calc(var(--content-bottom-pad) + 40px)' }}>
         {/* Header */}
         <div style={{ padding: '60px 20px 20px', display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 14 }}>
           <div style={{
@@ -87,7 +94,7 @@ export function PlaylistScreen() {
             background: 'var(--color-surface-2)',
             display: 'flex', alignItems: 'center', justifyContent: 'center',
           }}>
-            {playlist.tracks.length > 0 && artworkSrc ? (
+            {verifiedTracks.length > 0 && artworkSrc ? (
               <img src={artworkSrc} alt="Playlist artwork" width={180} height={180}
                 loading="eager"
                 onError={(e) => { (e.target as HTMLImageElement).src = CONFIG.ARTWORK_PLACEHOLDER; }}
@@ -112,7 +119,7 @@ export function PlaylistScreen() {
               </p>
             )}
             <p style={{ margin: '6px 0 0', fontSize: 'var(--text-xs)', color: 'var(--color-text-muted)' }}>
-              {playlist.creator} · {playlist.tracks.length} songs · {formatDuration(totalDuration)}
+              {playlist.creator} · {verifiedTracks.length} songs · {formatPlaylistDuration(totalDuration)}
             </p>
           </div>
 
@@ -121,9 +128,9 @@ export function PlaylistScreen() {
             <button
               id="play-playlist-btn"
               onClick={handlePlay}
-              disabled={playlist.tracks.length === 0}
+              disabled={verifiedTracks.length === 0}
               className="btn btn-primary"
-              style={{ flex: 1, padding: '12px 20px', borderRadius: 'var(--radius-full)', opacity: playlist.tracks.length ? 1 : 0.5 }}
+              style={{ flex: 1, padding: '12px 20px', borderRadius: 'var(--radius-full)', opacity: verifiedTracks.length ? 1 : 0.5 }}
             >
               <svg width="18" height="18" viewBox="0 0 24 24" fill="currentColor"><polygon points="5 3 19 12 5 21 5 3"/></svg>
               Play
@@ -131,9 +138,9 @@ export function PlaylistScreen() {
             <button
               id="shuffle-playlist-btn"
               onClick={handleShuffle}
-              disabled={playlist.tracks.length === 0}
+              disabled={verifiedTracks.length === 0}
               className="btn btn-ghost"
-              style={{ flex: 1, padding: '12px 20px', borderRadius: 'var(--radius-full)', opacity: playlist.tracks.length ? 1 : 0.5 }}
+              style={{ flex: 1, padding: '12px 20px', borderRadius: 'var(--radius-full)', opacity: verifiedTracks.length ? 1 : 0.5 }}
             >
               <svg width="18" height="18" viewBox="0 0 24 24" fill="none"><polyline points="16 3 21 3 21 8"/><line x1="4" y1="20" x2="21" y2="3"/><polyline points="21 16 21 21 16 21"/><line x1="15" y1="15" x2="21" y2="21"/><line x1="4" y1="4" x2="9" y2="9"/></svg>
               Shuffle
@@ -141,18 +148,28 @@ export function PlaylistScreen() {
           </div>
         </div>
 
+        {/* Songs Header */}
+        <div style={{ padding: '8px 20px 10px', display: 'flex', alignItems: 'center', justifyContent: 'space-between', borderBottom: '1px solid var(--color-border)', marginBottom: 8 }}>
+          <h2 style={{ margin: 0, fontSize: 'var(--text-sm)', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.05em', color: 'var(--color-text-secondary)' }}>
+            Songs
+          </h2>
+          <span style={{ fontSize: 'var(--text-xs)', color: 'var(--color-text-muted)' }}>
+            {verifiedTracks.length} tracks
+          </span>
+        </div>
+
         {/* Tracks list */}
         <div style={{ padding: '0 20px' }}>
-          {playlist.tracks.length === 0 ? (
+          {verifiedTracks.length === 0 ? (
             <p style={{ textAlign: 'center', color: 'var(--color-text-muted)', margin: '32px 0' }}>
               No songs in this playlist yet.
             </p>
           ) : (
-            playlist.tracks.map((song, idx) => (
+            verifiedTracks.map((song, idx) => (
               <SongCard
                 key={song.id}
                 song={song}
-                queue={playlist.tracks}
+                queue={verifiedTracks}
                 index={idx}
                 playlistId={playlist.id}
               />

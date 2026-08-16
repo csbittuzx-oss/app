@@ -23,8 +23,8 @@ export interface UpdateCheckResult {
 }
 
 // Current App Version installed on device
-export const CURRENT_APP_VERSION = '1.2.0';
-export const CURRENT_BUILD_NUMBER = 20260816;
+export const CURRENT_APP_VERSION = '1.2.1';
+export const CURRENT_BUILD_NUMBER = 20260817;
 
 const FIREBASE_RTDB_URL = 'https://soundwaves-b520c-default-rtdb.asia-southeast1.firebasedatabase.app';
 const UPDATE_CACHE_KEY = 'sw_latest_update_info';

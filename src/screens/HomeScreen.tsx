@@ -3,23 +3,26 @@ import { useApp } from '../state/AppContext';
 import { usePlayer } from '../state/PlayerContext';
 import {
   getPersonalizedTrending,
+  getPersonalizedRecommendForYou,
   getPersonalizedNewReleases,
-  getDailyRecommendations,
-  getMoreLikeWhatYouLike,
-  getHappyHits,
-  getPartyHits,
-  getThrowbackHits,
   getPersonalizedTracksByLanguage,
   getPersonalizedArtists,
   LANGUAGE_METADATA,
 } from '../data/repository/musicRepository';
+import {
+  generateSpotifyStyleShelves,
+  getCachedShelves,
+  type PlaylistShelfData,
+} from '../services/CuratedPlaylistsService';
 import { userProfileTracker } from '../domain/recommendation/UserProfileTracker';
-import type { Song, Artist } from '../data/models';
+import type { Song, Artist, Playlist } from '../data/models';
 import { SongSquareCard } from '../components/cards/SongCard';
 import { ArtistCard } from '../components/cards/ArtistCard';
+import { PlaylistShelfCard } from '../components/cards/PlaylistShelfCard';
 import { SkeletonGrid } from '../components/shared/SkeletonCard';
 import { ErrorState } from '../components/shared/ErrorState';
 import { getGreeting } from '../core/utils';
+import { filterSpotifyAvailableTracksSync } from '../services/SpotifyAvailabilityService';
 import { CONFIG } from '../config';
 
 interface Section {
@@ -63,6 +66,8 @@ export function HomeScreen() {
   const { state: appState, nav: { navigate } } = useApp();
   const { playSong } = usePlayer();
   const [sections, setSections] = useState<Section[]>(() => getCachedSections() || []);
+  const [shelves, setShelves] = useState<PlaylistShelfData[]>(() => getCachedShelves() || []);
+  const [shelvesLoading, setShelvesLoading] = useState(() => !getCachedShelves());
   const [topArtists, setTopArtists] = useState<Artist[]>(() => getCachedArtists() || []);
   const [artistsLoading, setArtistsLoading] = useState(() => !getCachedArtists());
 
@@ -75,32 +80,6 @@ export function HomeScreen() {
     return userProfileTracker.getTopArtists(5);
   }, [appState.recentlyPlayed.length]);
 
-  // Jump In Back tracks: combine recently played, search recents, and playlist tracks
-  const jumpInBackTracks = useMemo(() => {
-    const combined: Song[] = [];
-    const seenIds = new Set<string>();
-
-    // 1. Partial/Recent tracks
-    [...appState.recentlyPlayed, ...appState.searchRecentlyPlayed].forEach((s) => {
-      if (!seenIds.has(s.id)) {
-        seenIds.add(s.id);
-        combined.push(s);
-      }
-    });
-
-    // 2. Tracks from custom playlists
-    appState.userPlaylists.forEach((pl) => {
-      pl.tracks.forEach((s) => {
-        if (!seenIds.has(s.id)) {
-          seenIds.add(s.id);
-          combined.push(s);
-        }
-      });
-    });
-
-    return combined.slice(0, 16);
-  }, [appState.recentlyPlayed, appState.searchRecentlyPlayed, appState.userPlaylists]);
-
   const loadFeed = useCallback((forceRefresh = false) => {
     const isOffline = !navigator.onLine;
 
@@ -109,21 +88,24 @@ export function HomeScreen() {
       const cached = getCachedSections();
       if (cached && cached.length > 0) {
         setSections(cached);
-        const cachedArts = getCachedArtists();
-        if (cachedArts) setTopArtists(cachedArts);
-        setArtistsLoading(false);
-        return;
       }
+      const cachedShelves = getCachedShelves();
+      if (cachedShelves && cachedShelves.length > 0) {
+        setShelves(cachedShelves);
+        setShelvesLoading(false);
+      }
+      const cachedArts = getCachedArtists();
+      if (cachedArts) {
+        setTopArtists(cachedArts);
+        setArtistsLoading(false);
+      }
+      return;
     }
 
     const defaultInitialSections: Section[] = [
       { id: 'trending', title: 'Trending Now', subtitle: 'What listeners are loving right now', songs: [], loading: true, error: false },
+      { id: 'recommend_for_you', title: 'Recommend for You', subtitle: 'Based on your listening history', badge: 'For You', songs: [], loading: true, error: false },
       { id: 'new_releases', title: 'New Releases', subtitle: 'Fresh drops in your languages', songs: [], loading: true, error: false },
-      { id: 'daily_rec', title: 'Recommendation for Today', subtitle: 'Fresh personalized mix for you', badge: 'Daily Mix', songs: [], loading: true, error: false },
-      { id: 'more_like_you', title: 'More Like What You Like', subtitle: 'Based on your favorite artists & plays', songs: [], loading: true, error: false },
-      { id: 'happy', title: 'Happy', subtitle: 'Upbeat, feel-good & positive vibes', songs: [], loading: true, error: false },
-      { id: 'party', title: 'Party', subtitle: 'High-energy dance & club hits', songs: [], loading: true, error: false },
-      { id: 'throwback', title: 'Throwback', subtitle: 'Timeless classics & golden nostalgia', songs: [], loading: true, error: false },
       ...languages.map((lang) => ({
         id: `lang_${lang}`,
         title: LANGUAGE_METADATA[lang]?.title || `${lang} Hits`,
@@ -162,30 +144,39 @@ export function HomeScreen() {
     // 1. Trending Now
     loadSection('trending', () => getPersonalizedTrending(languages, 16));
 
-    // 2. New Releases
+    // 2. Recommend for You (Personalized from listening history)
+    loadSection('recommend_for_you', () => getPersonalizedRecommendForYou(languages, appState.recentlyPlayed, appState.favorites, 16));
+
+    // 3. New Releases
     loadSection('new_releases', () => getPersonalizedNewReleases(languages, 16));
 
-    // 3. Recommendation for Today
-    loadSection('daily_rec', () => getDailyRecommendations(languages, userTopArtists, 16));
-
-    // 4. More Like What You Like
-    loadSection('more_like_you', () => getMoreLikeWhatYouLike(languages, userTopArtists, 16));
-
-    // 5. Happy
-    loadSection('happy', () => getHappyHits(languages, 16));
-
-    // 6. Party
-    loadSection('party', () => getPartyHits(languages, 16));
-
-    // 7. Throwback
-    loadSection('throwback', () => getThrowbackHits(languages, 16));
-
-    // 8. Language-specific deep dives
+    // 4. Language-specific deep dives
     languages.forEach((lang) => {
       loadSection(`lang_${lang}`, () => getPersonalizedTracksByLanguage(lang, 16));
     });
 
-    // 9. Personalized Artists
+    // 4. Spotify-Style Curated Playlist Shelves (Personalized)
+    setShelvesLoading(true);
+    generateSpotifyStyleShelves({
+      languages,
+      favorites: appState.favorites,
+      recentlyPlayed: appState.recentlyPlayed,
+      searchRecentlyPlayed: appState.searchRecentlyPlayed,
+      userPlaylists: appState.userPlaylists,
+      topArtists: userTopArtists,
+    })
+      .then((generatedShelves) => {
+        setShelves(generatedShelves);
+      })
+      .catch(() => {
+        const cached = getCachedShelves();
+        if (cached) setShelves(cached);
+      })
+      .finally(() => {
+        setShelvesLoading(false);
+      });
+
+    // 5. Personalized Artists
     if (!isOffline || forceRefresh) {
       setArtistsLoading(true);
       getPersonalizedArtists(languages, 12)
@@ -198,7 +189,7 @@ export function HomeScreen() {
         .catch(() => {})
         .finally(() => setArtistsLoading(false));
     }
-  }, [languages.join(','), userTopArtists.join(',')]);
+  }, [languages.join(','), userTopArtists.join(','), appState.favorites.length, appState.recentlyPlayed.length]);
 
   useEffect(() => {
     loadFeed();
@@ -219,35 +210,35 @@ export function HomeScreen() {
     setSections((prev) => prev.map((s) => (s.id === id ? { ...s, loading: true, error: false } : s)));
     if (id === 'trending') {
       getPersonalizedTrending(languages, 16).then((songs) => setSections((prev) => prev.map((s) => (s.id === id ? { ...s, songs, loading: false } : s))));
+    } else if (id === 'recommend_for_you') {
+      getPersonalizedRecommendForYou(languages, appState.recentlyPlayed, appState.favorites, 16).then((songs) => setSections((prev) => prev.map((s) => (s.id === id ? { ...s, songs, loading: false } : s))));
     } else if (id === 'new_releases') {
       getPersonalizedNewReleases(languages, 16).then((songs) => setSections((prev) => prev.map((s) => (s.id === id ? { ...s, songs, loading: false } : s))));
-    } else if (id === 'daily_rec') {
-      getDailyRecommendations(languages, userTopArtists, 16).then((songs) => setSections((prev) => prev.map((s) => (s.id === id ? { ...s, songs, loading: false } : s))));
-    } else if (id === 'more_like_you') {
-      getMoreLikeWhatYouLike(languages, userTopArtists, 16).then((songs) => setSections((prev) => prev.map((s) => (s.id === id ? { ...s, songs, loading: false } : s))));
-    } else if (id === 'happy') {
-      getHappyHits(languages, 16).then((songs) => setSections((prev) => prev.map((s) => (s.id === id ? { ...s, songs, loading: false } : s))));
-    } else if (id === 'party') {
-      getPartyHits(languages, 16).then((songs) => setSections((prev) => prev.map((s) => (s.id === id ? { ...s, songs, loading: false } : s))));
-    } else if (id === 'throwback') {
-      getThrowbackHits(languages, 16).then((songs) => setSections((prev) => prev.map((s) => (s.id === id ? { ...s, songs, loading: false } : s))));
     } else if (id.startsWith('lang_')) {
       const lang = id.replace('lang_', '');
       getPersonalizedTracksByLanguage(lang, 16).then((songs) => setSections((prev) => prev.map((s) => (s.id === id ? { ...s, songs, loading: false } : s))));
     }
   }
 
+  const handleOpenPlaylist = (playlist: Playlist) => {
+    navigate('playlist', { playlistId: playlist.id, playlist });
+  };
+
   const greeting = getGreeting();
-  const visibleContinueListening = appState.recentlyPlayed.slice(0, 8);
+  const visibleContinueListening = filterSpotifyAvailableTracksSync(appState.recentlyPlayed).slice(0, 8);
 
   const trendingSection = sections.find((s) => s.id === 'trending');
+  const recommendForYouSection = sections.find((s) => s.id === 'recommend_for_you');
   const newReleasesSection = sections.find((s) => s.id === 'new_releases');
-  const dailyRecSection = sections.find((s) => s.id === 'daily_rec');
-  const moreLikeYouSection = sections.find((s) => s.id === 'more_like_you');
-  const happySection = sections.find((s) => s.id === 'happy');
-  const partySection = sections.find((s) => s.id === 'party');
-  const throwbackSection = sections.find((s) => s.id === 'throwback');
   const langSections = sections.filter((s) => s.id.startsWith('lang_'));
+
+  const moreLikeShelf = shelves.find((sh) => sh.id === 'shelf_more_like_you');
+  const jumpBackInShelf = shelves.find((sh) => sh.id === 'shelf_jump_back_in');
+  const happyShelf = shelves.find((sh) => sh.id === 'shelf_happy');
+  const partyShelf = shelves.find((sh) => sh.id === 'shelf_party');
+  const throwbackShelf = shelves.find((sh) => sh.id === 'shelf_throwback');
+  const bhojpuriShelf = shelves.find((sh) => sh.id === 'shelf_bhojpuri');
+  const recShelf = shelves.find((sh) => sh.id === 'shelf_recommendations');
 
   return (
     <div className="scroll-area" style={{ paddingBottom: 'var(--content-bottom-pad)' }}>
@@ -342,7 +333,7 @@ export function HomeScreen() {
         </section>
       )}
 
-      {/* ── 1. Continue Listening (Top) ── */}
+      {/* ── 1. Continue Listening (Top priority - preserved exactly where it is) ── */}
       {visibleContinueListening.length > 0 && (
         <HorizontalSection
           title="Continue Listening"
@@ -352,7 +343,7 @@ export function HomeScreen() {
         />
       )}
 
-      {/* ── 2. Trending Now (Top) ── */}
+      {/* ── 2. Trending Now (Preserved top song section) ── */}
       {trendingSection && (
         <HorizontalSection
           title={trendingSection.title}
@@ -364,7 +355,20 @@ export function HomeScreen() {
         />
       )}
 
-      {/* ── 3. New Releases (Top) ── */}
+      {/* ── 2.5 Recommend for You (Personalized from past listening history) ── */}
+      {recommendForYouSection && (
+        <HorizontalSection
+          title="Recommend for You"
+          subtitle="Based on your listening history"
+          badge="For You"
+          songs={recommendForYouSection.songs}
+          loading={recommendForYouSection.loading}
+          error={recommendForYouSection.error}
+          onRetry={() => retrySection('recommend_for_you')}
+        />
+      )}
+
+      {/* ── 3. New Releases (Preserved top song section) ── */}
       {newReleasesSection && (
         <HorizontalSection
           title={newReleasesSection.title}
@@ -376,75 +380,81 @@ export function HomeScreen() {
         />
       )}
 
-      {/* ── 4. Recommendation for Today (Daily Fresh Mix) ── */}
-      {dailyRecSection && (
-        <HorizontalSection
-          title={dailyRecSection.title}
-          subtitle={dailyRecSection.subtitle}
-          badge={dailyRecSection.badge}
-          songs={dailyRecSection.songs}
-          loading={dailyRecSection.loading}
-          error={dailyRecSection.error}
-          onRetry={() => retrySection('daily_rec')}
+      {/* ── 4. More Like What You Like (Spotify-style playlist shelf) ── */}
+      {moreLikeShelf && (
+        <PlaylistShelfSection
+          title={moreLikeShelf.title}
+          subtitle={moreLikeShelf.subtitle}
+          playlists={moreLikeShelf.playlists}
+          loading={shelvesLoading && shelves.length === 0}
+          onOpenPlaylist={handleOpenPlaylist}
         />
       )}
 
-      {/* ── 5. Jump In Back (Resume Recent & Started Music) ── */}
-      {jumpInBackTracks.length > 0 && (
-        <HorizontalSection
-          title="Jump In Back"
-          subtitle="Pick up where you left off"
-          songs={jumpInBackTracks}
-          loading={false}
-          error={false}
+      {/* ── 5. Jump In Back (Spotify-style playlist shelf) ── */}
+      {jumpBackInShelf && (
+        <PlaylistShelfSection
+          title={jumpBackInShelf.title}
+          subtitle={jumpBackInShelf.subtitle}
+          playlists={jumpBackInShelf.playlists}
+          loading={shelvesLoading && shelves.length === 0}
+          onOpenPlaylist={handleOpenPlaylist}
         />
       )}
 
-      {/* ── 6. More Like What You Like ── */}
-      {moreLikeYouSection && (
-        <HorizontalSection
-          title={moreLikeYouSection.title}
-          subtitle={moreLikeYouSection.subtitle}
-          songs={moreLikeYouSection.songs}
-          loading={moreLikeYouSection.loading}
-          error={moreLikeYouSection.error}
-          onRetry={() => retrySection('more_like_you')}
+      {/* ── 6. Happy (Spotify-style mood playlist shelf) ── */}
+      {happyShelf && (
+        <PlaylistShelfSection
+          title={happyShelf.title}
+          subtitle={happyShelf.subtitle}
+          playlists={happyShelf.playlists}
+          loading={shelvesLoading && shelves.length === 0}
+          onOpenPlaylist={handleOpenPlaylist}
         />
       )}
 
-      {/* ── 7. Happy (Upbeat & Feel-Good) ── */}
-      {happySection && (
-        <HorizontalSection
-          title={happySection.title}
-          subtitle={happySection.subtitle}
-          songs={happySection.songs}
-          loading={happySection.loading}
-          error={happySection.error}
-          onRetry={() => retrySection('happy')}
+      {/* ── 7. Party (Spotify-style party playlist shelf) ── */}
+      {partyShelf && (
+        <PlaylistShelfSection
+          title={partyShelf.title}
+          subtitle={partyShelf.subtitle}
+          playlists={partyShelf.playlists}
+          loading={shelvesLoading && shelves.length === 0}
+          onOpenPlaylist={handleOpenPlaylist}
         />
       )}
 
-      {/* ── 8. Party (High-Energy Dance / Club) ── */}
-      {partySection && (
-        <HorizontalSection
-          title={partySection.title}
-          subtitle={partySection.subtitle}
-          songs={partySection.songs}
-          loading={partySection.loading}
-          error={partySection.error}
-          onRetry={() => retrySection('party')}
+      {/* ── 8. Throwback (Spotify-style nostalgic playlist shelf) ── */}
+      {throwbackShelf && (
+        <PlaylistShelfSection
+          title={throwbackShelf.title}
+          subtitle={throwbackShelf.subtitle}
+          playlists={throwbackShelf.playlists}
+          loading={shelvesLoading && shelves.length === 0}
+          onOpenPlaylist={handleOpenPlaylist}
         />
       )}
 
-      {/* ── 9. Throwback (Nostalgic 90s/2000s Classics) ── */}
-      {throwbackSection && (
-        <HorizontalSection
-          title={throwbackSection.title}
-          subtitle={throwbackSection.subtitle}
-          songs={throwbackSection.songs}
-          loading={throwbackSection.loading}
-          error={throwbackSection.error}
-          onRetry={() => retrySection('throwback')}
+      {/* ── 9. Bhojpuri Hits (Spotify-style Bhojpuri playlist shelf) ── */}
+      {bhojpuriShelf && (
+        <PlaylistShelfSection
+          title={bhojpuriShelf.title}
+          subtitle={bhojpuriShelf.subtitle}
+          playlists={bhojpuriShelf.playlists}
+          loading={shelvesLoading && shelves.length === 0}
+          onOpenPlaylist={handleOpenPlaylist}
+        />
+      )}
+
+      {/* ── 10. Recommendations For Today (Spotify-style personalized shelf) ── */}
+      {recShelf && (
+        <PlaylistShelfSection
+          title={recShelf.title}
+          subtitle={recShelf.subtitle}
+          badge={recShelf.badge}
+          playlists={recShelf.playlists}
+          loading={shelvesLoading && shelves.length === 0}
+          onOpenPlaylist={handleOpenPlaylist}
         />
       )}
 
@@ -456,7 +466,7 @@ export function HomeScreen() {
           </h2>
         </div>
         {artistsLoading ? (
-          <div className="scroll-x" style={{ padding: '0 20px' }}>
+          <div className="scroll-x" style={{ padding: '0 20px', gap: 14 }}>
             {Array.from({ length: 6 }, (_, i) => (
               <div key={i} style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 8, width: 96, flexShrink: 0 }}>
                 <div className="skeleton" style={{ width: 80, height: 80, borderRadius: '50%' }} />
@@ -465,7 +475,7 @@ export function HomeScreen() {
             ))}
           </div>
         ) : topArtists.length > 0 ? (
-          <div className="scroll-x" style={{ padding: '0 20px' }}>
+          <div className="scroll-x" style={{ padding: '0 20px', gap: 14 }}>
             {topArtists.map((artist) => (
               <ArtistCard key={artist.id} artist={artist} size={80} />
             ))}
@@ -491,7 +501,7 @@ export function HomeScreen() {
   );
 }
 
-// ─── Horizontal scrollable section ────────────────────────────────────────────
+// ─── Horizontal scrollable song section ────────────────────────────────────────
 
 function HorizontalSection({
   title,
@@ -541,7 +551,7 @@ function HorizontalSection({
         </div>
       </div>
       {loading ? (
-        <div className="scroll-x" style={{ padding: '0 20px' }}>
+        <div className="scroll-x" style={{ padding: '0 20px', gap: 14 }}>
           <SkeletonGrid count={5} />
         </div>
       ) : error ? (
@@ -549,9 +559,85 @@ function HorizontalSection({
           <ErrorState type="api" message="Couldn't load this section." onRetry={onRetry} />
         </div>
       ) : songs.length === 0 ? null : (
-        <div className="scroll-x" style={{ padding: '0 20px' }}>
+        <div className="scroll-x" style={{ padding: '0 20px', gap: 14 }}>
           {songs.map((song, i) => (
             <SongSquareCard key={song.id} song={song} queue={songs} index={i} />
+          ))}
+        </div>
+      )}
+    </section>
+  );
+}
+
+// ─── Spotify-Style Horizontal Playlist Shelf Section ──────────────────────────
+
+function PlaylistShelfSection({
+  title,
+  subtitle,
+  badge,
+  playlists,
+  loading,
+  onOpenPlaylist,
+}: {
+  title: string;
+  subtitle?: string;
+  badge?: string;
+  playlists: Playlist[];
+  loading?: boolean;
+  onOpenPlaylist: (pl: Playlist) => void;
+}) {
+  if (!loading && (!playlists || playlists.length === 0)) return null;
+
+  return (
+    <section style={{ padding: '24px 0 0' }} aria-label={title}>
+      <div style={{ padding: '0 20px 10px', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+        <div>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+            <h2 style={{ margin: 0, fontSize: 'var(--text-base)', fontWeight: 700, color: 'var(--color-text-primary)' }}>
+              {title}
+            </h2>
+            {badge && (
+              <span style={{
+                fontSize: 10,
+                fontWeight: 700,
+                letterSpacing: '0.04em',
+                textTransform: 'uppercase',
+                background: 'rgba(245, 158, 11, 0.15)',
+                color: 'var(--color-accent)',
+                padding: '2px 8px',
+                borderRadius: 999,
+              }}>
+                {badge}
+              </span>
+            )}
+          </div>
+          {subtitle && (
+            <p style={{ margin: '2px 0 0', fontSize: 'var(--text-xs)', color: 'var(--color-text-secondary)' }}>
+              {subtitle}
+            </p>
+          )}
+        </div>
+      </div>
+
+      {loading ? (
+        <div className="scroll-x" style={{ padding: '0 20px', gap: 14 }}>
+          {Array.from({ length: 4 }, (_, i) => (
+            <div key={i} style={{ width: 148, flexShrink: 0, display: 'flex', flexDirection: 'column', gap: 8 }}>
+              <div className="skeleton" style={{ width: 148, height: 148, borderRadius: 'var(--radius-lg)' }} />
+              <div className="skeleton" style={{ height: 14, width: '80%', borderRadius: 4 }} />
+              <div className="skeleton" style={{ height: 11, width: '60%', borderRadius: 4 }} />
+            </div>
+          ))}
+        </div>
+      ) : (
+        <div className="scroll-x" style={{ padding: '0 20px', gap: 14 }}>
+          {playlists.map((pl) => (
+            <PlaylistShelfCard
+              key={pl.id}
+              playlist={pl}
+              onClick={() => onOpenPlaylist(pl)}
+              size={148}
+            />
           ))}
         </div>
       )}

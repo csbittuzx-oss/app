@@ -18,7 +18,10 @@ export function SettingsScreen() {
 
   const ALL_LANGUAGES = [
     'Hindi', 'International', 'Punjabi', 'Tamil', 'Telugu',
-    'Malayalam', 'Marathi', 'Gujarati', 'Bengali', 'Kannada', 'Bhojpuri'
+    'Malayalam', 'Marathi', 'Gujarati', 'Bengali', 'Kannada', 'Bhojpuri',
+    'Haryanvi', 'Rajasthani', 'Himachali / Pahari', 'Assamese', 'Odia',
+    'Kashmiri', 'Sindhi', 'Konkani', 'Maithili', 'Chhattisgarhi',
+    'Garhwali', 'Kumaoni', 'Manipuri', 'Nagpuri', 'Braj', 'Awadhi', 'Marwari',
   ];
 
   const showToast = (msg: string) => {
@@ -493,7 +496,7 @@ export function SettingsScreen() {
                   </h3>
                   <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8, marginTop: 4 }}>
                     <span style={{ fontSize: 'var(--text-xs)', color: 'var(--color-text-secondary)', fontWeight: 600 }}>
-                      Version 1.2.0
+                      Version 1.2.1
                     </span>
                     <span style={{
                       fontSize: '10.5px',
@@ -506,15 +509,8 @@ export function SettingsScreen() {
                     }}>
                       Beta Version
                     </span>
-                    <span style={{ fontSize: 'var(--text-xs)', color: 'var(--color-text-muted)' }}>•</span>
-                    <span style={{ fontSize: 'var(--text-xs)', color: 'var(--color-text-muted)' }}>
-                      Build 2026.08
-                    </span>
                   </div>
                 </div>
-                <p style={{ margin: 0, fontSize: 'var(--text-xs)', color: 'var(--color-text-secondary)', lineHeight: 1.6, maxWidth: 360 }}>
-                  Powered by Musify & JioSaavn 320kbps Stream Engine, YouTube Music InnerTube API & Spotify Real Importer
-                </p>
                 <div style={{
                   fontSize: '11.5px',
                   fontWeight: 600,
