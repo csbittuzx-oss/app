@@ -1,0 +1,18 @@
+{
+  "app_updates": {
+    "latest": {
+      "version": "1.2.0",
+      "build_number": 20260816,
+      "title": "Soundwave 1.2.0 Update",
+      "apk_url": "https://github.com/panditbittu/soundwave/releases/download/v1.2.0/app-release.apk",
+      "force_update": false,
+      "min_supported_version": "1.0.0",
+      "changelog": [
+        "Continue Listening persistence",
+        "Settings About & Legal section",
+        "Smart AutoPlay Recommendations"
+      ],
+      "release_date": "2026-08-16"
+    }
+  }
+}
