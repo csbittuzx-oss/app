@@ -69,7 +69,7 @@ interface EmptyStateProps {
   icon?: React.ReactNode;
   title: string;
   subtitle?: string;
-  action?: { label: string; onClick: () => void };
+  action?: { label: string; onClick: () => void } | React.ReactNode;
 }
 
 const defaultEmptyIcon = (
@@ -97,14 +97,18 @@ export function EmptyState({ icon = defaultEmptyIcon, title, subtitle, action }:
         )}
       </div>
       {action && (
-        <button
-          id="empty-state-action-btn"
-          onClick={action.onClick}
-          className="btn btn-primary"
-          style={{ fontSize: 'var(--text-sm)' }}
-        >
-          {action.label}
-        </button>
+        React.isValidElement(action) ? (
+          action
+        ) : (
+          <button
+            id="empty-state-action-btn"
+            onClick={(action as { label: string; onClick: () => void }).onClick}
+            className="btn btn-primary"
+            style={{ fontSize: 'var(--text-sm)' }}
+          >
+            {(action as { label: string; onClick: () => void }).label}
+          </button>
+        )
       )}
     </div>
   );

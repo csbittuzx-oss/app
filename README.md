@@ -1,32 +1,43 @@
-# React + TypeScript + Vite
+# Soundwave 🎵
 
-This template provides a minimal setup to get React working in Vite with HMR and some Oxlint rules.
+> High-Fidelity Music Streaming & Offline Backup Player for Android.
 
-Currently, two official plugins are available:
+[![Download Soundwave APK](https://img.shields.io/badge/Download-Soundwave.apk-FF8C00?style=for-the-badge&logo=android&logoColor=white)](https://github.com/b2raj123zx-wq/soundwaves/raw/main/release/Soundwave.apk)
+[![Release Version](https://img.shields.io/badge/Version-v1.2.0-00E5FF?style=for-the-badge)](https://github.com/b2raj123zx-wq/soundwaves/raw/main/release/Soundwave-v1.2.0.apk)
 
-- [@vitejs/plugin-react](https://github.com/vitejs/vite-plugin-react/blob/main/packages/plugin-react) uses [Oxc](https://oxc.rs)
-- [@vitejs/plugin-react-swc](https://github.com/vitejs/vite-plugin-react/blob/main/packages/plugin-react-swc) uses [SWC](https://swc.rs/)
+---
 
-## React Compiler
+## 📥 Download Soundwave
 
-The React Compiler is not enabled on this template because of its impact on dev & build performances. To add it, see [this documentation](https://react.dev/learn/react-compiler/installation).
+| File | Type | Download Link |
+| :--- | :--- | :--- |
+| **Soundwave.apk** | Production Release APK *(~1.45 MB)* | [⬇️ **Download Soundwave.apk**](https://github.com/b2raj123zx-wq/soundwaves/raw/main/release/Soundwave.apk) |
+| **Soundwave-v1.2.0.apk** | Versioned Release APK | [⬇️ **Download Soundwave-v1.2.0.apk**](https://github.com/b2raj123zx-wq/soundwaves/raw/main/release/Soundwave-v1.2.0.apk) |
+| **Soundwave.aab** | Android App Bundle (Google Play) | [⬇️ **Download Soundwave.aab**](https://github.com/b2raj123zx-wq/soundwaves/raw/main/release/Soundwave.aab) |
 
-## Expanding the Oxlint configuration
+---
 
-If you are developing a production application, we recommend enabling type-aware lint rules by installing `oxlint-tsgolint` and editing `.oxlintrc.json`:
+## ✨ Features
 
-```json
-{
-  "$schema": "./node_modules/oxlint/configuration_schema.json",
-  "plugins": ["react", "typescript", "oxc"],
-  "options": {
-    "typeAware": true
-  },
-  "rules": {
-    "react/rules-of-hooks": "error",
-    "react/only-export-components": ["warn", { "allowConstantExport": true }]
-  }
-}
+- 🎧 **Studio-Grade 320 kbps Streaming**: Pristine audio quality with lossless dynamics.
+- 📱 **Continuous Background Audio**: Native `MediaPlaybackService` foreground service with full lock-screen media controls.
+- ⚡ **Ultra-Lightweight**: R8 optimized and shrunk down to just **~1.45 MB**.
+- 📶 **Spotify-Style Offline Backup**: Automatically caches your favorite tunes for offline listening without internet.
+- 🎨 **Aura Design Language**: Modern dark interface with dynamic backdrop glow and smooth animations.
+- 🔄 **In-App Update Engine**: Automatic update checking & notifications powered by Soundwave Cloud.
+
+---
+
+## 🛠️ Build from Source
+
+```bash
+# Install dependencies
+npm install
+
+# Build web distribution & sync capacitor
+npm run build
+npx cap sync android
+
+# Build release APK & AAB
+build_release.bat
 ```
-
-See the [Oxlint rules documentation](https://oxc.rs/docs/guide/usage/linter/rules) for the full list of rules and categories.

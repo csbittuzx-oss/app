@@ -251,7 +251,51 @@ export function LibraryScreen() {
 
         {/* Playlists tab */}
         {activeTab === 'playlists' && (
-          <div>
+          sortedPlaylists.length === 0 && state.recentlyPlayed.length === 0 ? (
+            <EmptyState
+              icon={
+                <svg width="52" height="52" viewBox="0 0 24 24" fill="none">
+                  <path d="M9 18V5l12-2v13" stroke="var(--color-text-muted)" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"/>
+                  <circle cx="6" cy="18" r="3" stroke="var(--color-text-muted)" strokeWidth="1.5"/>
+                  <circle cx="18" cy="16" r="3" stroke="var(--color-text-muted)" strokeWidth="1.5"/>
+                </svg>
+              }
+              title="No playlists yet"
+              subtitle="Create your first custom playlist or import your library from Spotify."
+              action={
+                <div style={{ display: 'flex', flexWrap: 'wrap', gap: 10, justifyContent: 'center', marginTop: 14 }}>
+                  <button
+                    id="empty-create-playlist-btn"
+                    onClick={() => setShowCreatePlaylist(true)}
+                    className="btn btn-primary"
+                    style={{ padding: '8px 18px', borderRadius: 'var(--radius-full)', fontSize: 'var(--text-xs)', fontWeight: 700 }}
+                  >
+                    + Create Playlist
+                  </button>
+                  <button
+                    id="empty-spotify-import-btn"
+                    onClick={() => setShowSpotifyImport(true)}
+                    style={{
+                      background: 'rgba(29, 185, 84, 0.15)',
+                      color: '#1DB954',
+                      border: '1px solid rgba(29, 185, 84, 0.3)',
+                      padding: '8px 18px',
+                      borderRadius: 'var(--radius-full)',
+                      fontSize: 'var(--text-xs)',
+                      fontWeight: 700,
+                      display: 'flex',
+                      alignItems: 'center',
+                      gap: 6,
+                      cursor: 'pointer',
+                    }}
+                  >
+                    <SpotifyIcon size={14} />
+                    Import Spotify
+                  </button>
+                </div>
+              }
+            />
+          ) : (
             <div>
               {/* Spotify-style Offline Backup Mix */}
               {state.recentlyPlayed.length > 0 && (
@@ -419,7 +463,7 @@ export function LibraryScreen() {
                 </div>
               ))}
             </div>
-          </div>
+          )
         )}
 
         {/* Liked Songs tab */}

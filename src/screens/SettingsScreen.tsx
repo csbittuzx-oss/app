@@ -2,19 +2,13 @@ import { useState } from 'react';
 import { useApp } from '../state/AppContext';
 import { usePlayer } from '../state/PlayerContext';
 import type { AudioQuality } from '../data/models';
-import { updateService, CURRENT_APP_VERSION, type AppUpdateInfo } from '../services/UpdateService';
-import { UpdateModal } from '../components/shared/UpdateModal';
 
 export function SettingsScreen() {
-  const { state, dispatch, clearSearchHistory, clearSearchRecentPlayed, resetApp, setMusicLanguages, resetOnboarding } = useApp();
+  const { state, dispatch, setMusicLanguages, resetOnboarding } = useApp();
   const { setAudioQuality, state: playerState, toggleAutoPlay } = usePlayer();
-  const [showResetModal, setShowResetModal] = useState(false);
   const [showLangModal, setShowLangModal] = useState(false);
   const [showPrivacyModal, setShowPrivacyModal] = useState(false);
   const [showTermsModal, setShowTermsModal] = useState(false);
-  const [isCheckingUpdate, setIsCheckingUpdate] = useState(false);
-  const [availableUpdate, setAvailableUpdate] = useState<AppUpdateInfo | null>(null);
-  const [showUpdateModal, setShowUpdateModal] = useState(false);
   const [selectedLangs, setSelectedLangs] = useState<string[]>(state.musicLanguages || ['Hindi', 'International']);
   const [toastMessage, setToastMessage] = useState<string | null>(null);
 
@@ -42,12 +36,6 @@ export function SettingsScreen() {
     showToast('Music recommendation preferences updated');
   };
 
-  const handleClearSearch = () => {
-    clearSearchHistory();
-    clearSearchRecentPlayed();
-    showToast('Search history & recent searches cleared');
-  };
-
   const handleQualityChange = (q: AudioQuality) => {
     dispatch({ type: 'SET_CONFIG', payload: { audioQuality: q } });
     setAudioQuality(q);
@@ -60,52 +48,36 @@ export function SettingsScreen() {
     showToast(autoUpdate ? 'Automatic updates disabled' : 'Automatic updates enabled');
   };
 
-  const handleCheckForUpdates = async () => {
-    setIsCheckingUpdate(true);
-    try {
-      const result = await updateService.checkForUpdates(true);
-      if (result.hasUpdate && result.latestUpdate) {
-        setAvailableUpdate(result.latestUpdate);
-        setShowUpdateModal(true);
-      } else {
-        showToast(`Soundwave is up to date (v${CURRENT_APP_VERSION})`);
-      }
-    } catch {
-      showToast('Could not check for updates. Please try again.');
-    } finally {
-      setIsCheckingUpdate(false);
-    }
-  };
-
-  const handleResetConfirm = () => {
-    resetApp();
-    setShowResetModal(false);
-    showToast('App reset to factory defaults');
-  };
-
   return (
     <div style={{ display: 'flex', flexDirection: 'column', height: '100%', position: 'relative' }}>
-      {/* Toast Notification */}
+      {/* Settings Bottom Toast Notification */}
       {toastMessage && (
         <div style={{
           position: 'fixed',
-          top: 24,
+          bottom: playerState.currentSong
+            ? 'calc(64px + 56px + env(safe-area-inset-bottom, 0px) + 16px)'
+            : 'calc(56px + env(safe-area-inset-bottom, 0px) + 16px)',
           left: '50%',
           transform: 'translateX(-50%)',
-          zIndex: 500,
-          background: 'var(--color-text-primary)',
-          color: 'var(--color-bg)',
+          zIndex: 800,
+          background: '#1A1D2B',
+          border: '1px solid rgba(255, 255, 255, 0.15)',
+          color: '#F3F4F6',
           padding: '10px 20px',
           borderRadius: 'var(--radius-full)',
           fontSize: 'var(--text-sm)',
           fontWeight: 600,
-          boxShadow: 'var(--shadow-lg)',
-          animation: 'fadeIn 200ms ease-out',
+          boxShadow: '0 8px 30px rgba(0, 0, 0, 0.6)',
+          animation: 'slideUp 200ms cubic-bezier(0, 0, 0.2, 1)',
           textAlign: 'center',
-          maxWidth: '90%',
+          maxWidth: '85%',
+          display: 'flex',
+          alignItems: 'center',
+          gap: 8,
           pointerEvents: 'none',
         }}>
-          {toastMessage}
+          <span style={{ width: 6, height: 6, borderRadius: '50%', background: 'var(--color-accent)' }} />
+          <span>{toastMessage}</span>
         </div>
       )}
 
@@ -341,116 +313,48 @@ export function SettingsScreen() {
               textTransform: 'uppercase',
               letterSpacing: '0.08em',
             }}>
-              Updates & Releases
+              Updates
             </h2>
             <div style={{
               background: 'var(--color-surface)',
               border: '1px solid var(--color-border)',
               borderRadius: 'var(--radius-lg)',
-              overflow: 'hidden',
+              padding: '14px 16px',
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'space-between',
             }}>
-              {/* Check for Updates */}
-              <button
-                type="button"
-                id="btn-check-for-updates"
-                onClick={handleCheckForUpdates}
-                disabled={isCheckingUpdate}
-                style={{
+              <div style={{ display: 'flex', alignItems: 'center', gap: 14 }}>
+                <div style={{
+                  width: 40,
+                  height: 40,
+                  borderRadius: 'var(--radius-md)',
+                  background: 'var(--color-surface-2)',
                   display: 'flex',
                   alignItems: 'center',
-                  justifyContent: 'space-between',
-                  width: '100%',
-                  padding: '14px 16px',
-                  background: 'none',
-                  border: 'none',
-                  borderBottom: '1px solid var(--color-border)',
-                  cursor: isCheckingUpdate ? 'default' : 'pointer',
-                  textAlign: 'left',
-                  opacity: isCheckingUpdate ? 0.7 : 1,
-                }}
-              >
-                <div style={{ display: 'flex', alignItems: 'center', gap: 14 }}>
-                  <div style={{
-                    width: 40,
-                    height: 40,
-                    borderRadius: 'var(--radius-md)',
-                    background: 'var(--color-surface-2)',
-                    display: 'flex',
-                    alignItems: 'center',
-                    justifyContent: 'center',
-                    color: 'var(--color-accent)',
-                    flexShrink: 0,
-                  }}>
-                    {isCheckingUpdate ? (
-                      <div className="spinner-border" style={{ width: 20, height: 20, border: '2px solid var(--color-accent)', borderTopColor: 'transparent', borderRadius: '50%', animation: 'spin 800ms linear infinite' }} />
-                    ) : (
-                      <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                        <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" />
-                        <polyline points="7 10 12 15 17 10" />
-                        <line x1="12" y1="15" x2="12" y2="3" />
-                      </svg>
-                    )}
-                  </div>
-                  <div>
-                    <p style={{ margin: 0, fontWeight: 600, fontSize: 'var(--text-md)', color: 'var(--color-text-primary)' }}>
-                      {isCheckingUpdate ? 'Checking Firebase Server...' : 'Check for Updates'}
-                    </p>
-                    <p style={{ margin: '2px 0 0', fontSize: 'var(--text-xs)', color: 'var(--color-text-secondary)' }}>
-                      Current: v{CURRENT_APP_VERSION} • Firebase OTA Engine
-                    </p>
-                  </div>
-                </div>
-                <span style={{
-                  fontSize: 'var(--text-xs)',
-                  color: 'var(--color-accent)',
-                  fontWeight: 700,
-                  background: 'var(--color-accent-dim)',
-                  padding: '4px 10px',
-                  borderRadius: 'var(--radius-full)',
+                  justifyContent: 'center',
+                  color: 'var(--color-success)',
+                  flexShrink: 0,
                 }}>
-                  {isCheckingUpdate ? 'Checking...' : 'Check Now'}
-                </span>
-              </button>
-
-              {/* Automatically Update Toggle */}
-              <div style={{
-                padding: '14px 16px',
-                display: 'flex',
-                alignItems: 'center',
-                justifyContent: 'space-between',
-              }}>
-                <div style={{ display: 'flex', alignItems: 'center', gap: 14 }}>
-                  <div style={{
-                    width: 40,
-                    height: 40,
-                    borderRadius: 'var(--radius-md)',
-                    background: 'var(--color-surface-2)',
-                    display: 'flex',
-                    alignItems: 'center',
-                    justifyContent: 'center',
-                    color: 'var(--color-success)',
-                    flexShrink: 0,
-                  }}>
-                    <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                      <path d="M21.5 2v6h-6M21.34 15.57a10 10 0 1 1-.57-8.38l5.67-5.67"/>
-                    </svg>
-                  </div>
-                  <div>
-                    <p style={{ margin: 0, fontWeight: 600, fontSize: 'var(--text-md)', color: 'var(--color-text-primary)' }}>
-                      Automatically Update
-                    </p>
-                    <p style={{ margin: '2px 0 0', fontSize: 'var(--text-xs)', color: 'var(--color-text-secondary)' }}>
-                      Check and alert for new releases on startup
-                    </p>
-                  </div>
+                  <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                    <path d="M21.5 2v6h-6M21.34 15.57a10 10 0 1 1-.57-8.38l5.67-5.67"/>
+                  </svg>
                 </div>
-                <ToggleSwitch
-                  id="auto-update-toggle"
-                  checked={autoUpdate}
-                  onChange={handleAutoUpdateToggle}
-                  label="Automatically Update"
-                />
+                <div>
+                  <p style={{ margin: 0, fontWeight: 600, fontSize: 'var(--text-md)', color: 'var(--color-text-primary)' }}>
+                    Automatically Update
+                  </p>
+                  <p style={{ margin: '2px 0 0', fontSize: 'var(--text-xs)', color: 'var(--color-text-secondary)' }}>
+                    Check and alert for new releases on startup
+                  </p>
+                </div>
               </div>
+              <ToggleSwitch
+                id="auto-update-toggle"
+                checked={autoUpdate}
+                onChange={handleAutoUpdateToggle}
+                label="Automatically Update"
+              />
             </div>
           </section>
 
@@ -548,125 +452,6 @@ export function SettingsScreen() {
                   Reset Onboarding
                 </button>
               </div>
-            </div>
-          </section>
-
-          {/* ── 5. Tools ── */}
-          <section aria-label="Tools">
-            <h2 style={{
-              margin: '0 0 10px',
-              fontSize: 'var(--text-xs)',
-              fontWeight: 700,
-              color: 'var(--color-text-muted)',
-              textTransform: 'uppercase',
-              letterSpacing: '0.08em',
-            }}>
-              Tools
-            </h2>
-            <div style={{
-              background: 'var(--color-surface)',
-              border: '1px solid var(--color-border)',
-              borderRadius: 'var(--radius-lg)',
-              overflow: 'hidden',
-            }}>
-              {/* Clear Search History */}
-              <button
-                type="button"
-                id="tool-clear-search-history-btn"
-                onClick={handleClearSearch}
-                style={{
-                  display: 'flex',
-                  alignItems: 'center',
-                  justifyContent: 'space-between',
-                  width: '100%',
-                  padding: '14px 16px',
-                  background: 'none',
-                  border: 'none',
-                  borderBottom: '1px solid var(--color-border)',
-                  cursor: 'pointer',
-                  textAlign: 'left',
-                }}
-              >
-                <div style={{ display: 'flex', alignItems: 'center', gap: 14 }}>
-                  <div style={{
-                    width: 36,
-                    height: 36,
-                    borderRadius: 'var(--radius-md)',
-                    background: 'var(--color-surface-2)',
-                    display: 'flex',
-                    alignItems: 'center',
-                    justifyContent: 'center',
-                    color: 'var(--color-text-primary)',
-                    flexShrink: 0,
-                  }}>
-                    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                      <circle cx="11" cy="11" r="8"/>
-                      <line x1="21" y1="21" x2="16.65" y2="16.65"/>
-                      <line x1="8" y1="11" x2="14" y2="11"/>
-                    </svg>
-                  </div>
-                  <div>
-                    <p style={{ margin: 0, fontWeight: 600, fontSize: 'var(--text-md)', color: 'var(--color-text-primary)' }}>
-                      Clear Search History
-                    </p>
-                    <p style={{ margin: '2px 0 0', fontSize: 'var(--text-xs)', color: 'var(--color-text-secondary)' }}>
-                      Remove searched queries and played search recents
-                    </p>
-                  </div>
-                </div>
-                <span style={{ fontSize: 'var(--text-xs)', color: 'var(--color-accent)', fontWeight: 600 }}>
-                  Clear
-                </span>
-              </button>
-
-              {/* Reset App Data */}
-              <button
-                type="button"
-                id="tool-reset-app-btn"
-                onClick={() => setShowResetModal(true)}
-                style={{
-                  display: 'flex',
-                  alignItems: 'center',
-                  justifyContent: 'space-between',
-                  width: '100%',
-                  padding: '14px 16px',
-                  background: 'none',
-                  border: 'none',
-                  cursor: 'pointer',
-                  textAlign: 'left',
-                }}
-              >
-                <div style={{ display: 'flex', alignItems: 'center', gap: 14 }}>
-                  <div style={{
-                    width: 36,
-                    height: 36,
-                    borderRadius: 'var(--radius-md)',
-                    background: 'rgba(239, 68, 68, 0.12)',
-                    display: 'flex',
-                    alignItems: 'center',
-                    justifyContent: 'center',
-                    color: 'var(--color-error)',
-                    flexShrink: 0,
-                  }}>
-                    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                      <polyline points="1 4 1 10 7 10"/>
-                      <polyline points="23 20 23 14 17 14"/>
-                      <path d="M20.49 9A9 9 0 0 0 5.64 5.64L1 10m22 4l-4.64 4.36A9 9 0 0 1 3.51 15"/>
-                    </svg>
-                  </div>
-                  <div>
-                    <p style={{ margin: 0, fontWeight: 600, fontSize: 'var(--text-md)', color: 'var(--color-error)' }}>
-                      Reset
-                    </p>
-                    <p style={{ margin: '2px 0 0', fontSize: 'var(--text-xs)', color: 'var(--color-text-secondary)' }}>
-                      Reset library, cache, and app settings to default
-                    </p>
-                  </div>
-                </div>
-                <span style={{ fontSize: 'var(--text-xs)', color: 'var(--color-error)', fontWeight: 600 }}>
-                  Reset
-                </span>
-              </button>
             </div>
           </section>
 
@@ -1054,94 +839,6 @@ export function SettingsScreen() {
         </div>
       )}
 
-      {/* ── Reset Confirmation Modal ── */}
-      {showResetModal && (
-        <div
-          role="dialog"
-          aria-modal="true"
-          style={{
-            position: 'fixed',
-            inset: 0,
-            zIndex: 1000,
-            background: 'rgba(0, 0, 0, 0.75)',
-            backdropFilter: 'blur(6px)',
-            display: 'flex',
-            alignItems: 'flex-end',
-            justifyContent: 'center',
-            animation: 'fadeIn 200ms ease-out',
-          }}
-          onClick={(e) => { if (e.target === e.currentTarget) setShowResetModal(false); }}
-        >
-          <div style={{
-            background: 'var(--color-surface)',
-            width: '100%',
-            maxWidth: 'var(--screen-max)',
-            borderRadius: 'var(--radius-xl) var(--radius-xl) 0 0',
-            padding: '24px 20px',
-            paddingBottom: 'calc(24px + env(safe-area-inset-bottom, 0px))',
-            animation: 'slideUp 250ms cubic-bezier(0, 0, 0.2, 1)',
-            display: 'flex',
-            flexDirection: 'column',
-            gap: 16,
-            textAlign: 'center',
-          }}>
-            <div style={{
-              width: 52,
-              height: 52,
-              borderRadius: '50%',
-              background: 'rgba(239, 68, 68, 0.15)',
-              color: 'var(--color-error)',
-              display: 'flex',
-              alignItems: 'center',
-              justifyContent: 'center',
-              margin: '0 auto',
-            }}>
-              <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                <path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"/>
-                <line x1="12" y1="9" x2="12" y2="13"/>
-                <line x1="12" y1="17" x2="12.01" y2="17"/>
-              </svg>
-            </div>
-            <div>
-              <h3 style={{ margin: 0, fontSize: 'var(--text-lg)', fontWeight: 700, color: 'var(--color-text-primary)' }}>
-                Reset Soundwave App?
-              </h3>
-              <p style={{ margin: '6px 0 0', fontSize: 'var(--text-sm)', color: 'var(--color-text-secondary)', lineHeight: 1.5 }}>
-                This will reset your local playlists, liked songs history, search history, and restore settings to default.
-              </p>
-            </div>
-            <div style={{ display: 'flex', gap: 12, marginTop: 4 }}>
-              <button
-                type="button"
-                onClick={() => setShowResetModal(false)}
-                className="btn btn-ghost"
-                style={{ flex: 1, padding: '12px', borderRadius: 'var(--radius-md)' }}
-              >
-                Cancel
-              </button>
-              <button
-                type="button"
-                id="confirm-reset-app-btn"
-                onClick={handleResetConfirm}
-                style={{
-                  flex: 1,
-                  padding: '12px',
-                  borderRadius: 'var(--radius-md)',
-                  background: 'var(--color-error)',
-                  color: '#fff',
-                  border: 'none',
-                  fontWeight: 700,
-                  fontSize: 'var(--text-sm)',
-                  cursor: 'pointer',
-                }}
-              >
-                Reset All Data
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
-
       {/* ── Privacy Policy Modal ── */}
       {showPrivacyModal && (
         <div
@@ -1471,15 +1168,6 @@ export function SettingsScreen() {
             </div>
           </div>
         </div>
-      )}
-
-      {/* ── In-App Update Modal ── */}
-      {availableUpdate && (
-        <UpdateModal
-          updateInfo={availableUpdate}
-          isOpen={showUpdateModal}
-          onClose={() => setShowUpdateModal(false)}
-        />
       )}
     </div>
   );

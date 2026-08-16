@@ -52,15 +52,7 @@ class AudioPlayer {
   private _audioQuality: AudioQuality = 'high';
   private callbacks: Set<AudioPlayerCallback> = new Set();
 
-  // Web Audio Context & Studio Processing Nodes for authentic High Quality sound
-  private audioCtx: AudioContext | null = null;
-  private sourceNode: MediaElementAudioSourceNode | null = null;
-  private bassNode: BiquadFilterNode | null = null;
-  private midNode: BiquadFilterNode | null = null;
-  private trebleNode: BiquadFilterNode | null = null;
-  private compressorNode: DynamicsCompressorNode | null = null;
-  private gainNode: GainNode | null = null;
-  private isAudioGraphReady = false;
+
 
   // AutoPlay & Recommendation state
   private isAutoPlayFetching = false;
@@ -164,7 +156,6 @@ class AudioPlayer {
     });
 
     this.audio.addEventListener('play', () => {
-      this.initAudioGraph();
       this.emit({ type: 'play' });
       if (this.currentSong) {
         MediaNotificationService.update(
@@ -295,112 +286,10 @@ class AudioPlayer {
   }
 
   /**
-   * Initializes high-fidelity Web Audio API graph for studio-grade warmth and clarity.
-   */
-  private initAudioGraph() {
-    if (this.isAudioGraphReady) {
-      if (this.audioCtx && this.audioCtx.state === 'suspended') {
-        this.audioCtx.resume().catch(() => {});
-      }
-      return;
-    }
-
-    try {
-      const AudioCtxClass = window.AudioContext || (window as any).webkitAudioContext;
-      if (!AudioCtxClass) return;
-      this.audioCtx = new AudioCtxClass();
-
-      this.sourceNode = this.audioCtx.createMediaElementSource(this.audio);
-
-      // 1. Bass Warmth (Sub-bass & Kick Definition)
-      this.bassNode = this.audioCtx.createBiquadFilter();
-      this.bassNode.type = 'lowshelf';
-      this.bassNode.frequency.value = 90; // 90 Hz
-
-      // 2. Vocal & Instrument Presence
-      this.midNode = this.audioCtx.createBiquadFilter();
-      this.midNode.type = 'peaking';
-      this.midNode.frequency.value = 3200; // 3.2 kHz
-      this.midNode.Q.value = 1.0;
-
-      // 3. Air & High-End Sparkle
-      this.trebleNode = this.audioCtx.createBiquadFilter();
-      this.trebleNode.type = 'highshelf';
-      this.trebleNode.frequency.value = 11000; // 11 kHz
-
-      // 4. Studio Dynamics Compressor (prevents distortion & harshness, adds clean punch)
-      this.compressorNode = this.audioCtx.createDynamicsCompressor();
-      this.compressorNode.threshold.value = -18;
-      this.compressorNode.knee.value = 24;
-      this.compressorNode.ratio.value = 3;
-      this.compressorNode.attack.value = 0.003;
-      this.compressorNode.release.value = 0.25;
-
-      // 5. Output Gain
-      this.gainNode = this.audioCtx.createGain();
-      this.gainNode.gain.value = 1.0;
-
-      // Connect: Source -> Bass -> Mid -> Treble -> Compressor -> Gain -> Speakers
-      this.sourceNode.connect(this.bassNode);
-      this.bassNode.connect(this.midNode);
-      this.midNode.connect(this.trebleNode);
-      this.trebleNode.connect(this.compressorNode);
-      this.compressorNode.connect(this.gainNode);
-      this.gainNode.connect(this.audioCtx.destination);
-
-      this.isAudioGraphReady = true;
-      this.applyQualityDSP(this._audioQuality);
-    } catch (e) {
-      console.warn('Web Audio API enhancement fallback:', e);
-    }
-  }
-
-  /**
-   * Applies precision DSP tuning depending on selected audio quality.
-   */
-  private applyQualityDSP(quality: AudioQuality) {
-    if (!this.isAudioGraphReady) return;
-
-    try {
-      if (quality === 'high') {
-        // High (320kbps equivalent): Warm low-end, open airy treble, transparent dynamics
-        if (this.bassNode) this.bassNode.gain.value = 2.0;
-        if (this.midNode) this.midNode.gain.value = 0.8;
-        if (this.trebleNode) this.trebleNode.gain.value = 1.5;
-        if (this.compressorNode) {
-          this.compressorNode.threshold.value = -20;
-          this.compressorNode.ratio.value = 2.5;
-        }
-      } else if (quality === 'medium') {
-        // Medium (160kbps): Balanced presence
-        if (this.bassNode) this.bassNode.gain.value = 1.0;
-        if (this.midNode) this.midNode.gain.value = 0.5;
-        if (this.trebleNode) this.trebleNode.gain.value = 0.8;
-        if (this.compressorNode) {
-          this.compressorNode.threshold.value = -18;
-          this.compressorNode.ratio.value = 3.0;
-        }
-      } else {
-        // Low (96kbps / Data Saver): Vocal clarity enhancement
-        if (this.bassNode) this.bassNode.gain.value = 0.5;
-        if (this.midNode) this.midNode.gain.value = 1.2;
-        if (this.trebleNode) this.trebleNode.gain.value = 0.0;
-        if (this.compressorNode) {
-          this.compressorNode.threshold.value = -15;
-          this.compressorNode.ratio.value = 4.0;
-        }
-      }
-    } catch {
-      // ignore
-    }
-  }
-
-  /**
    * Updates audio quality in real-time and refreshes active stream if needed.
    */
   async setAudioQuality(quality: AudioQuality) {
     this._audioQuality = quality;
-    this.applyQualityDSP(quality);
     this.emit({ type: 'qualitychange', quality });
 
     // Save preference
@@ -887,9 +776,6 @@ class AudioPlayer {
     this.audio.pause();
     this.audio.src = '';
     this.callbacks.clear();
-    if (this.audioCtx) {
-      this.audioCtx.close().catch(() => {});
-    }
   }
 }
 
