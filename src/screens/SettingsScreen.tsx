@@ -1,6 +1,8 @@
 import { useState } from 'react';
 import { useApp } from '../state/AppContext';
 import { usePlayer } from '../state/PlayerContext';
+import { aiTasteProfileEngine } from '../domain/ai/AITasteProfileEngine';
+import { scrobblingService } from '../services/ScrobblingService';
 import type { AudioQuality } from '../data/models';
 
 export function SettingsScreen() {
@@ -11,6 +13,14 @@ export function SettingsScreen() {
   const [showTermsModal, setShowTermsModal] = useState(false);
   const [selectedLangs, setSelectedLangs] = useState<string[]>(state.musicLanguages || ['Hindi', 'International']);
   const [toastMessage, setToastMessage] = useState<string | null>(null);
+
+  // Scrobbler Config State
+  const initialScrobbleConfig = scrobblingService.getConfig();
+  const [lbEnabled, setLbEnabled] = useState(initialScrobbleConfig.listenbrainzEnabled);
+  const [lbToken, setLbToken] = useState(initialScrobbleConfig.listenbrainzToken);
+  const [lfmEnabled, setLfmEnabled] = useState(initialScrobbleConfig.lastfmEnabled);
+  const [lfmApiKey, setLfmApiKey] = useState(initialScrobbleConfig.lastfmApiKey);
+  const [lfmSessionKey, setLfmSessionKey] = useState(initialScrobbleConfig.lastfmSessionKey);
 
   const isDark = state.theme === 'dark';
   const audioQuality: AudioQuality = state.config.audioQuality || 'high';
@@ -361,7 +371,189 @@ export function SettingsScreen() {
             </div>
           </section>
 
-          {/* ── 4. Music Recommendations & Languages ── */}
+          {/* ── 4. Music Scrobbling & History (ListenBrainz & Last.fm) ── */}
+          <section aria-label="Music Scrobbling">
+            <h2 style={{
+              margin: '0 0 10px',
+              fontSize: 'var(--text-xs)',
+              fontWeight: 700,
+              color: 'var(--color-text-muted)',
+              textTransform: 'uppercase',
+              letterSpacing: '0.08em',
+            }}>
+              Music Scrobbling
+            </h2>
+            <div style={{
+              background: 'var(--color-surface)',
+              border: '1px solid var(--color-border)',
+              borderRadius: 'var(--radius-lg)',
+              padding: '16px',
+              display: 'flex',
+              flexDirection: 'column',
+              gap: 16,
+            }}>
+              {/* ListenBrainz */}
+              <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
+                <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
+                    <div style={{
+                      width: 36,
+                      height: 36,
+                      borderRadius: 'var(--radius-md)',
+                      background: 'rgba(235, 116, 59, 0.15)',
+                      color: '#EB743B',
+                      display: 'flex',
+                      alignItems: 'center',
+                      justifyContent: 'center',
+                      fontWeight: 800,
+                      fontSize: '14px',
+                    }}>
+                      LB
+                    </div>
+                    <div>
+                      <p style={{ margin: 0, fontWeight: 600, fontSize: 'var(--text-md)', color: 'var(--color-text-primary)' }}>
+                        ListenBrainz
+                      </p>
+                      <p style={{ margin: '2px 0 0', fontSize: 'var(--text-xs)', color: 'var(--color-text-secondary)' }}>
+                        Open-source music listening history
+                      </p>
+                    </div>
+                  </div>
+                  <ToggleSwitch
+                    id="listenbrainz-toggle"
+                    checked={lbEnabled}
+                    onChange={() => {
+                      const next = !lbEnabled;
+                      setLbEnabled(next);
+                      scrobblingService.saveConfig({ listenbrainzEnabled: next });
+                      showToast(next ? 'ListenBrainz scrobbling enabled' : 'ListenBrainz scrobbling disabled');
+                    }}
+                    label="ListenBrainz"
+                  />
+                </div>
+
+                {lbEnabled && (
+                  <div style={{ display: 'flex', gap: 8, marginTop: 4 }}>
+                    <input
+                      type="password"
+                      placeholder="User Token (from listenbrainz.org)"
+                      value={lbToken}
+                      onChange={(e) => {
+                        setLbToken(e.target.value);
+                        scrobblingService.saveConfig({ listenbrainzToken: e.target.value });
+                      }}
+                      style={{
+                        flex: 1,
+                        background: 'var(--color-surface-2)',
+                        border: '1px solid var(--color-border)',
+                        borderRadius: 'var(--radius-sm)',
+                        padding: '8px 12px',
+                        fontSize: 'var(--text-xs)',
+                        color: 'var(--color-text-primary)',
+                        outline: 'none',
+                      }}
+                    />
+                    <button
+                      onClick={async () => {
+                        const valid = await scrobblingService.validateListenBrainzToken(lbToken);
+                        showToast(valid ? 'ListenBrainz Token is valid!' : 'Invalid ListenBrainz Token');
+                      }}
+                      className="btn-ghost"
+                      style={{ padding: '6px 12px', fontSize: 'var(--text-xs)', flexShrink: 0 }}
+                    >
+                      Verify
+                    </button>
+                  </div>
+                )}
+              </div>
+
+              <div style={{ height: 1, background: 'var(--color-border)' }} />
+
+              {/* Last.fm */}
+              <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
+                <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
+                    <div style={{
+                      width: 36,
+                      height: 36,
+                      borderRadius: 'var(--radius-md)',
+                      background: 'rgba(217, 35, 35, 0.15)',
+                      color: '#D92323',
+                      display: 'flex',
+                      alignItems: 'center',
+                      justifyContent: 'center',
+                      fontWeight: 800,
+                      fontSize: '14px',
+                    }}>
+                      FM
+                    </div>
+                    <div>
+                      <p style={{ margin: 0, fontWeight: 600, fontSize: 'var(--text-md)', color: 'var(--color-text-primary)' }}>
+                        Last.fm
+                      </p>
+                      <p style={{ margin: '2px 0 0', fontSize: 'var(--text-xs)', color: 'var(--color-text-secondary)' }}>
+                        Real-time now playing & scrobbling
+                      </p>
+                    </div>
+                  </div>
+                  <ToggleSwitch
+                    id="lastfm-toggle"
+                    checked={lfmEnabled}
+                    onChange={() => {
+                      const next = !lfmEnabled;
+                      setLfmEnabled(next);
+                      scrobblingService.saveConfig({ lastfmEnabled: next });
+                      showToast(next ? 'Last.fm scrobbling enabled' : 'Last.fm scrobbling disabled');
+                    }}
+                    label="Last.fm"
+                  />
+                </div>
+
+                {lfmEnabled && (
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: 8, marginTop: 4 }}>
+                    <input
+                      type="text"
+                      placeholder="API Key"
+                      value={lfmApiKey}
+                      onChange={(e) => {
+                        setLfmApiKey(e.target.value);
+                        scrobblingService.saveConfig({ lastfmApiKey: e.target.value });
+                      }}
+                      style={{
+                        background: 'var(--color-surface-2)',
+                        border: '1px solid var(--color-border)',
+                        borderRadius: 'var(--radius-sm)',
+                        padding: '8px 12px',
+                        fontSize: 'var(--text-xs)',
+                        color: 'var(--color-text-primary)',
+                        outline: 'none',
+                      }}
+                    />
+                    <input
+                      type="password"
+                      placeholder="Session Key (sk)"
+                      value={lfmSessionKey}
+                      onChange={(e) => {
+                        setLfmSessionKey(e.target.value);
+                        scrobblingService.saveConfig({ lastfmSessionKey: e.target.value });
+                      }}
+                      style={{
+                        background: 'var(--color-surface-2)',
+                        border: '1px solid var(--color-border)',
+                        borderRadius: 'var(--radius-sm)',
+                        padding: '8px 12px',
+                        fontSize: 'var(--text-xs)',
+                        color: 'var(--color-text-primary)',
+                        outline: 'none',
+                      }}
+                    />
+                  </div>
+                )}
+              </div>
+            </div>
+          </section>
+
+          {/* ── 5. Music Recommendations & Languages ── */}
           <section aria-label="Music Recommendations">
             <h2 style={{
               margin: '0 0 10px',
@@ -428,6 +620,37 @@ export function SettingsScreen() {
                   }}
                 >
                   Change
+                </button>
+              </div>
+
+              {/* Reset AI Personalization & Taste Profile */}
+              <div style={{ borderTop: '1px solid var(--color-border)', paddingTop: 10, display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                <div>
+                  <p style={{ margin: 0, fontSize: 'var(--text-xs)', fontWeight: 600, color: 'var(--color-text-primary)' }}>
+                    Reset Personalization Profile
+                  </p>
+                  <p style={{ margin: '2px 0 0', fontSize: '11px', color: 'var(--color-text-muted)' }}>
+                    Wipe learned taste affinities, skips, and discovery history
+                  </p>
+                </div>
+                <button
+                  type="button"
+                  onClick={() => {
+                    aiTasteProfileEngine.resetPersonalizationProfile();
+                    showToast('Personalization and taste profile reset');
+                  }}
+                  style={{
+                    background: 'rgba(239, 68, 68, 0.1)',
+                    border: '1px solid rgba(239, 68, 68, 0.3)',
+                    color: '#EF4444',
+                    borderRadius: 'var(--radius-md)',
+                    padding: '6px 12px',
+                    fontSize: 'var(--text-xs)',
+                    fontWeight: 700,
+                    cursor: 'pointer',
+                  }}
+                >
+                  Reset
                 </button>
               </div>
 

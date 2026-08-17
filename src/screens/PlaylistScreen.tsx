@@ -5,6 +5,7 @@ import { SongCard } from '../components/cards/SongCard';
 import { EmptyState } from '../components/shared/ErrorState';
 import { formatPlaylistDuration } from '../core/utils';
 import { filterSpotifyAvailableTracksSync } from '../services/SpotifyAvailabilityService';
+import { deduplicateSongs } from '../data/repository/musicRepository';
 import { CONFIG } from '../config';
 import { getOfflineBackupPlaylist } from '../services/OfflineBackupService';
 import { getCuratedPlaylistById } from '../services/CuratedPlaylistsService';
@@ -52,7 +53,8 @@ export function PlaylistScreen() {
     );
   }
 
-  const verifiedTracks = filterSpotifyAvailableTracksSync(playlist.tracks);
+  // Strictly deduplicate tracks so every song appears only once
+  const verifiedTracks = deduplicateSongs(filterSpotifyAvailableTracksSync(playlist.tracks));
   const totalDuration = verifiedTracks.reduce((sum, s) => sum + s.duration, 0);
   const artworkSrc = playlist.artwork || (verifiedTracks[0]?.artwork) || CONFIG.ARTWORK_PLACEHOLDER;
 

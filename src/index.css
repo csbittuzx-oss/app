@@ -1,4 +1,4 @@
-@import url('https://fonts.googleapis.com/css2?family=Poppins:wght@300;400;500;600;700&family=Righteous&display=swap');
+@import url('https://fonts.googleapis.com/css2?family=Anton&family=Bebas+Neue&family=Oswald:wght@500;600;700;800&family=Poppins:wght@300;400;500;600;700&family=Righteous&display=swap');
 
 /* ═══════════════════════════════════════════
    SOUNDWAVE — Design Token System
@@ -44,6 +44,7 @@
 
   /* ── Typography ── */
   --font-display: 'Righteous', sans-serif;
+  --font-lyrics: 'Bebas Neue', 'Anton', 'Oswald', Impact, sans-serif;
   --font-body: 'Poppins', sans-serif;
 
   /* ── Font Sizes ── */
@@ -426,3 +427,54 @@ body {
 
 .safe-top    { padding-top: env(safe-area-inset-top, 0px); }
 .safe-bottom { padding-bottom: env(safe-area-inset-bottom, 0px); }
+
+@keyframes createSheetPop {
+  0% {
+    opacity: 0;
+    transform: translateY(16px) scale(0.96);
+  }
+  100% {
+    opacity: 1;
+    transform: translateY(0) scale(1);
+  }
+}
+
+@keyframes fadeIn {
+  0% { opacity: 0; }
+  100% { opacity: 1; }
+}
+
+/* ─── Heavy Condensed Display Lyrics System ─── */
+
+@keyframes lyricEntrance {
+  0% {
+    opacity: 0;
+    transform: translateY(24px) scale(0.94);
+  }
+  100% {
+    opacity: 1;
+    transform: translateY(0) scale(1);
+  }
+}
+
+.lyric-line-active {
+  font-family: var(--font-lyrics);
+  text-transform: uppercase;
+  letter-spacing: 0.025em;
+  font-weight: 800;
+  line-height: 1.15;
+  color: var(--color-text-primary);
+  text-shadow: 0 4px 28px rgba(245, 158, 11, 0.4), 0 0 16px rgba(255, 255, 255, 0.15);
+  animation: lyricEntrance 380ms cubic-bezier(0.16, 1, 0.3, 1) forwards;
+}
+
+.lyric-line-inactive {
+  font-family: var(--font-lyrics);
+  text-transform: uppercase;
+  letter-spacing: 0.025em;
+  font-weight: 700;
+  line-height: 1.2;
+  color: var(--color-text-secondary);
+  opacity: 0.28;
+  transition: all 400ms cubic-bezier(0.16, 1, 0.3, 1);
+}

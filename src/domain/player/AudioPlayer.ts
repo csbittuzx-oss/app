@@ -3,6 +3,7 @@
 //  Handles playback, queue, MediaSession API, Full-Track Resolver,
 //  Smart AutoPlay & Continuous Next Song Recommendation,
 //  "Continue Listening" Persistence, and Real-time Audio Quality Switching
+//  Adaptive Streaming — network-aware buffering, smart cache, pre-buffer
 // ═══════════════════════════════════════════
 
 import type { Song, RepeatMode, AudioQuality } from '../../data/models';
@@ -13,6 +14,8 @@ import { showToast } from '../../core/utils/toast';
 import { MediaNotificationService } from '../../services/MediaNotificationService';
 import { smartRecommendationEngine } from '../recommendation/SmartRecommendationEngine';
 import { userProfileTracker } from '../recommendation/UserProfileTracker';
+import { aiTasteProfileEngine } from '../ai/AITasteProfileEngine';
+import { adaptiveStreaming } from '../../services/AdaptiveStreamingService';
 
 export interface PlaybackSession {
   song: Song;
@@ -35,14 +38,16 @@ export type AudioPlayerEvent =
   | { type: 'ended' }
   | { type: 'timeupdate'; currentTime: number; duration: number; progress: number }
   | { type: 'loading'; isLoading: boolean }
-  | { type: 'error'; error: string }
+  | { type: 'error'; error: string | null }
   | { type: 'queuechange' }
   | { type: 'songchange'; song: Song | null }
   | { type: 'autoplaychange'; autoPlay: boolean }
-  | { type: 'qualitychange'; quality: AudioQuality };
+  | { type: 'qualitychange'; quality: AudioQuality }
+  | { type: 'ridingmodechange'; ridingMode: boolean };
 
 class AudioPlayer {
   private audio: HTMLAudioElement;
+  private crossfadeAudio: HTMLAudioElement;
   private _queue: Song[] = [];
   private _originalQueue: Song[] = [];
   private _queueIndex = 0;
@@ -50,13 +55,31 @@ class AudioPlayer {
   private _repeat: RepeatMode = 'off';
   private _volume = 1;
   private _autoPlay = true;
+  private _ridingMode = false;
   private _audioQuality: AudioQuality = 'high';
   private callbacks: Set<AudioPlayerCallback> = new Set();
+
+  // Crossfade state
+  private isCrossfading = false;
+  private isCrossfadePaused = false;
+  private crossfadeTimer: ReturnType<typeof setInterval> | null = null;
+  private crossfadeSongId: string | null = null;
+  private crossfadeProgress = 0;
+  private crossfadeTargetSong: Song | null = null;
+  private crossfadeTargetIndex = -1;
+  private isResolvingCrossfade = false;
 
   // AutoPlay & Recommendation state
   private isAutoPlayFetching = false;
   private lastPrefetchedSongId: string | null = null;
   private lastTimeUpdateSecond = 0;
+
+  // Adaptive streaming state
+  private currentStreamSongId: string | null = null;
+  private stallWatcherCleanup: (() => void) | null = null;
+  private nextSongPreBuffered: string | null = null;
+  // Generation counter: incremented on every play() call to cancel stale async requests
+  private _playGeneration = 0;
 
   // Continue Listening & Resume state (Restored from previous session exclusively for resume)
   private savedResumeTrackId: string | null = null;
@@ -66,8 +89,11 @@ class AudioPlayer {
 
   constructor() {
     this.audio = new Audio();
-    this.audio.preload = 'auto';
-    this.audio.crossOrigin = 'anonymous';
+    this.crossfadeAudio = new Audio();
+    adaptiveStreaming.configureAudioElement(this.audio);
+    adaptiveStreaming.configureAudioElement(this.crossfadeAudio);
+    // Initialise network monitoring immediately
+    adaptiveStreaming.initNetworkMonitor();
 
     // Retrieve saved configuration from localStorage if available
     try {
@@ -80,6 +106,10 @@ class AudioPlayer {
         if (typeof parsed.autoPlay === 'boolean') {
           this._autoPlay = parsed.autoPlay;
         }
+      }
+      const savedRiding = localStorage.getItem('sw_riding_mode');
+      if (savedRiding === 'true') {
+        this._ridingMode = true;
       }
     } catch {
       // default
@@ -164,6 +194,7 @@ class AudioPlayer {
 
     this.audio.addEventListener('play', () => {
       this.emit({ type: 'play' });
+      this.emit({ type: 'error', error: null });
       if (this.currentSong) {
         MediaNotificationService.update(
           this.currentSong,
@@ -172,6 +203,11 @@ class AudioPlayer {
           this.audio.currentTime
         );
       }
+    });
+
+    this.audio.addEventListener('playing', () => {
+      this.emit({ type: 'loading', isLoading: false });
+      this.emit({ type: 'error', error: null });
     });
 
     this.audio.addEventListener('pause', () => {
@@ -213,6 +249,28 @@ class AudioPlayer {
         this.lastTimeUpdateSecond = currentSec;
       }
 
+      // When Riding Mode is ON, continuously check remaining duration and trigger DJ crossfade 8-9s before track end
+      if (
+        this._ridingMode &&
+        !this.isCrossfading &&
+        !this.isResolvingCrossfade &&
+        !this.audio.paused &&
+        this.currentSong &&
+        this.crossfadeSongId !== this.currentSong.id &&
+        duration > 15 &&
+        currentTime > 0
+      ) {
+        const remaining = duration - currentTime;
+        if (remaining > 0 && remaining <= 9 && this._repeat !== 'one') {
+          const nextIndex = this._queueIndex + 1;
+          const hasNext = nextIndex < this._queue.length || (this._repeat === 'all' && this._queue.length > 0) || (this._autoPlay && this._queue.length > 0);
+          if (hasNext) {
+            this.crossfadeSongId = this.currentSong.id;
+            this.startCrossfade();
+          }
+        }
+      }
+
       // Proactively pre-fetch context-pure recommendations when 50% through the song and near queue end
       if (
         this._autoPlay &&
@@ -227,12 +285,23 @@ class AudioPlayer {
     });
 
     this.audio.addEventListener('loadstart', () => this.emit({ type: 'loading', isLoading: true }));
-    this.audio.addEventListener('canplay', () => this.emit({ type: 'loading', isLoading: false }));
+    this.audio.addEventListener('canplay', () => {
+      this.emit({ type: 'loading', isLoading: false });
+      this.emit({ type: 'error', error: null });
+    });
     this.audio.addEventListener('error', () => {
       const err = this.audio.error;
+      // Filter out abort errors, empty src resets during song switching, or unmounted states
+      if (!this.audio.src || !this.currentSong || err?.code === MediaError.MEDIA_ERR_ABORTED) {
+        return;
+      }
+
       this.emit({ type: 'loading', isLoading: false });
-      this.emit({ type: 'error', error: err?.message || 'Playback failed' });
+      this.emit({ type: 'error', error: 'Playback failed. Tap to retry.' });
     });
+
+    // Install adaptive stall watcher for graceful buffering recovery
+    this.installAdaptiveStallWatcher();
 
     // Save session on app backgrounding / window close
     if (typeof window !== 'undefined') {
@@ -395,6 +464,26 @@ class AudioPlayer {
     this.emit({ type: 'autoplaychange', autoPlay: enabled });
   }
 
+  get ridingMode(): boolean {
+    return this._ridingMode;
+  }
+
+  set ridingMode(enabled: boolean) {
+    this._ridingMode = enabled;
+    try {
+      localStorage.setItem('sw_riding_mode', String(enabled));
+    } catch {}
+    if (!enabled) {
+      this.cancelCrossfade();
+    }
+    this.emit({ type: 'ridingmodechange', ridingMode: enabled });
+  }
+
+  toggleRidingMode(): boolean {
+    this.ridingMode = !this.ridingMode;
+    return this.ridingMode;
+  }
+
   get audioQuality(): AudioQuality {
     return this._audioQuality;
   }
@@ -402,25 +491,38 @@ class AudioPlayer {
   // ─── Playback ─────────────────────────────────────────────────────────────
 
   async play(song?: Song, queue?: Song[], startIndex?: number, seekToSeconds?: number) {
+    this.cancelCrossfade();
+    const targetSong = song || (queue && queue.length > 0 ? (startIndex !== undefined && startIndex >= 0 && startIndex < queue.length ? queue[startIndex] : queue[0]) : this._queue[this._queueIndex]);
+    if (!targetSong) return;
+
     if (queue && queue.length > 0) {
       this._originalQueue = [...queue];
       this._queue = this._shuffle ? shuffle(queue) : [...queue];
-      this._queueIndex = startIndex !== undefined
-        ? this._shuffle
-          ? this._queue.findIndex((s) => s.id === queue[startIndex].id)
-          : startIndex
-        : 0;
+      const matchIndex = this._queue.findIndex((s) => s.id === targetSong.id);
+      this._queueIndex = matchIndex !== -1 ? matchIndex : (startIndex !== undefined && startIndex >= 0 && startIndex < this._queue.length ? startIndex : 0);
     }
 
-    const targetSong = song || this._queue[this._queueIndex];
-    if (!targetSong) return;
+    // ── Generation counter – every play() call gets a unique ID.
+    //    Any async step checks this before touching the audio element.
+    //    If a newer play() arrived while we were awaiting, we bail out.
+    this._playGeneration = (this._playGeneration + 1) & 0x7fffffff;
+    const myGen = this._playGeneration;
+
+    // ── Cancel all in-flight adaptive stream downloads immediately ──
+    adaptiveStreaming.cancelAllExcept('');   // abort every pending download
+    this.currentStreamSongId = targetSong.id;
+    this.nextSongPreBuffered = null;
+    this.crossfadeSongId = null;
+
+    // ── Immediately stop the old song and clear the audio element ──
+    //    This ensures the previous song stops playing RIGHT NOW, before any async work.
+    this.audio.pause();
+    this.audio.src = '';
 
     // ── Correct Playback State Rules ──
     if (seekToSeconds !== undefined) {
-      // Explicit seek requested (e.g. from explicit Resume action)
       this.pendingSeekPosition = seekToSeconds;
     } else {
-      // User tapped/played a song (from Home, Search, Playlist, Liked Songs, etc.) -> ALWAYS start at 0:00!
       this.pendingSeekPosition = 0;
       this.savedResumePosition = 0;
       this.savedResumeTrackId = null;
@@ -428,22 +530,23 @@ class AudioPlayer {
 
     this.lastTimeUpdateSecond = 0;
     userProfileTracker.recordPlay(targetSong);
-    this.saveCurrentSession();
+    aiTasteProfileEngine.recordSongPlay(targetSong);
 
+    // ── Immediately update UI with new song info (artwork, title, artist) ──
+    this.emit({ type: 'songchange', song: targetSong });
     this.emit({ type: 'loading', isLoading: true });
+    this.updateMediaSession(targetSong);
 
-    // ── Offline Playback Rules ──
+    // ── Offline check ──
     if (!navigator.onLine) {
       let offlineUrl: string | null = null;
-      try {
-        offlineUrl = await getOfflineSongStream(targetSong.id);
-      } catch {
-        // ignore
-      }
+      try { offlineUrl = await getOfflineSongStream(targetSong.id); } catch {}
 
-      if (!offlineUrl && targetSong.previewUrl && targetSong.previewUrl.startsWith('blob:')) {
+      if (!offlineUrl && targetSong.previewUrl?.startsWith('blob:')) {
         offlineUrl = targetSong.previewUrl;
       }
+
+      if (myGen !== this._playGeneration) return;   // newer song selected, bail
 
       if (offlineUrl) {
         targetSong.previewUrl = offlineUrl;
@@ -455,7 +558,7 @@ class AudioPlayer {
       }
     }
 
-    // Check if we need to resolve full track
+    // ── Full-track URL resolution (Spotify preview → JioSaavn) ──
     const isShortPreview = (!targetSong.previewUrl && navigator.onLine)
       || targetSong.provider === 'itunes'
       || targetSong.id.startsWith('spotify_')
@@ -475,40 +578,87 @@ class AudioPlayer {
           this._audioQuality,
           targetSong.duration
         );
-        if (fullTrack && fullTrack.streamUrl) {
+        if (myGen !== this._playGeneration) return;   // newer song selected, bail
+        if (fullTrack?.streamUrl) {
           targetSong.previewUrl = fullTrack.streamUrl;
-          if (fullTrack.duration > 0) {
-            targetSong.duration = fullTrack.duration;
-          }
+          if (fullTrack.duration > 0) targetSong.duration = fullTrack.duration;
           if (fullTrack.artwork && (targetSong.id.startsWith('spotify_') || !targetSong.artwork)) {
             targetSong.artwork = fullTrack.artwork;
             targetSong.artworkLg = fullTrack.artwork;
           }
           targetSong.provider = 'saavn';
+          this.emit({ type: 'songchange', song: { ...targetSong } });
         }
       } catch (e) {
         console.warn('Full track resolve fallback:', e);
       }
     }
 
-    // Format current stream with selected audio quality
-    if (targetSong.previewUrl && !targetSong.previewUrl.startsWith('blob:')) {
-      targetSong.previewUrl = formatMediaUrlWithQuality(targetSong.previewUrl, this._audioQuality);
+    // ── Additional Full-Stream Guarantee: if previewUrl is STILL missing or a short preview (p.scdn.co / apple.com)
+    if (
+      (!targetSong.previewUrl ||
+       targetSong.previewUrl.includes('p.scdn.co') ||
+       targetSong.previewUrl.includes('spotify.com') ||
+       targetSong.previewUrl.includes('apple.com') ||
+       targetSong.previewUrl.includes('mzstatic.com')) &&
+      navigator.onLine
+    ) {
+      try {
+        const { resolveYouTubeFullAudioStream } = await import('../../data/api/youtubeMusicApi');
+        const ytStream = await resolveYouTubeFullAudioStream(targetSong.title, targetSong.artist, targetSong.duration);
+        if (myGen !== this._playGeneration) return;
+        if (ytStream?.streamUrl) {
+          targetSong.previewUrl = ytStream.streamUrl;
+          if (ytStream.duration > 0) targetSong.duration = ytStream.duration;
+          if (ytStream.artwork && (!targetSong.artwork || targetSong.id.startsWith('spotify_'))) {
+            targetSong.artwork = ytStream.artwork;
+            targetSong.artworkLg = ytStream.artwork;
+          }
+          targetSong.provider = 'youtube';
+          this.emit({ type: 'songchange', song: { ...targetSong } });
+        }
+      } catch (e) {
+        console.warn('YouTube full stream resolve fallback:', e);
+      }
     }
 
-    if (!targetSong.previewUrl) {
+    if (myGen !== this._playGeneration) return;   // newer song selected, bail
+
+    if (!targetSong.previewUrl || targetSong.previewUrl.includes('p.scdn.co') || targetSong.previewUrl.includes('apple.com')) {
       this.emit({ type: 'loading', isLoading: false });
       this.emit({ type: 'error', error: `Audio source unavailable for "${targetSong.title}".` });
       showToast(`Audio unavailable for "${targetSong.title}". Skipping...`, 'info', 2000);
       if (this._queue.length > 1 && this._queueIndex < this._queue.length - 1) {
-        setTimeout(() => {
-          if (!this.isPlaying) this.next();
-        }, 1200);
+        setTimeout(() => { if (myGen === this._playGeneration && !this.isPlaying) this.next(); }, 1200);
       }
       return;
     }
 
-    this.audio.src = targetSong.previewUrl;
+    // ── Resolve stream URL ──
+    // Strategy: check cache first for instant play, then fall back to native streaming.
+    // We do NOT wait for a full download before setting audio.src — native streaming starts immediately.
+    let resolvedUrl = formatMediaUrlWithQuality(targetSong.previewUrl, this._audioQuality);
+
+    if (!targetSong.previewUrl.startsWith('blob:') && navigator.onLine) {
+      try {
+        // Check cache synchronously-ish (IndexedDB lookup only, no download)
+        const cachedUrl = await adaptiveStreaming.getCachedUrl(targetSong.id, resolvedUrl);
+        if (myGen !== this._playGeneration) return;
+        if (cachedUrl) {
+          resolvedUrl = cachedUrl;   // instant cache hit – use blob URL
+        }
+        // If no cache hit, use the direct stream URL immediately.
+        // The adaptive service will cache it in the background for next time.
+      } catch {
+        // cache lookup failed – use direct URL
+      }
+    }
+
+    if (myGen !== this._playGeneration) return;   // newer song selected, bail
+
+    // ── Set audio source and start playback ──
+    targetSong.previewUrl = resolvedUrl;
+    this.audio.src = resolvedUrl;
     this.audio.volume = this._volume;
 
     if (this.pendingSeekPosition > 0) {
@@ -518,31 +668,298 @@ class AudioPlayer {
       this.audio.currentTime = 0;
     }
 
-    this.emit({ type: 'songchange', song: targetSong });
-    this.updateMediaSession(targetSong);
     this.saveCurrentSession();
 
-    // Auto-cache song for Spotify-style Offline Backup in the background
-    if (targetSong.previewUrl && !targetSong.previewUrl.startsWith('blob:')) {
-      cacheSongForOfflineBackup(targetSong, targetSong.previewUrl).catch(() => {});
+    // Background-cache for offline backup (non-blocking)
+    if (!resolvedUrl.startsWith('blob:')) {
+      cacheSongForOfflineBackup(targetSong, resolvedUrl).catch(() => {});
+      // Also background-download into the adaptive streaming cache for future instant-play
+      adaptiveStreaming.preBufferSong(targetSong.id, resolvedUrl, this._audioQuality);
     }
 
     try {
       const playPromise = this.audio.play();
+      if (playPromise !== undefined) await playPromise;
+    } catch {
+      // Retry once the browser has buffered enough data
+      const onCanPlay = () => {
+        this.audio.removeEventListener('canplay', onCanPlay);
+        if (myGen === this._playGeneration) this.audio.play().catch(() => {});
+      };
+      this.audio.addEventListener('canplay', onCanPlay, { once: true });
+    }
+
+    if (myGen !== this._playGeneration) return;
+
+    // ── Schedule pre-buffer of the next song in queue ──
+    this.scheduleNextSongPreBuffer();
+  }
+
+
+  /**
+   * Installs adaptive stall watching on the audio element.
+   */
+  private installAdaptiveStallWatcher(): void {
+    if (this.stallWatcherCleanup) this.stallWatcherCleanup();
+    this.stallWatcherCleanup = adaptiveStreaming.installStallWatcher(
+      this.audio,
+      () => this.currentStreamSongId || '',
+      () => {
+        // Stall detected – notify UI via loading event
+        this.emit({ type: 'loading', isLoading: true });
+      },
+      () => {
+        // Recovered – clear loading
+        this.emit({ type: 'loading', isLoading: false });
+      },
+    );
+  }
+
+  /**
+   * Schedules a background pre-buffer of the next song in queue.
+   * Waits a few seconds to avoid competing with the current song's streaming.
+   */
+  private scheduleNextSongPreBuffer(): void {
+    const nextIndex = this._queueIndex + 1;
+    if (nextIndex >= this._queue.length) return;
+    const nextSong = this._queue[nextIndex];
+    if (!nextSong || !nextSong.previewUrl || nextSong.previewUrl.startsWith('blob:')) return;
+    if (this.nextSongPreBuffered === nextSong.id) return;
+
+    // Delay start to let the current song start playing first
+    setTimeout(() => {
+      if (this.nextSongPreBuffered === nextSong.id) return;
+      this.nextSongPreBuffered = nextSong.id;
+      adaptiveStreaming.preBufferSong(nextSong.id, nextSong.previewUrl!, this._audioQuality);
+    }, 8000);
+  }
+
+  // ─── Riding Mode DJ Crossfade Engine ───────────────────────────────────────
+
+  private async startCrossfade(): Promise<void> {
+    if (this.isCrossfading || this.isResolvingCrossfade || !this._ridingMode || this.audio.paused) return;
+
+    let nextIndex = this._queueIndex + 1;
+    let nextSong: Song | null = null;
+
+    if (nextIndex < this._queue.length) {
+      nextSong = this._queue[nextIndex];
+    } else if (this._repeat === 'all' && this._queue.length > 0) {
+      nextIndex = 0;
+      nextSong = this._queue[0];
+    } else if (this._autoPlay && this._queue.length > 0) {
+      try {
+        const current = this.currentSong;
+        if (current) {
+          const context = this.getRecommendationContext();
+          const nextTracks = await smartRecommendationEngine.getSmartNextTracks(current, 3, context);
+          if (nextTracks && nextTracks.length > 0) {
+            this._queue.push(...nextTracks);
+            this._originalQueue.push(...nextTracks);
+            this.emit({ type: 'queuechange' });
+            nextSong = this._queue[nextIndex];
+          }
+        }
+      } catch {}
+    }
+
+    if (!nextSong) return;
+
+    this.isResolvingCrossfade = true;
+    const targetSong = nextSong;
+    const targetIndex = nextIndex;
+
+    try {
+      let streamUrl: string | null = targetSong.previewUrl || null;
+
+      // ── Resolve full audio stream for upcoming song if needed ──
+      const isShortPreview = !streamUrl
+        || targetSong.provider === 'itunes'
+        || targetSong.id.startsWith('spotify_')
+        || (streamUrl && (
+            streamUrl.includes('p.scdn.co') ||
+            streamUrl.includes('spotify.com') ||
+            streamUrl.includes('apple.com') ||
+            streamUrl.includes('mzstatic.com')
+          ));
+
+      if (isShortPreview && navigator.onLine) {
+        const fullTrack = await resolveFullTrack(
+          targetSong.title,
+          targetSong.artist,
+          this._audioQuality,
+          targetSong.duration
+        );
+        if (fullTrack?.streamUrl) {
+          streamUrl = fullTrack.streamUrl;
+          targetSong.previewUrl = fullTrack.streamUrl;
+          if (fullTrack.duration > 0) targetSong.duration = fullTrack.duration;
+          targetSong.provider = 'saavn';
+        }
+      }
+
+      if (!streamUrl && navigator.onLine) {
+        const { resolveYouTubeFullAudioStream } = await import('../../data/api/youtubeMusicApi');
+        const ytStream = await resolveYouTubeFullAudioStream(targetSong.title, targetSong.artist, targetSong.duration);
+        if (ytStream?.streamUrl) {
+          streamUrl = ytStream.streamUrl;
+          targetSong.previewUrl = ytStream.streamUrl;
+          if (ytStream.duration > 0) targetSong.duration = ytStream.duration;
+          targetSong.provider = 'youtube';
+        }
+      }
+
+      this.isResolvingCrossfade = false;
+
+      if (!this._ridingMode || this.audio.paused || !streamUrl) {
+        return;
+      }
+
+      // Check cache or format URL
+      if (!streamUrl.startsWith('blob:') && navigator.onLine) {
+        const cached = await adaptiveStreaming.getCachedUrl(targetSong.id, streamUrl);
+        if (cached) {
+          streamUrl = cached;
+        } else {
+          streamUrl = formatMediaUrlWithQuality(streamUrl, this._audioQuality);
+        }
+      }
+
+      if (!this._ridingMode || this.audio.paused) return;
+
+      this.isCrossfading = true;
+      this.isCrossfadePaused = false;
+      this.crossfadeProgress = 0;
+      this.crossfadeTargetSong = targetSong;
+      this.crossfadeTargetIndex = targetIndex;
+
+      this.crossfadeAudio.src = streamUrl;
+      this.crossfadeAudio.currentTime = 0;
+      this.crossfadeAudio.volume = 0;
+
+      // Start playing next song at 0% volume while current song continues playing
+      const playPromise = this.crossfadeAudio.play();
       if (playPromise !== undefined) {
         await playPromise;
       }
-    } catch {
-      // Auto-retry once media stream is buffered without failing or alerting user
-      const onCanPlayThrough = () => {
-        this.audio.removeEventListener('canplay', onCanPlayThrough);
-        this.audio.play().catch(() => {});
-      };
-      this.audio.addEventListener('canplay', onCanPlayThrough, { once: true });
+
+      if (!this.isCrossfading || !this._ridingMode) {
+        this.crossfadeAudio.pause();
+        return;
+      }
+
+      this.runCrossfadeTransition();
+    } catch (e) {
+      console.warn('Crossfade execution error:', e);
+      this.isResolvingCrossfade = false;
+      this.cancelCrossfade();
     }
   }
 
+  private runCrossfadeTransition() {
+    if (this.crossfadeTimer) {
+      clearInterval(this.crossfadeTimer);
+      this.crossfadeTimer = null;
+    }
+
+    const crossfadeDurationMs = 8000; // 8.0s smooth transition window
+    const stepInterval = 40; // 25 fps buttery-smooth volume increments
+
+    this.crossfadeTimer = setInterval(() => {
+      if (this.isCrossfadePaused) return;
+
+      this.crossfadeProgress += stepInterval / crossfadeDurationMs;
+      const p = Math.min(1, Math.max(0, this.crossfadeProgress));
+
+      // Linear / ease volume crossfade curve
+      // Current song: 100% -> 0%
+      // Next song: 0% -> 100%
+      const fadeOutVol = Math.max(0, this._volume * (1 - p));
+      const fadeInVol = Math.min(this._volume, this._volume * p);
+
+      if (this.audio) this.audio.volume = fadeOutVol;
+      if (this.crossfadeAudio) this.crossfadeAudio.volume = fadeInVol;
+
+      if (p >= 1) {
+        if (this.crossfadeTimer) {
+          clearInterval(this.crossfadeTimer);
+          this.crossfadeTimer = null;
+        }
+        if (this.crossfadeTargetSong) {
+          this.completeCrossfade(this.crossfadeTargetSong, this.crossfadeTargetIndex);
+        }
+      }
+    }, stepInterval);
+  }
+
+  private completeCrossfade(nextSong: Song, newIndex: number): void {
+    if (!this.isCrossfading) return;
+
+    if (this.crossfadeTimer) {
+      clearInterval(this.crossfadeTimer);
+      this.crossfadeTimer = null;
+    }
+
+    // Stop and completely clean up old audio instance
+    this.audio.pause();
+    this.audio.src = '';
+    this.audio.volume = this._volume;
+
+    // Swap audio element instances
+    const oldPrimary = this.audio;
+    this.audio = this.crossfadeAudio;
+    this.crossfadeAudio = oldPrimary;
+    this.crossfadeAudio.volume = 0;
+    this.crossfadeAudio.src = '';
+    this.audio.volume = this._volume;
+
+    this._queueIndex = newIndex;
+    this.isCrossfading = false;
+    this.isCrossfadePaused = false;
+    this.crossfadeTargetSong = null;
+    this.crossfadeProgress = 0;
+    this.crossfadeSongId = null;
+
+    // Reattach event listeners to new primary audio element
+    this.bindEvents();
+
+    this.emit({ type: 'songchange', song: nextSong });
+    this.emit({ type: 'play' });
+    this.updateMediaSession(nextSong);
+    this.saveCurrentSession();
+    this.scheduleNextSongPreBuffer();
+  }
+
+  private cancelCrossfade(): void {
+    if (this.crossfadeTimer) {
+      clearInterval(this.crossfadeTimer);
+      this.crossfadeTimer = null;
+    }
+    if (this.crossfadeAudio) {
+      this.crossfadeAudio.pause();
+      this.crossfadeAudio.src = '';
+      this.crossfadeAudio.volume = 0;
+    }
+    if (this.audio) {
+      this.audio.volume = this._volume;
+    }
+    this.isCrossfading = false;
+    this.isCrossfadePaused = false;
+    this.crossfadeTargetSong = null;
+    this.crossfadeProgress = 0;
+    this.isResolvingCrossfade = false;
+  }
+
   togglePlay() {
+    if (this.isCrossfading) {
+      if (this.isCrossfadePaused || this.audio.paused) {
+        this.resume();
+      } else {
+        this.pause();
+      }
+      return;
+    }
+
     if (this.audio.paused) {
       this.resume();
     } else {
@@ -550,9 +967,31 @@ class AudioPlayer {
     }
   }
 
-  pause() { this.audio.pause(); }
+  pause() {
+    if (this.isCrossfading) {
+      this.isCrossfadePaused = true;
+      this.audio.pause();
+      if (this.crossfadeAudio && !this.crossfadeAudio.paused) {
+        this.crossfadeAudio.pause();
+      }
+      this.emit({ type: 'pause' });
+      return;
+    }
+    this.cancelCrossfade();
+    this.audio.pause();
+  }
 
   resume() {
+    if (this.isCrossfading && this.isCrossfadePaused) {
+      this.isCrossfadePaused = false;
+      this.audio.play().catch(() => {});
+      if (this.crossfadeAudio && this.crossfadeAudio.src) {
+        this.crossfadeAudio.play().catch(() => {});
+      }
+      this.emit({ type: 'play' });
+      return;
+    }
+
     if (this.audio.paused) {
       const current = this.currentSong;
       // If user explicitly resumes the restored session from previous app launch
@@ -562,6 +1001,7 @@ class AudioPlayer {
         this.savedResumeTrackId = null;
         if (!this.audio.src) {
           this.play(current, this._queue, this._queueIndex, resumePos);
+          return;
         } else {
           this.audio.currentTime = resumePos;
           this.audio.play().catch(() => {});
@@ -575,6 +1015,7 @@ class AudioPlayer {
   }
 
   seek(progress: number) {
+    this.cancelCrossfade();
     const dur = this.audio.duration;
     if (!isNaN(dur) && dur > 0) {
       this.audio.currentTime = progress * dur;
@@ -586,6 +1027,7 @@ class AudioPlayer {
   }
 
   seekToTime(seconds: number) {
+    this.cancelCrossfade();
     this.audio.currentTime = seconds;
     this.pendingSeekPosition = 0;
     this.savedResumePosition = 0;
@@ -596,11 +1038,46 @@ class AudioPlayer {
   // ─── Queue Navigation & Smart AutoPlay ────────────────────────────────────
 
   private handleEnded() {
+    // ── Premature short-preview cutoff detector:
+    // If playback ends in less than 35s on a track that is supposed to be full-length (>45s),
+    // automatically re-resolve full stream via YouTube and continue uninterrupted.
+    if (
+      this.audio.currentTime > 0 &&
+      this.audio.currentTime < 35 &&
+      this.currentSong &&
+      this.currentSong.duration > 45 &&
+      navigator.onLine
+    ) {
+      console.warn('Playback ended prematurely (<35s). Re-resolving full stream...');
+      const target = this.currentSong;
+      import('../../data/api/youtubeMusicApi')
+        .then(({ resolveYouTubeFullAudioStream }) => {
+          return resolveYouTubeFullAudioStream(target.title, target.artist, target.duration);
+        })
+        .then((res) => {
+          if (res?.streamUrl && this.currentSong?.id === target.id) {
+            target.previewUrl = res.streamUrl;
+            this.audio.src = res.streamUrl;
+            this.audio.currentTime = 0;
+            this.audio.play().catch(() => {});
+            return;
+          }
+          this.proceedAfterEnded();
+        })
+        .catch(() => this.proceedAfterEnded());
+      return;
+    }
+
+    this.proceedAfterEnded();
+  }
+
+  private proceedAfterEnded() {
     this.emit({ type: 'ended' });
 
     // Record track completion
     if (this.currentSong) {
       userProfileTracker.recordCompletion(this.currentSong);
+      aiTasteProfileEngine.recordSongCompletion(this.currentSong);
     }
 
     if (this._repeat === 'one') {
@@ -654,6 +1131,7 @@ class AudioPlayer {
     const current = this.currentSong;
     if (current && this.audio.currentTime < 25 && (this.audio.duration > 40 || this.audio.currentTime < (this.audio.duration * 0.25))) {
       userProfileTracker.recordSkip(current, this.audio.currentTime);
+      aiTasteProfileEngine.recordSongSkip(current);
     }
 
     if (this._queueIndex < this._queue.length - 1) {

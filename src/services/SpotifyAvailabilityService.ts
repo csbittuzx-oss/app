@@ -46,11 +46,11 @@ export function getCatalogKey(title: string, artist: string): string {
     .toLowerCase()
     .replace(/\(.*?\)/g, '')
     .replace(/\[.*?\]/g, '')
-    .replace(/[^a-z0-9]/g, '');
+    .replace(/[^\p{L}\p{N}]/gu, '');
   const cleanArtist = (artist || '')
     .toLowerCase()
     .split(/[,&/]|feat\.|ft\./i)[0]
-    ?.replace(/[^a-z0-9]/g, '') || '';
+    ?.replace(/[^\p{L}\p{N}]/gu, '') || '';
   return `${cleanTitle}_${cleanArtist}`;
 }
 

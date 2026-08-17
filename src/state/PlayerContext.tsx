@@ -26,6 +26,7 @@ function getInitialPlayerState(): PlayerState {
     showQueue: false,
     showLyrics: false,
     autoPlay: true,
+    ridingMode: audioPlayer.ridingMode,
   };
 
   try {
@@ -66,15 +67,16 @@ type PlayerAction =
   | { type: 'SET_VOLUME'; payload: number }
   | { type: 'SET_MUTED'; payload: boolean }
   | { type: 'SET_AUTOPLAY'; payload: boolean }
+  | { type: 'SET_RIDING_MODE'; payload: boolean }
   | { type: 'SHOW_FULL_PLAYER'; payload: boolean }
   | { type: 'SHOW_QUEUE'; payload: boolean }
   | { type: 'SHOW_LYRICS'; payload: boolean };
 
 function playerReducer(state: PlayerState, action: PlayerAction): PlayerState {
   switch (action.type) {
-    case 'SET_PLAYING':    return { ...state, isPlaying: action.payload };
+    case 'SET_PLAYING':    return { ...state, isPlaying: action.payload, error: action.payload ? null : state.error };
     case 'SET_SONG':       return { ...state, currentSong: action.payload, error: null };
-    case 'SET_PROGRESS':   return { ...state, ...action.payload };
+    case 'SET_PROGRESS':   return { ...state, ...action.payload, error: state.error && state.isPlaying ? null : state.error };
     case 'SET_LOADING':    return { ...state, isLoading: action.payload };
     case 'SET_ERROR':      return { ...state, error: action.payload, isLoading: false };
     case 'SET_QUEUE':      return { ...state, queue: action.payload.queue, queueIndex: action.payload.queueIndex };
@@ -83,6 +85,7 @@ function playerReducer(state: PlayerState, action: PlayerAction): PlayerState {
     case 'SET_VOLUME':     return { ...state, volume: action.payload };
     case 'SET_MUTED':      return { ...state, isMuted: action.payload };
     case 'SET_AUTOPLAY':   return { ...state, autoPlay: action.payload };
+    case 'SET_RIDING_MODE': return { ...state, ridingMode: action.payload };
     case 'SHOW_FULL_PLAYER': return { ...state, showFullPlayer: action.payload };
     case 'SHOW_QUEUE':     return { ...state, showQueue: action.payload };
     case 'SHOW_LYRICS':    return { ...state, showLyrics: action.payload };
@@ -107,6 +110,8 @@ interface PlayerContextValue {
   toggleRepeat: () => void;
   toggleAutoPlay: () => void;
   setAutoPlay: (enabled: boolean) => void;
+  toggleRidingMode: () => void;
+  setRidingMode: (enabled: boolean) => void;
   addToQueue: (song: Song) => void;
   removeFromQueue: (index: number) => void;
   clearQueue: () => void;
@@ -161,15 +166,24 @@ export function PlayerProvider({ children }: { children: React.ReactNode }) {
         case 'autoplaychange':
           dispatch({ type: 'SET_AUTOPLAY', payload: event.autoPlay });
           break;
+        case 'ridingmodechange':
+          dispatch({ type: 'SET_RIDING_MODE', payload: event.ridingMode });
+          break;
       }
     });
     return unsubscribe;
   }, []);
 
   const playSong = useCallback((song: Song, queue?: Song[], startIndex?: number) => {
-    audioPlayer.play(song, queue || [song], startIndex);
+    const targetQueue = queue && queue.length > 0 ? queue : [song];
+    const initialIndex = startIndex !== undefined && startIndex >= 0 && startIndex < targetQueue.length
+      ? startIndex
+      : targetQueue.findIndex(s => s.id === song.id);
+    const validIndex = initialIndex !== -1 ? initialIndex : 0;
+
+    audioPlayer.play(song, targetQueue, validIndex);
     dispatch({ type: 'SET_SONG', payload: song });
-    dispatch({ type: 'SET_QUEUE', payload: { queue: queue || [song], queueIndex: startIndex || 0 } });
+    dispatch({ type: 'SET_QUEUE', payload: { queue: targetQueue, queueIndex: validIndex } });
     dispatch({ type: 'SET_PROGRESS', payload: { currentTime: 0, duration: song.duration || 0, progress: 0 } });
   }, []);
 
@@ -228,6 +242,16 @@ export function PlayerProvider({ children }: { children: React.ReactNode }) {
     } catch {}
   }, []);
 
+  const toggleRidingMode = useCallback(() => {
+    const nextVal = audioPlayer.toggleRidingMode();
+    dispatch({ type: 'SET_RIDING_MODE', payload: nextVal });
+  }, []);
+
+  const setRidingMode = useCallback((enabled: boolean) => {
+    audioPlayer.ridingMode = enabled;
+    dispatch({ type: 'SET_RIDING_MODE', payload: enabled });
+  }, []);
+
   const addToQueue = useCallback((song: Song) => audioPlayer.addToQueue(song), []);
   const removeFromQueue = useCallback((i: number) => audioPlayer.removeFromQueue(i), []);
   const clearQueue = useCallback(() => audioPlayer.clearQueue(), []);
@@ -245,6 +269,7 @@ export function PlayerProvider({ children }: { children: React.ReactNode }) {
       state, playSong, togglePlay, next, previous, seek, seekToTime,
       setVolume, setAudioQuality, toggleMute, toggleShuffle, toggleRepeat,
       toggleAutoPlay, setAutoPlay,
+      toggleRidingMode, setRidingMode,
       addToQueue, removeFromQueue, clearQueue, reorderQueue,
       openFullPlayer, closeFullPlayer, openQueue, closeQueue, openLyrics, closeLyrics,
     }}>

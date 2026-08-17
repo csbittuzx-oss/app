@@ -131,6 +131,64 @@ app.post('/api/updates/publish', async (req, res) => {
   }
 });
 
+const GEMINI_API_KEY = process.env.GEMINI_API_KEY || '';
+
+// ── 3. AI Music Search Intent & Smart Personalization Endpoint ──
+app.post('/api/ai/intent', async (req, res) => {
+  const { query, language } = req.body;
+  if (!query) {
+    return res.status(400).json({ success: false, message: 'Query is required' });
+  }
+
+  if (!GEMINI_API_KEY) {
+    return res.json({
+      success: true,
+      hasGemini: false,
+      query,
+    });
+  }
+
+  try {
+    const prompt = `You are a music recommendation and search intent intelligence engine for SoundWave music streaming application.
+Analyze the user's natural-language music query: "${query}" (Preferred languages: ${language || 'Hindi, English'}).
+Output ONLY a strict JSON object with these exact keys:
+{
+  "isNaturalLanguage": true,
+  "intentType": "mood" | "activity" | "era" | "similarity" | "genre" | "direct",
+  "expandedQuery": "clean search keywords optimized for JioSaavn / YouTube Music",
+  "smartTag": "Short 2-3 word clean badge title (e.g. Study & Focus, Late Night Drive, 2000s Hits)",
+  "categoryHint": "Short description"
+}`;
+
+    const geminiUrl = `https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key=${GEMINI_API_KEY}`;
+    const gRes = await fetch(geminiUrl, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        contents: [{ parts: [{ text: prompt }] }],
+        generationConfig: { responseMimeType: 'application/json' }
+      })
+    });
+
+    if (!gRes.ok) {
+      throw new Error(`Gemini returned HTTP ${gRes.status}`);
+    }
+
+    const gData = await gRes.json();
+    const rawText = gData?.candidates?.[0]?.content?.parts?.[0]?.text;
+    const parsed = JSON.parse(rawText);
+
+    return res.json({
+      success: true,
+      hasGemini: true,
+      data: parsed
+    });
+  } catch (error) {
+    console.error('Gemini intent error:', error);
+    return res.json({ success: false, message: error.message });
+  }
+});
+
 // ── 3. Web Admin Dashboard UI (Desktop & Mobile Responsive) ──
 app.get(['/', '/admin'], async (req, res) => {
   let currentRelease = null;

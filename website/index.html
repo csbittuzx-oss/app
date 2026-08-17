@@ -1,0 +1,1683 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+  <title>Soundwave — Stream 100M+ Songs in 320kbps Lossless Audio | 100% Ad-Free</title>
+  <meta name="description" content="Download Soundwave — The ultimate free, ad-free music streaming app. Enjoy 320kbps HD audio, 28 Indian regional languages, synchronized lyrics, smart auto play, and offline downloads.">
+  <link rel="icon" type="image/png" href="/logo.png">
+  
+  <!-- Open Graph Meta Tags -->
+  <meta property="og:title" content="Soundwave — Premium Music Streaming | 100% Ad-Free">
+  <meta property="og:description" content="Stream 100M+ songs in 320kbps HD audio with zero ads. Download Soundwave APK for Android.">
+  <meta property="og:image" content="/logo.png">
+  <meta property="og:url" content="https://soundwave.app">
+  <meta property="og:type" content="website">
+
+  <!-- Google Fonts -->
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@400;500;600;700;800;900&family=Plus+Jakarta+Sans:wght@400;500;600;700;800&family=Space+Grotesk:wght@600;700&display=swap" rel="stylesheet">
+
+  <style>
+    :root {
+      --bg: #F8F9FC;
+      --surface: #FFFFFF;
+      --surface-2: #F1F5F9;
+      --surface-3: #E2E8F0;
+      --border: #E2E8F0;
+      --border-subtle: #EDF2F7;
+      
+      --accent: #F59E0B;
+      --accent-hover: #D97706;
+      --accent-light: #FEF3C7;
+      --accent-glow: rgba(245, 158, 11, 0.28);
+
+      --text: #0F172A;
+      --text-secondary: #475569;
+      --text-muted: #94A3B8;
+      
+      --success: #10B981;
+      --success-light: #D1FAE5;
+      
+      --font-body: 'Plus Jakarta Sans', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+      --font-display: 'Outfit', 'Space Grotesk', sans-serif;
+      
+      --radius-sm: 8px;
+      --radius-md: 14px;
+      --radius-lg: 20px;
+      --radius-xl: 28px;
+      
+      --shadow-sm: 0 2px 8px rgba(15, 23, 42, 0.04);
+      --shadow-md: 0 8px 24px rgba(15, 23, 42, 0.06);
+      --shadow-lg: 0 16px 40px rgba(15, 23, 42, 0.08);
+      --shadow-xl: 0 24px 60px rgba(15, 23, 42, 0.12);
+      --shadow-accent: 0 10px 28px rgba(245, 158, 11, 0.35);
+    }
+
+    * {
+      box-sizing: border-box;
+      margin: 0;
+      padding: 0;
+    }
+
+    html {
+      scroll-behavior: smooth;
+      font-size: 16px;
+    }
+
+    body {
+      font-family: var(--font-body);
+      background: var(--bg);
+      color: var(--text);
+      line-height: 1.6;
+      overflow-x: hidden;
+      -webkit-font-smoothing: antialiased;
+      -moz-osx-font-smoothing: grayscale;
+    }
+
+    /* Ambient Background Mesh */
+    .bg-mesh {
+      position: fixed;
+      top: 0;
+      left: 0;
+      width: 100vw;
+      height: 100vh;
+      pointer-events: none;
+      z-index: 0;
+      background: 
+        radial-gradient(circle at 10% 20%, rgba(245, 158, 11, 0.07) 0%, transparent 40%),
+        radial-gradient(circle at 90% 40%, rgba(217, 119, 6, 0.05) 0%, transparent 45%),
+        radial-gradient(circle at 50% 80%, rgba(245, 158, 11, 0.04) 0%, transparent 50%);
+    }
+
+    .container {
+      width: 100%;
+      max-width: 1200px;
+      margin: 0 auto;
+      padding: 0 24px;
+      position: relative;
+      z-index: 1;
+    }
+
+    /* Typography */
+    h1, h2, h3, h4 {
+      font-family: var(--font-display);
+      color: var(--text);
+      line-height: 1.2;
+      font-weight: 800;
+      letter-spacing: -0.02em;
+    }
+
+    p {
+      color: var(--text-secondary);
+    }
+
+    /* Header & Navigation */
+    header {
+      position: sticky;
+      top: 0;
+      z-index: 100;
+      backdrop-filter: blur(16px);
+      -webkit-backdrop-filter: blur(16px);
+      background: rgba(248, 249, 252, 0.85);
+      border-bottom: 1px solid rgba(226, 232, 240, 0.8);
+      transition: all 0.25s ease;
+    }
+
+    .nav-inner {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      height: 72px;
+    }
+
+    .brand {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+      text-decoration: none;
+      color: var(--text);
+    }
+
+    .brand-icon {
+      width: 42px;
+      height: 42px;
+      border-radius: 12px;
+      background: linear-gradient(135deg, #F59E0B 0%, #D97706 100%);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      box-shadow: 0 6px 16px rgba(245, 158, 11, 0.3);
+      position: relative;
+      overflow: hidden;
+    }
+
+    .brand-icon img {
+      width: 100%;
+      height: 100%;
+      object-fit: cover;
+    }
+
+    .brand-name {
+      font-family: var(--font-display);
+      font-size: 22px;
+      font-weight: 800;
+      letter-spacing: -0.02em;
+      color: var(--text);
+    }
+
+    .brand-name span {
+      color: var(--accent);
+    }
+
+    .nav-links {
+      display: flex;
+      align-items: center;
+      gap: 32px;
+      list-style: none;
+    }
+
+    .nav-links a {
+      text-decoration: none;
+      color: var(--text-secondary);
+      font-weight: 600;
+      font-size: 14px;
+      transition: color 0.2s ease;
+    }
+
+    .nav-links a:hover {
+      color: var(--text);
+    }
+
+    .nav-cta-btn {
+      display: inline-flex;
+      align-items: center;
+      gap: 8px;
+      background: linear-gradient(135deg, #F59E0B 0%, #D97706 100%);
+      color: #FFFFFF !important;
+      padding: 10px 20px;
+      border-radius: 999px;
+      font-weight: 700;
+      font-size: 14px;
+      text-decoration: none;
+      box-shadow: var(--shadow-accent);
+      transition: all 0.2s ease;
+    }
+
+    .nav-cta-btn:hover {
+      transform: translateY(-2px);
+      box-shadow: 0 12px 32px rgba(245, 158, 11, 0.45);
+    }
+
+    .mobile-menu-btn {
+      display: none;
+      background: none;
+      border: none;
+      cursor: pointer;
+      padding: 8px;
+      color: var(--text);
+    }
+
+    /* Mobile Drawer */
+    .mobile-drawer {
+      display: none;
+      flex-direction: column;
+      gap: 16px;
+      padding: 20px 24px;
+      background: var(--surface);
+      border-bottom: 1px solid var(--border);
+    }
+
+    .mobile-drawer.open {
+      display: flex;
+    }
+
+    .mobile-drawer a {
+      text-decoration: none;
+      color: var(--text);
+      font-weight: 600;
+      font-size: 16px;
+      padding: 8px 0;
+    }
+
+    /* Hero Section */
+    .hero {
+      padding: 70px 0 80px;
+      position: relative;
+    }
+
+    .hero-grid {
+      display: grid;
+      grid-template-columns: 1.15fr 0.85fr;
+      gap: 50px;
+      align-items: center;
+    }
+
+    .hero-badge {
+      display: inline-flex;
+      align-items: center;
+      gap: 8px;
+      padding: 6px 14px;
+      border-radius: 999px;
+      background: var(--accent-light);
+      border: 1px solid rgba(245, 158, 11, 0.3);
+      color: #B45309;
+      font-weight: 700;
+      font-size: 13px;
+      margin-bottom: 20px;
+    }
+
+    .hero-badge-dot {
+      width: 7px;
+      height: 7px;
+      border-radius: 50%;
+      background: var(--accent);
+      box-shadow: 0 0 8px var(--accent);
+      animation: pulse 1.8s infinite;
+    }
+
+    @keyframes pulse {
+      0%, 100% { opacity: 1; transform: scale(1); }
+      50% { opacity: 0.4; transform: scale(1.3); }
+    }
+
+    .hero h1 {
+      font-size: clamp(2.4rem, 4.8vw, 3.6rem);
+      line-height: 1.12;
+      margin-bottom: 20px;
+      letter-spacing: -0.03em;
+    }
+
+    .hero h1 .highlight {
+      background: linear-gradient(135deg, #F59E0B 0%, #D97706 100%);
+      -webkit-background-clip: text;
+      -webkit-text-fill-color: transparent;
+    }
+
+    .hero-desc {
+      font-size: clamp(1rem, 1.8vw, 1.15rem);
+      color: var(--text-secondary);
+      line-height: 1.65;
+      margin-bottom: 32px;
+      max-width: 540px;
+    }
+
+    .hero-cta-group {
+      display: flex;
+      align-items: center;
+      gap: 16px;
+      flex-wrap: wrap;
+      margin-bottom: 36px;
+    }
+
+    .btn-primary {
+      display: inline-flex;
+      align-items: center;
+      gap: 10px;
+      background: linear-gradient(135deg, #F59E0B 0%, #D97706 100%);
+      color: #FFFFFF;
+      padding: 16px 28px;
+      border-radius: 999px;
+      font-size: 16px;
+      font-weight: 700;
+      text-decoration: none;
+      box-shadow: var(--shadow-accent);
+      transition: all 0.22s cubic-bezier(0.2, 0.8, 0.2, 1);
+    }
+
+    .btn-primary:hover {
+      transform: translateY(-3px) scale(1.02);
+      box-shadow: 0 16px 36px rgba(245, 158, 11, 0.45);
+    }
+
+    .btn-secondary {
+      display: inline-flex;
+      align-items: center;
+      gap: 8px;
+      background: var(--surface);
+      color: var(--text);
+      border: 1.5px solid var(--border);
+      padding: 15px 24px;
+      border-radius: 999px;
+      font-size: 15px;
+      font-weight: 700;
+      text-decoration: none;
+      box-shadow: var(--shadow-sm);
+      transition: all 0.2s ease;
+    }
+
+    .btn-secondary:hover {
+      background: var(--surface-2);
+      border-color: #CBD5E1;
+      transform: translateY(-2px);
+    }
+
+    .hero-proof-list {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 20px;
+    }
+
+    .proof-item {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      font-size: 13px;
+      font-weight: 600;
+      color: var(--text-secondary);
+    }
+
+    .proof-icon {
+      color: var(--success);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      background: var(--success-light);
+      width: 20px;
+      height: 20px;
+      border-radius: 50%;
+    }
+
+    /* Hero Mockup (Phone Frame) */
+    .hero-mockup-wrap {
+      position: relative;
+      display: flex;
+      justify-content: center;
+    }
+
+    .mockup-glow {
+      position: absolute;
+      top: 50%;
+      left: 50%;
+      transform: translate(-50%, -50%);
+      width: 320px;
+      height: 480px;
+      background: radial-gradient(circle, rgba(245, 158, 11, 0.22) 0%, transparent 70%);
+      filter: blur(40px);
+      z-index: 0;
+    }
+
+    .phone-frame {
+      position: relative;
+      z-index: 1;
+      width: 310px;
+      height: 620px;
+      background: #FFFFFF;
+      border-radius: 44px;
+      border: 10px solid #0F172A;
+      box-shadow: 0 28px 70px rgba(15, 23, 42, 0.22), 0 0 0 1px rgba(0,0,0,0.1);
+      display: flex;
+      flex-direction: column;
+      overflow: hidden;
+    }
+
+    .phone-notch {
+      position: absolute;
+      top: 8px;
+      left: 50%;
+      transform: translateX(-50%);
+      width: 100px;
+      height: 22px;
+      background: #0F172A;
+      border-radius: 20px;
+      z-index: 10;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      gap: 8px;
+    }
+
+    .notch-cam {
+      width: 8px;
+      height: 8px;
+      border-radius: 50%;
+      background: #1E293B;
+    }
+
+    .phone-screen {
+      flex: 1;
+      padding: 40px 16px 16px;
+      background: #F8F9FC;
+      display: flex;
+      flex-direction: column;
+      position: relative;
+      font-size: 12px;
+    }
+
+    .mock-header {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      margin-bottom: 16px;
+    }
+
+    .mock-card {
+      background: #FFFFFF;
+      border-radius: 16px;
+      padding: 14px;
+      box-shadow: 0 4px 16px rgba(15, 23, 42, 0.05);
+      border: 1px solid #F1F5F9;
+      margin-bottom: 12px;
+    }
+
+    .mock-art-wrap {
+      width: 100%;
+      height: 180px;
+      border-radius: 14px;
+      overflow: hidden;
+      position: relative;
+      margin-bottom: 12px;
+      background: #0F172A;
+    }
+
+    .mock-art-wrap img {
+      width: 100%;
+      height: 100%;
+      object-fit: cover;
+    }
+
+    .mock-eq {
+      position: absolute;
+      bottom: 10px;
+      right: 10px;
+      background: rgba(0,0,0,0.65);
+      backdrop-filter: blur(8px);
+      padding: 4px 8px;
+      border-radius: 8px;
+      display: flex;
+      align-items: flex-end;
+      gap: 3px;
+      height: 20px;
+    }
+
+    .mock-eq span {
+      width: 3px;
+      background: #F59E0B;
+      border-radius: 2px;
+      animation: eq 0.8s infinite alternate ease-in-out;
+    }
+    .mock-eq span:nth-child(1) { height: 8px; animation-delay: 0.1s; }
+    .mock-eq span:nth-child(2) { height: 16px; animation-delay: 0.3s; }
+    .mock-eq span:nth-child(3) { height: 10px; animation-delay: 0.2s; }
+    .mock-eq span:nth-child(4) { height: 14px; animation-delay: 0.4s; }
+
+    @keyframes eq {
+      0% { height: 4px; }
+      100% { height: 16px; }
+    }
+
+    .mock-controls {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      margin-top: 8px;
+    }
+
+    .mock-play-btn {
+      width: 44px;
+      height: 44px;
+      border-radius: 50%;
+      background: #F59E0B;
+      color: #fff;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      box-shadow: 0 4px 14px rgba(245, 158, 11, 0.4);
+    }
+
+    /* Floating Pills */
+    .floating-card-1 {
+      position: absolute;
+      top: 60px;
+      left: -40px;
+      background: #FFFFFF;
+      padding: 10px 16px;
+      border-radius: 16px;
+      box-shadow: var(--shadow-lg);
+      border: 1px solid var(--border);
+      display: flex;
+      align-items: center;
+      gap: 12px;
+      z-index: 5;
+      animation: float 4s ease-in-out infinite;
+    }
+
+    .floating-card-2 {
+      position: absolute;
+      bottom: 80px;
+      right: -30px;
+      background: #FFFFFF;
+      padding: 10px 16px;
+      border-radius: 16px;
+      box-shadow: var(--shadow-lg);
+      border: 1px solid var(--border);
+      display: flex;
+      align-items: center;
+      gap: 12px;
+      z-index: 5;
+      animation: float 4.5s ease-in-out infinite reverse;
+    }
+
+    .pill-svg-icon {
+      width: 36px;
+      height: 36px;
+      border-radius: 10px;
+      background: var(--accent-light);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      color: var(--accent-hover);
+    }
+
+    @keyframes float {
+      0%, 100% { transform: translateY(0); }
+      50% { transform: translateY(-8px); }
+    }
+
+    /* Section Styling */
+    section {
+      padding: 90px 0;
+      position: relative;
+    }
+
+    .section-head {
+      text-align: center;
+      max-width: 680px;
+      margin: 0 auto 56px;
+    }
+
+    .section-tag {
+      display: inline-block;
+      font-size: 12px;
+      font-weight: 800;
+      letter-spacing: 0.08em;
+      text-transform: uppercase;
+      color: var(--accent-hover);
+      background: var(--accent-light);
+      padding: 6px 14px;
+      border-radius: 999px;
+      margin-bottom: 12px;
+    }
+
+    .section-head h2 {
+      font-size: clamp(2rem, 3.6vw, 2.6rem);
+      margin-bottom: 16px;
+      letter-spacing: -0.025em;
+    }
+
+    .section-head p {
+      font-size: 16px;
+      color: var(--text-secondary);
+    }
+
+    /* Bento Features Grid */
+    .bento-grid {
+      display: grid;
+      grid-template-columns: repeat(3, 1fr);
+      gap: 24px;
+    }
+
+    .bento-card {
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: var(--radius-xl);
+      padding: 32px 28px;
+      box-shadow: var(--shadow-sm);
+      transition: all 0.28s cubic-bezier(0.2, 0.8, 0.2, 1);
+      display: flex;
+      flex-direction: column;
+      position: relative;
+      overflow: hidden;
+    }
+
+    .bento-card:hover {
+      transform: translateY(-6px);
+      box-shadow: var(--shadow-lg);
+      border-color: #CBD5E1;
+    }
+
+    .bento-card.featured {
+      grid-column: span 2;
+      background: linear-gradient(135deg, #FFFFFF 0%, #FEF9EE 100%);
+      border-color: rgba(245, 158, 11, 0.35);
+    }
+
+    .bento-icon {
+      width: 52px;
+      height: 52px;
+      border-radius: 16px;
+      background: var(--surface-2);
+      border: 1px solid var(--border);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      margin-bottom: 22px;
+      color: var(--accent-hover);
+    }
+
+    .bento-card.featured .bento-icon {
+      background: var(--accent-light);
+      border-color: rgba(245, 158, 11, 0.4);
+      color: var(--accent-hover);
+    }
+
+    .bento-card h3 {
+      font-size: 20px;
+      margin-bottom: 10px;
+      letter-spacing: -0.015em;
+    }
+
+    .bento-card p {
+      font-size: 14.5px;
+      color: var(--text-secondary);
+      line-height: 1.6;
+    }
+
+    /* Comparison Table Section */
+    .comparison-wrap {
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: var(--radius-xl);
+      box-shadow: var(--shadow-md);
+      overflow-x: auto;
+    }
+
+    table {
+      width: 100%;
+      border-collapse: collapse;
+      text-align: left;
+      min-width: 600px;
+    }
+
+    th, td {
+      padding: 18px 24px;
+      border-bottom: 1px solid var(--border);
+      font-size: 15px;
+    }
+
+    th {
+      background: var(--surface-2);
+      font-family: var(--font-display);
+      font-weight: 700;
+      color: var(--text);
+    }
+
+    th.highlight-col, td.highlight-col {
+      background: rgba(245, 158, 11, 0.05);
+      border-left: 1.5px solid rgba(245, 158, 11, 0.3);
+      border-right: 1.5px solid rgba(245, 158, 11, 0.3);
+    }
+
+    th.highlight-col {
+      color: var(--accent-hover);
+    }
+
+    .check-yes {
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      color: var(--success);
+      font-weight: 700;
+    }
+
+    .check-no {
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      color: var(--text-muted);
+    }
+
+    /* Languages Grid */
+    .lang-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fill, minmax(130px, 1fr));
+      gap: 12px;
+    }
+
+    .lang-pill {
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: var(--radius-md);
+      padding: 12px 14px;
+      text-align: center;
+      transition: all 0.2s ease;
+      display: flex;
+      flex-direction: column;
+      gap: 2px;
+    }
+
+    .lang-pill:hover {
+      border-color: var(--accent);
+      background: var(--accent-light);
+      transform: translateY(-2px);
+    }
+
+    .lang-name {
+      font-weight: 700;
+      font-size: 13.5px;
+      color: var(--text);
+    }
+
+    .lang-native {
+      font-size: 11px;
+      color: var(--text-muted);
+    }
+
+    /* Installation & Permission Guide */
+    .install-steps {
+      display: grid;
+      grid-template-columns: repeat(3, 1fr);
+      gap: 24px;
+      margin-bottom: 40px;
+    }
+
+    .step-card {
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: var(--radius-xl);
+      padding: 32px 24px;
+      box-shadow: var(--shadow-sm);
+      position: relative;
+    }
+
+    .step-number {
+      width: 36px;
+      height: 36px;
+      border-radius: 50%;
+      background: var(--accent-light);
+      color: var(--accent-hover);
+      font-weight: 800;
+      font-size: 16px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      margin-bottom: 18px;
+    }
+
+    .step-card h3 {
+      font-size: 18px;
+      margin-bottom: 8px;
+    }
+
+    .step-card p {
+      font-size: 14px;
+      color: var(--text-secondary);
+      line-height: 1.55;
+    }
+
+    .permission-callout {
+      background: #FFFBEB;
+      border: 1.5px solid #FDE68A;
+      border-radius: var(--radius-lg);
+      padding: 24px;
+      display: flex;
+      align-items: flex-start;
+      gap: 16px;
+    }
+
+    .callout-icon {
+      font-size: 24px;
+      line-height: 1;
+    }
+
+    /* FAQ Accordion */
+    .faq-list {
+      max-width: 760px;
+      margin: 0 auto;
+      display: flex;
+      flex-direction: column;
+      gap: 14px;
+    }
+
+    .faq-item {
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: var(--radius-lg);
+      overflow: hidden;
+      transition: all 0.2s ease;
+    }
+
+    .faq-item.active {
+      border-color: #CBD5E1;
+      box-shadow: var(--shadow-md);
+    }
+
+    .faq-question {
+      padding: 20px 24px;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      cursor: pointer;
+      font-weight: 700;
+      font-size: 16px;
+      color: var(--text);
+      user-select: none;
+    }
+
+    .faq-toggle-icon {
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      color: var(--text-muted);
+      transition: transform 0.25s ease, color 0.25s ease;
+    }
+
+    .faq-item.active .faq-toggle-icon {
+      transform: rotate(45deg);
+      color: var(--accent-hover);
+    }
+
+    .faq-answer {
+      padding: 0 24px 20px;
+      color: var(--text-secondary);
+      font-size: 14.5px;
+      line-height: 1.65;
+      display: none;
+    }
+
+    .faq-item.active .faq-answer {
+      display: block;
+    }
+
+    /* Final CTA Banner */
+    .final-cta {
+      background: linear-gradient(135deg, #0F172A 0%, #1E293B 100%);
+      color: #FFFFFF;
+      border-radius: var(--radius-xl);
+      padding: 60px 48px;
+      box-shadow: var(--shadow-xl);
+      display: grid;
+      grid-template-columns: 1.3fr 0.7fr;
+      gap: 40px;
+      align-items: center;
+      position: relative;
+      overflow: hidden;
+    }
+
+    .final-cta::after {
+      content: '';
+      position: absolute;
+      top: -50%;
+      right: -20%;
+      width: 400px;
+      height: 400px;
+      background: radial-gradient(circle, rgba(245, 158, 11, 0.25) 0%, transparent 70%);
+      pointer-events: none;
+    }
+
+    .final-cta h2 {
+      color: #FFFFFF;
+      font-size: clamp(2rem, 3.4vw, 2.6rem);
+      margin-bottom: 14px;
+    }
+
+    .final-cta p {
+      color: #94A3B8;
+      font-size: 16px;
+      margin-bottom: 28px;
+      line-height: 1.6;
+    }
+
+    .qr-card {
+      background: #FFFFFF;
+      border-radius: var(--radius-lg);
+      padding: 20px;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      text-align: center;
+      color: var(--text);
+      box-shadow: 0 8px 30px rgba(0,0,0,0.3);
+      max-width: 240px;
+      margin-left: auto;
+    }
+
+    .qr-card img {
+      width: 140px;
+      height: 140px;
+      border-radius: 8px;
+      margin-bottom: 10px;
+    }
+
+    .qr-label {
+      font-size: 12px;
+      font-weight: 700;
+      color: var(--text-secondary);
+    }
+
+    /* Footer */
+    footer {
+      border-top: 1px solid var(--border);
+      background: var(--surface);
+      padding: 60px 0 32px;
+      margin-top: 60px;
+    }
+
+    .footer-grid {
+      display: grid;
+      grid-template-columns: 1.5fr 1fr 1fr;
+      gap: 40px;
+      margin-bottom: 48px;
+    }
+
+    .footer-brand p {
+      font-size: 14px;
+      color: var(--text-secondary);
+      margin-top: 12px;
+      max-width: 320px;
+    }
+
+    .footer-col h4 {
+      font-size: 15px;
+      font-weight: 800;
+      margin-bottom: 18px;
+      text-transform: uppercase;
+      letter-spacing: 0.05em;
+    }
+
+    .footer-col ul {
+      list-style: none;
+      display: flex;
+      flex-direction: column;
+      gap: 10px;
+    }
+
+    .footer-col a {
+      text-decoration: none;
+      color: var(--text-secondary);
+      font-size: 14px;
+      transition: color 0.2s ease;
+    }
+
+    .footer-col a:hover {
+      color: var(--accent-hover);
+    }
+
+    .footer-bottom {
+      border-top: 1px solid var(--border);
+      padding-top: 24px;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      flex-wrap: wrap;
+      gap: 16px;
+      font-size: 13px;
+      color: var(--text-muted);
+    }
+
+    /* Responsive Breakpoints */
+    @media (max-width: 960px) {
+      .hero-grid { grid-template-columns: 1fr; text-align: center; }
+      .hero-desc { margin-left: auto; margin-right: auto; }
+      .hero-cta-group { justify-content: center; }
+      .hero-proof-list { justify-content: center; }
+      .bento-grid { grid-template-columns: 1fr; }
+      .bento-card.featured { grid-column: span 1; }
+      .install-steps { grid-template-columns: 1fr; }
+      .final-cta { grid-template-columns: 1fr; text-align: center; }
+      .qr-card { margin: 0 auto; }
+      .footer-grid { grid-template-columns: 1fr; gap: 32px; }
+    }
+
+    @media (max-width: 768px) {
+      .nav-links { display: none; }
+      .mobile-menu-btn { display: block; }
+      .phone-frame { width: 280px; height: 560px; }
+      .floating-card-1 { display: none; }
+      .floating-card-2 { display: none; }
+    }
+  </style>
+</head>
+<body>
+
+  <!-- Background Ambient Mesh -->
+  <div class="bg-mesh"></div>
+
+  <!-- ── Header ── -->
+  <header>
+    <div class="container">
+      <div class="nav-inner">
+        <a href="#" class="brand">
+          <div class="brand-icon">
+            <img src="/logo.png" alt="Soundwave Logo" onerror="this.style.display='none'">
+            <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polygon points="11 5 6 9 2 9 2 15 6 15 11 19 11 5"/><path d="M15.54 8.46a5 5 0 0 1 0 7.07"/><path d="M19.07 4.93a10 10 0 0 1 0 14.14"/></svg>
+          </div>
+          <div class="brand-name">Sound<span>wave</span></div>
+        </a>
+
+        <ul class="nav-links">
+          <li><a href="#features">Features</a></li>
+          <li><a href="#experience">Player</a></li>
+          <li><a href="#languages">28 Languages</a></li>
+          <li><a href="#install-guide">Install Guide</a></li>
+          <li><a href="#faq">FAQ</a></li>
+          <li>
+            <a href="https://github.com/csbittuzx-oss/app/raw/main/Soundwave.apk" class="nav-cta-btn" download>
+              <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
+              <span>Download APK</span>
+            </a>
+          </li>
+        </ul>
+
+        <button class="mobile-menu-btn" onclick="toggleMobileMenu()" aria-label="Toggle navigation">
+          <svg width="26" height="26" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><line x1="3" y1="12" x2="21" y2="12"/><line x1="3" y1="6" x2="21" y2="6"/><line x1="3" y1="18" x2="21" y2="18"/></svg>
+        </button>
+      </div>
+    </div>
+
+    <!-- Mobile Drawer -->
+    <div class="mobile-drawer" id="mobileDrawer">
+      <a href="#features" onclick="toggleMobileMenu()">Features</a>
+      <a href="#experience" onclick="toggleMobileMenu()">Player</a>
+      <a href="#languages" onclick="toggleMobileMenu()">28 Languages</a>
+      <a href="#install-guide" onclick="toggleMobileMenu()">Install Guide</a>
+      <a href="#faq" onclick="toggleMobileMenu()">FAQ</a>
+      <a href="https://github.com/csbittuzx-oss/app/raw/main/Soundwave.apk" class="btn-primary" style="justify-content: center;" download>
+        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
+        <span>Download Soundwave APK (v1.3.0)</span>
+      </a>
+    </div>
+  </header>
+
+  <!-- ── Hero Section ── -->
+  <section class="hero">
+    <div class="container">
+      <div class="hero-grid">
+        
+        <!-- Left Hero Content -->
+        <div class="hero-content">
+          <div class="hero-badge">
+            <span class="hero-badge-dot"></span>
+            <span>Soundwave v1.3.0 Release · 100% Free Forever</span>
+          </div>
+
+          <h1>Stream 100M+ Songs in <span class="highlight">320kbps HD Audio</span> Without Ads.</h1>
+
+          <p class="hero-desc">
+            The modern open-source music streaming app built for true audiophiles. Experience seamless playback in 28 regional languages, synced live lyrics, smart continuous auto play, and instant offline downloads.
+          </p>
+
+          <div class="hero-cta-group">
+            <a href="https://github.com/csbittuzx-oss/app/raw/main/Soundwave.apk" class="btn-primary" download>
+              <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
+              <span>Download APK (Android)</span>
+            </a>
+
+            <a href="https://github.com/csbittuzx-oss/app" target="_blank" class="btn-secondary">
+              <svg width="20" height="20" viewBox="0 0 24 24" fill="currentColor"><path d="M12 0C5.37 0 0 5.37 0 12c0 5.31 3.435 9.795 8.205 11.385.6.105.825-.255.825-.57 0-.285-.015-1.23-.015-2.235-3.015.555-3.795-.735-4.035-1.41-.135-.345-.72-1.41-1.23-1.695-.42-.225-1.02-.78-.015-.795.945-.015 1.62.87 1.845 1.23 1.08 1.815 2.805 1.305 3.495.99.105-.78.42-1.305.765-1.605-2.67-.3-5.46-1.335-5.46-5.925 0-1.305.465-2.385 1.23-3.225-.12-.3-.54-1.53.12-3.18 0 0 1.005-.315 3.3 1.23.96-.27 1.98-.405 3-.405s2.04.135 3 .405c2.295-1.56 3.3-1.23 3.3-1.23.66 1.65.24 2.88.12 3.18.765.84 1.23 1.905 1.23 3.225 0 4.605-2.805 5.625-5.475 5.925.435.375.81 1.095.81 2.22 0 1.605-.015 2.895-.015 3.3 0 .315.225.69.825.57A12.02 12.02 0 0 0 24 12c0-6.63-5.37-12-12-12z"/></svg>
+              <span>GitHub Repo</span>
+            </a>
+          </div>
+
+          <div class="hero-proof-list">
+            <div class="proof-item">
+              <span class="proof-icon">
+                <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"/></svg>
+              </span>
+              <span>100% Ad-Free Forever</span>
+            </div>
+            <div class="proof-item">
+              <span class="proof-icon">
+                <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"/></svg>
+              </span>
+              <span>320kbps Studio Master Quality</span>
+            </div>
+            <div class="proof-item">
+              <span class="proof-icon">
+                <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"/></svg>
+              </span>
+              <span>28 Indian Regional Languages</span>
+            </div>
+            <div class="proof-item">
+              <span class="proof-icon">
+                <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"/></svg>
+              </span>
+              <span>Spotify Verified Catalog</span>
+            </div>
+          </div>
+        </div>
+
+        <!-- Right Hero Mockup -->
+        <div class="hero-mockup-wrap">
+          <div class="mockup-glow"></div>
+          
+          <!-- Floating Pill 1 -->
+          <div class="floating-card-1">
+            <div class="pill-svg-icon">
+              <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2"/></svg>
+            </div>
+            <div>
+              <strong style="font-size: 13px; display: block; color: var(--text);">Lossless 320kbps</strong>
+              <span style="font-size: 11px; color: var(--text-muted);">Studio Master Sound</span>
+            </div>
+          </div>
+
+          <!-- Floating Pill 2 -->
+          <div class="floating-card-2">
+            <div class="pill-svg-icon">
+              <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><circle cx="12" cy="12" r="6"/><circle cx="12" cy="12" r="2"/></svg>
+            </div>
+            <div>
+              <strong style="font-size: 13px; display: block; color: var(--text);">Smart Auto Play</strong>
+              <span style="font-size: 11px; color: var(--text-muted);">Strict Language Context</span>
+            </div>
+          </div>
+
+          <!-- Realistic Phone Bezel Mockup -->
+          <div class="phone-frame">
+            <div class="phone-notch">
+              <div class="notch-cam"></div>
+            </div>
+
+            <div class="phone-screen">
+              <div class="mock-header">
+                <span style="font-weight: 800; font-size: 14px; color: #0F172A;">Soundwave</span>
+                <span style="background: rgba(245, 158, 11, 0.15); color: #D97706; padding: 2px 8px; border-radius: 999px; font-weight: 700; font-size: 10px;">320kbps HD</span>
+              </div>
+
+              <div class="mock-card">
+                <div class="mock-art-wrap">
+                  <img src="https://images.unsplash.com/photo-1511671782779-c97d3d27a1d4?w=500&auto=format&fit=crop&q=80" alt="Album Cover">
+                  <div class="mock-eq">
+                    <span></span><span></span><span></span><span></span>
+                  </div>
+                </div>
+
+                <div style="font-weight: 800; font-size: 15px; color: #0F172A; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;">Kesariya (From "Brahmastra")</div>
+                <div style="font-size: 12px; color: #64748B; margin-top: 2px;">Arijit Singh, Pritam · Hindi</div>
+
+                <!-- Progress Bar -->
+                <div style="margin: 14px 0 6px; width: 100%; height: 4px; background: #E2E8F0; border-radius: 2px; position: relative;">
+                  <div style="width: 58%; height: 100%; background: #F59E0B; border-radius: 2px;"></div>
+                </div>
+                <div style="display: flex; justify-content: space-between; font-size: 10px; color: #94A3B8;">
+                  <span>02:14</span>
+                  <span>04:28</span>
+                </div>
+
+                <!-- Playback Controls -->
+                <div class="mock-controls">
+                  <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#64748B" stroke-width="2"><polygon points="19 20 9 12 19 4 19 20"/><line x1="5" y1="19" x2="5" y2="5"/></svg>
+                  <div class="mock-play-btn">
+                    <svg width="18" height="18" viewBox="0 0 24 24" fill="currentColor"><polygon points="5 3 19 12 5 21 5 3"/></svg>
+                  </div>
+                  <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#64748B" stroke-width="2"><polygon points="5 4 15 12 5 20 5 4"/><line x1="19" y1="5" x2="19" y2="19"/></svg>
+                </div>
+              </div>
+
+              <!-- Synced Lyrics Teaser -->
+              <div style="background: #FFFFFF; border-radius: 12px; padding: 10px 12px; border: 1px solid #F1F5F9;">
+                <div style="font-size: 10px; font-weight: 800; text-transform: uppercase; color: #F59E0B; margin-bottom: 2px;">Live Synced Lyrics</div>
+                <div style="font-size: 11px; font-weight: 700; color: #0F172A;">"Kesariya tera ishq hai piya..."</div>
+              </div>
+            </div>
+          </div>
+
+        </div>
+
+      </div>
+    </div>
+  </section>
+
+  <!-- ── Bento Features Grid ── -->
+  <section id="features" style="background: var(--surface);">
+    <div class="container">
+      <div class="section-head">
+        <span class="section-tag">Core Features</span>
+        <h2>Engineered for Sound Perfection</h2>
+        <p>Soundwave eliminates all limitations found in traditional streaming services to deliver a frictionless audio experience.</p>
+      </div>
+
+      <div class="bento-grid">
+        
+        <!-- Feature 1: Featured 320kbps -->
+        <div class="bento-card featured">
+          <div class="bento-icon">
+            <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 18v-6a9 9 0 0 1 18 0v6"/><path d="M21 19a2 2 0 0 1-2 2h-1a2 2 0 0 1-2-2v-3a2 2 0 0 1 2-2h3zM3 19a2 2 0 0 0 2 2h1a2 2 0 0 0 2-2v-3a2 2 0 0 0-2-2H3z"/></svg>
+          </div>
+          <h3>Pure 320kbps Lossless Audio Stream</h3>
+          <p>
+            Experience crystal-clear studio acoustics. Powered by direct high-bitrate stream decoding, Soundwave provides pure 320kbps sound without compression artifacts or dynamic throttling.
+          </p>
+        </div>
+
+        <!-- Feature 2: Zero Ads -->
+        <div class="bento-card">
+          <div class="bento-icon">
+            <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><line x1="4.93" y1="4.93" x2="19.07" y2="19.07"/></svg>
+          </div>
+          <h3>100% Ad-Free Listening</h3>
+          <p>
+            Zero audio commercial interruptions, zero video banners, and zero paywalls. Enjoy undisturbed listening from your first song to your last.
+          </p>
+        </div>
+
+        <!-- Feature 3: Smart Auto Play -->
+        <div class="bento-card">
+          <div class="bento-icon">
+            <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><polyline points="16 3 21 3 21 8"/><line x1="4" y1="20" x2="21" y2="3"/><polyline points="21 16 21 21 16 21"/><line x1="15" y1="15" x2="21" y2="21"/><line x1="4" y1="4" x2="9" y2="9"/></svg>
+          </div>
+          <h3>Context-Aware Smart Auto Play</h3>
+          <p>
+            Never suffer from random genre switches. When listening to Bhojpuri, the next song is strictly Bhojpuri. When playing Phonk, you stay locked in Phonk.
+          </p>
+        </div>
+
+        <!-- Feature 4: 28 Regional Languages -->
+        <div class="bento-card">
+          <div class="bento-icon">
+            <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><line x1="2" y1="12" x2="22" y2="12"/><path d="M12 2a15.3 15.3 0 0 1 4 10 15.3 15.3 0 0 1-4 10 15.3 15.3 0 0 1-4-10 15.3 15.3 0 0 1 4-10z"/></svg>
+          </div>
+          <h3>28 Indian Regional Languages</h3>
+          <p>
+            From Hindi, Punjabi, and Bhojpuri to Pahari, Maithili, Garhwali, and Tamil — personalize your feed to match the exact dialects you love.
+          </p>
+        </div>
+
+        <!-- Feature 5: Synced Lyrics -->
+        <div class="bento-card">
+          <div class="bento-icon">
+            <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 2a3 3 0 0 0-3 3v7a3 3 0 0 0 6 0V5a3 3 0 0 0-3-3z"/><path d="M19 10v2a7 7 0 0 1-14 0v-2"/><line x1="12" y1="19" x2="12" y2="22"/><line x1="8" y1="22" x2="16" y2="22"/></svg>
+          </div>
+          <h3>Synchronized Live Lyrics</h3>
+          <p>
+            Sing along with precision. Word-by-word highlighted real-time lyrics keep pace with the vocals for an immersive karaoke experience.
+          </p>
+        </div>
+
+      </div>
+    </div>
+  </section>
+
+  <!-- ── Interactive Experience / Player Showcase ── -->
+  <section id="experience">
+    <div class="container">
+      <div class="section-head">
+        <span class="section-tag">App Comparison</span>
+        <h2>Why Audiophiles Choose Soundwave</h2>
+        <p>Compare Soundwave side-by-side with mainstream subscription music services.</p>
+      </div>
+
+      <div class="comparison-wrap">
+        <table>
+          <thead>
+            <tr>
+              <th>Feature</th>
+              <th class="highlight-col">Soundwave (Free)</th>
+              <th>Spotify Free</th>
+              <th>YouTube Music Free</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr>
+              <td><strong>Audio Quality</strong></td>
+              <td class="highlight-col">
+                <span class="check-yes">
+                  <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"/></svg>
+                  320kbps HD (Lossless)
+                </span>
+              </td>
+              <td>160kbps (Standard)</td>
+              <td>128kbps (Compressed)</td>
+            </tr>
+            <tr>
+              <td><strong>Ad Interruptions</strong></td>
+              <td class="highlight-col">
+                <span class="check-yes">
+                  <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"/></svg>
+                  0 Ads Forever
+                </span>
+              </td>
+              <td>
+                <span class="check-no">
+                  <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
+                  Frequent Audio Ads
+                </span>
+              </td>
+              <td>
+                <span class="check-no">
+                  <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
+                  Frequent Video Ads
+                </span>
+              </td>
+            </tr>
+            <tr>
+              <td><strong>Unlimited Skips</strong></td>
+              <td class="highlight-col">
+                <span class="check-yes">
+                  <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"/></svg>
+                  Unlimited
+                </span>
+              </td>
+              <td>
+                <span class="check-no">
+                  <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
+                  6 Skips / Hour
+                </span>
+              </td>
+              <td>
+                <span class="check-no">
+                  <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
+                  Limited
+                </span>
+              </td>
+            </tr>
+            <tr>
+              <td><strong>Background Playback</strong></td>
+              <td class="highlight-col">
+                <span class="check-yes">
+                  <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"/></svg>
+                  Yes (Screen Off)
+                </span>
+              </td>
+              <td>
+                <span class="check-yes">
+                  <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"/></svg>
+                  Yes
+                </span>
+              </td>
+              <td>
+                <span class="check-no">
+                  <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
+                  Screen Must Stay On
+                </span>
+              </td>
+            </tr>
+            <tr>
+              <td><strong>Synced Real-Time Lyrics</strong></td>
+              <td class="highlight-col">
+                <span class="check-yes">
+                  <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"/></svg>
+                  Full Free Access
+                </span>
+              </td>
+              <td>
+                <span class="check-no">
+                  <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
+                  Limited / Restricted
+                </span>
+              </td>
+              <td>
+                <span class="check-no">
+                  <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
+                  Not Synced
+                </span>
+              </td>
+            </tr>
+            <tr>
+              <td><strong>Indian Regional Languages</strong></td>
+              <td class="highlight-col">
+                <span class="check-yes">
+                  <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"/></svg>
+                  28 Languages Dedicated
+                </span>
+              </td>
+              <td>Partial Support</td>
+              <td>Basic Auto-Translate</td>
+            </tr>
+            <tr>
+              <td><strong>Subscription Cost</strong></td>
+              <td class="highlight-col"><strong style="color: var(--success); font-size: 16px;">$0 / Free Forever</strong></td>
+              <td>₹119 / Month</td>
+              <td>₹99 / Month</td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+    </div>
+  </section>
+
+  <!-- ── 28 Supported Languages Showcase ── -->
+  <section id="languages" style="background: var(--surface);">
+    <div class="container">
+      <div class="section-head">
+        <span class="section-tag">Curation</span>
+        <h2>28 Regional & Global Languages</h2>
+        <p>Soundwave features deep catalog support and strict language isolation for every music culture across India and beyond.</p>
+      </div>
+
+      <div class="lang-grid">
+        <div class="lang-pill"><span class="lang-name">Hindi</span><span class="lang-native">हिन्दी</span></div>
+        <div class="lang-pill"><span class="lang-name">International</span><span class="lang-native">English</span></div>
+        <div class="lang-pill"><span class="lang-name">Punjabi</span><span class="lang-native">ਪੰਜਾਬੀ</span></div>
+        <div class="lang-pill"><span class="lang-name">Bhojpuri</span><span class="lang-native">भोजपुरी</span></div>
+        <div class="lang-pill"><span class="lang-name">Tamil</span><span class="lang-native">தமிழ்</span></div>
+        <div class="lang-pill"><span class="lang-name">Telugu</span><span class="lang-native">తెలుగు</span></div>
+        <div class="lang-pill"><span class="lang-name">Malayalam</span><span class="lang-native">മലയാളം</span></div>
+        <div class="lang-pill"><span class="lang-name">Marathi</span><span class="lang-native">मराठी</span></div>
+        <div class="lang-pill"><span class="lang-name">Gujarati</span><span class="lang-native">ગુજરાતી</span></div>
+        <div class="lang-pill"><span class="lang-name">Bengali</span><span class="lang-native">বাংলা</span></div>
+        <div class="lang-pill"><span class="lang-name">Kannada</span><span class="lang-native">ಕನ್ನಡ</span></div>
+        <div class="lang-pill"><span class="lang-name">Haryanvi</span><span class="lang-native">हरियाणवी</span></div>
+        <div class="lang-pill"><span class="lang-name">Rajasthani</span><span class="lang-native">राजस्थानी</span></div>
+        <div class="lang-pill"><span class="lang-name">Pahari</span><span class="lang-native">हिमाचली / पहाड़ी</span></div>
+        <div class="lang-pill"><span class="lang-name">Assamese</span><span class="lang-native">অসমীয়া</span></div>
+        <div class="lang-pill"><span class="lang-name">Odia</span><span class="lang-native">ଓଡ଼ିଆ</span></div>
+        <div class="lang-pill"><span class="lang-name">Kashmiri</span><span class="lang-native">کٲشُر / कश्मीरी</span></div>
+        <div class="lang-pill"><span class="lang-name">Sindhi</span><span class="lang-native">سنڌي / सिन्धी</span></div>
+        <div class="lang-pill"><span class="lang-name">Konkani</span><span class="lang-native">कोंकणी</span></div>
+        <div class="lang-pill"><span class="lang-name">Maithili</span><span class="lang-native">मैथिली</span></div>
+        <div class="lang-pill"><span class="lang-name">Chhattisgarhi</span><span class="lang-native">छत्तीसगढ़ी</span></div>
+        <div class="lang-pill"><span class="lang-name">Garhwali</span><span class="lang-native">गढ़वाली</span></div>
+        <div class="lang-pill"><span class="lang-name">Kumaoni</span><span class="lang-native">कुमाऊँनी</span></div>
+        <div class="lang-pill"><span class="lang-name">Manipuri</span><span class="lang-native">ꯃꯩꯇꯩꯂꯣꯟ</span></div>
+        <div class="lang-pill"><span class="lang-name">Nagpuri</span><span class="lang-native">नागपुरी</span></div>
+        <div class="lang-pill"><span class="lang-name">Braj</span><span class="lang-native">ब्रजभाषा</span></div>
+        <div class="lang-pill"><span class="lang-name">Awadhi</span><span class="lang-native">अवधी</span></div>
+        <div class="lang-pill"><span class="lang-name">Marwari</span><span class="lang-native">मारवाड़ी</span></div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ── Sideloading & Installation Permissions Guide ── -->
+  <section id="install-guide">
+    <div class="container">
+      <div class="section-head">
+        <span class="section-tag">Installation & Permissions</span>
+        <h2>How to Install Soundwave on Android</h2>
+        <p>Because Soundwave is 100% free and open source, it is distributed directly as an APK file. Follow these 3 easy steps to install.</p>
+      </div>
+
+      <div class="install-steps">
+        <div class="step-card">
+          <div class="step-number">1</div>
+          <h3>Download APK</h3>
+          <p>Tap the <strong>Download APK</strong> button on this page. The official verified file <code>Soundwave.apk</code> (approx. 12 MB) will download to your device.</p>
+        </div>
+
+        <div class="step-card">
+          <div class="step-number">2</div>
+          <h3>Allow Unknown Apps</h3>
+          <p>When opening the downloaded APK, if Android displays a prompt, tap <strong>Settings</strong> and toggle on <strong>"Allow from this source"</strong> (Chrome / Files).</p>
+        </div>
+
+        <div class="step-card">
+          <div class="step-number">3</div>
+          <h3>Install & Stream</h3>
+          <p>Tap <strong>Install</strong>. Once complete, open Soundwave, select your favorite languages, and enjoy unlimited ad-free music in studio quality!</p>
+        </div>
+      </div>
+
+      <div class="permission-callout">
+        <div class="callout-icon" style="color: #D97706; display: flex; align-items: center;">
+          <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/><polyline points="9 12 11 14 15 10"/></svg>
+        </div>
+        <div>
+          <strong style="color: #92400E; font-size: 15px; display: block; margin-bottom: 4px;">Why does Android ask for "Install unknown apps" permission?</strong>
+          <p style="color: #B45309; font-size: 13.5px; margin: 0; line-height: 1.55;">
+            Android labels any app downloaded outside the Google Play Store as an "unknown source". Soundwave is 100% safe, verified, open-source, and does not collect personal tracking data. You can inspect the entire codebase on our GitHub repository.
+          </p>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ── FAQ Section ── -->
+  <section id="faq" style="background: var(--surface);">
+    <div class="container">
+      <div class="section-head">
+        <span class="section-tag">Got Questions?</span>
+        <h2>Frequently Asked Questions</h2>
+        <p>Everything you need to know about Soundwave, compatibility, audio quality, and updates.</p>
+      </div>
+
+      <div class="faq-list">
+        
+        <div class="faq-item active">
+          <div class="faq-question" onclick="toggleFaq(this)">
+            <span>Is Soundwave really 100% free with no ads?</span>
+            <span class="faq-toggle-icon">
+              <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
+            </span>
+          </div>
+          <div class="faq-answer">
+            Yes! Soundwave is built as an open-source community music client. There are no subscriptions, no premium tiers, no audio ads, and no paywalls. Everything is unlocked for free.
+          </div>
+        </div>
+
+        <div class="faq-item">
+          <div class="faq-question" onclick="toggleFaq(this)">
+            <span>How does the 320kbps HD audio engine work?</span>
+            <span class="faq-toggle-icon">
+              <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
+            </span>
+          </div>
+          <div class="faq-answer">
+            Soundwave connects directly to lossless 320kbps CD-quality music streams from official music catalogs. You get pure uncompressed audio with full dynamic range and punchy bass.
+          </div>
+        </div>
+
+        <div class="faq-item">
+          <div class="faq-question" onclick="toggleFaq(this)">
+            <span>How do I receive app updates?</span>
+            <span class="faq-toggle-icon">
+              <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
+            </span>
+          </div>
+          <div class="faq-answer">
+            Soundwave features an automatic built-in OTA update system. Whenever a new update is released, the app will notify you with a changelog and let you update seamlessly with one tap.
+          </div>
+        </div>
+
+        <div class="faq-item">
+          <div class="faq-question" onclick="toggleFaq(this)">
+            <span>What Android versions are supported?</span>
+            <span class="faq-toggle-icon">
+              <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
+            </span>
+          </div>
+          <div class="faq-answer">
+            Soundwave is fully compatible with Android 7.0 (Nougat) all the way up to Android 14 and Android 15+.
+          </div>
+        </div>
+
+        <div class="faq-item">
+          <div class="faq-question" onclick="toggleFaq(this)">
+            <span>Can I listen to downloaded music offline?</span>
+            <span class="faq-toggle-icon">
+              <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
+            </span>
+          </div>
+          <div class="faq-answer">
+            Yes. You can download any track with a single tap to your device storage and listen offline without an active internet connection.
+          </div>
+        </div>
+
+      </div>
+    </div>
+  </section>
+
+  <!-- ── Final Download CTA ── -->
+  <section style="padding: 40px 0 80px;">
+    <div class="container">
+      <div class="final-cta">
+        <div>
+          <h2>Ready for the Ultimate Music Experience?</h2>
+          <p>
+            Download Soundwave now and start streaming 100M+ songs with pure 320kbps audio quality, synchronized lyrics, and zero commercial interruptions.
+          </p>
+
+          <div style="display: flex; gap: 14px; flex-wrap: wrap;">
+            <a href="https://github.com/csbittuzx-oss/app/raw/main/Soundwave.apk" class="btn-primary" download>
+              <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
+              <span>Download Soundwave APK</span>
+            </a>
+
+            <a href="https://github.com/csbittuzx-oss/app" target="_blank" class="btn-secondary" style="background: rgba(255,255,255,0.1); color: #fff; border-color: rgba(255,255,255,0.2);">
+              <span>GitHub Release</span>
+            </a>
+          </div>
+        </div>
+
+        <!-- QR Code for mobile scanning -->
+        <div class="qr-card">
+          <img src="https://api.qrserver.com/v1/create-qr-code/?size=200x200&data=https://github.com/csbittuzx-oss/app/raw/main/Soundwave.apk" alt="Scan QR Code to Download APK">
+          <span class="qr-label" style="display: flex; align-items: center; justify-content: center; gap: 6px;">
+            <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><rect x="5" y="2" width="14" height="20" rx="2" ry="2"/><line x1="12" y1="18" x2="12.01" y2="18"/></svg>
+            Scan with phone to download
+          </span>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ── Footer ── -->
+  <footer>
+    <div class="container">
+      <div class="footer-grid">
+        <div class="footer-brand">
+          <div class="brand">
+            <div class="brand-icon">
+              <img src="/logo.png" alt="Soundwave Logo" onerror="this.style.display='none'">
+              <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polygon points="11 5 6 9 2 9 2 15 6 15 11 19 11 5"/><path d="M15.54 8.46a5 5 0 0 1 0 7.07"/><path d="M19.07 4.93a10 10 0 0 1 0 14.14"/></svg>
+            </div>
+            <div class="brand-name">Sound<span>wave</span></div>
+          </div>
+          <p>
+            The premium, free, open-source music streaming application designed for superior sound quality and uninterrupted listening.
+          </p>
+        </div>
+
+        <div class="footer-col">
+          <h4>Navigation</h4>
+          <ul>
+            <li><a href="#features">Features</a></li>
+            <li><a href="#experience">Comparison</a></li>
+            <li><a href="#languages">28 Languages</a></li>
+            <li><a href="#install-guide">Installation Guide</a></li>
+            <li><a href="#faq">FAQ</a></li>
+          </ul>
+        </div>
+
+        <div class="footer-col">
+          <h4>Download & Links</h4>
+          <ul>
+            <li><a href="https://github.com/csbittuzx-oss/app/raw/main/Soundwave.apk" download>Direct APK Download</a></li>
+            <li><a href="https://github.com/csbittuzx-oss/app" target="_blank">GitHub Repository</a></li>
+            <li><a href="/admin">Admin Control Panel</a></li>
+            <li><a href="/health">API Health Check</a></li>
+          </ul>
+        </div>
+      </div>
+
+      <div class="footer-bottom">
+        <div>© 2026 Soundwave. Developed with <svg width="14" height="14" viewBox="0 0 24 24" fill="#EF4444" style="vertical-align: -2px; display: inline-block;"><path d="M20.84 4.61a5.5 5.5 0 0 0-7.78 0L12 5.67l-1.06-1.06a5.5 5.5 0 0 0-7.78 7.78l1.06 1.06L12 21.23l7.78-7.78 1.06-1.06a5.5 5.5 0 0 0 0-7.78z"/></svg> for music lovers. All rights reserved.</div>
+        <div>Created by <strong style="color: var(--text);">Pandit Bittu</strong> (@panditbittu.x)</div>
+      </div>
+    </div>
+  </footer>
+
+  <script>
+    function toggleMobileMenu() {
+      const drawer = document.getElementById('mobileDrawer');
+      drawer.classList.toggle('open');
+    }
+
+    function toggleFaq(el) {
+      const item = el.parentElement;
+      item.classList.toggle('active');
+    }
+  </script>
+</body>
+</html>

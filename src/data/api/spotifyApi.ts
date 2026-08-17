@@ -195,7 +195,6 @@ export async function importSpotifyPlaylist(urlOrId: string): Promise<Playlist> 
   const rawTracks: Song[] = entity.trackList.map((t: any, index: number) => {
     const rawTrackId = t.uri ? t.uri.replace('spotify:track:', '') : `track_${index}`;
     const durationSeconds = Math.round((t.duration || 0) / 1000);
-    const audioFallback = t.audioPreview?.url || null;
 
     return {
       id: `spotify_${rawTrackId}`,
@@ -205,7 +204,7 @@ export async function importSpotifyPlaylist(urlOrId: string): Promise<Playlist> 
       artwork: '', // will be populated with track's real distinct artwork below
       artworkLg: '',
       duration: durationSeconds,
-      previewUrl: audioFallback,
+      previewUrl: null, // Full stream resolved on-demand to guarantee full song playback
       provider: 'saavn' as const,
       isLiked: false,
       isDownloaded: false,

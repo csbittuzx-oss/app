@@ -12,21 +12,11 @@
 // ═══════════════════════════════════════════
 
 import type { Song, Playlist } from '../data/models';
-import { isSongMatchingLanguage, sortByPopularityAndTrending } from '../data/repository/musicRepository';
+import { isSongMatchingLanguage, sortByPopularityAndTrending, deduplicateSongs } from '../data/repository/musicRepository';
 import { searchJioSaavn } from '../data/api/saavnApi';
 import { searchYouTubeMusic } from '../data/api/youtubeMusicApi';
 import { userProfileTracker } from '../domain/recommendation/UserProfileTracker';
 import { filterSpotifyAvailableTracks } from './SpotifyAvailabilityService';
-
-function deduplicateSongs(songs: Song[]): Song[] {
-  const seen = new Set<string>();
-  return songs.filter((s) => {
-    if (!s || !s.id) return false;
-    if (seen.has(s.id)) return false;
-    seen.add(s.id);
-    return true;
-  });
-}
 
 const CURATED_CACHE_KEY = 'sw_curated_playlists_cache';
 const SHELVES_CACHE_KEY = 'sw_curated_shelves_cache';
@@ -120,19 +110,29 @@ function resolveUniquePlaylistArtwork(
 const curatedPlaylistsMap = new Map<string, Playlist>();
 
 export function getCuratedPlaylistById(id: string): Playlist | null {
+  let pl: Playlist | null = null;
   if (curatedPlaylistsMap.has(id)) {
-    return curatedPlaylistsMap.get(id) || null;
-  }
-  try {
-    const raw = localStorage.getItem(CURATED_CACHE_KEY);
-    if (raw) {
-      const parsed: Record<string, Playlist> = JSON.parse(raw);
-      if (parsed[id]) {
-        curatedPlaylistsMap.set(id, parsed[id]);
-        return parsed[id];
+    pl = curatedPlaylistsMap.get(id) || null;
+  } else {
+    try {
+      const raw = localStorage.getItem(CURATED_CACHE_KEY);
+      if (raw) {
+        const parsed: Record<string, Playlist> = JSON.parse(raw);
+        if (parsed[id]) {
+          pl = parsed[id];
+          curatedPlaylistsMap.set(id, pl);
+        }
       }
-    }
-  } catch {}
+    } catch {}
+  }
+  if (pl) {
+    const uniqueTracks = deduplicateSongs(pl.tracks);
+    return {
+      ...pl,
+      tracks: uniqueTracks,
+      totalDuration: uniqueTracks.reduce((acc, s) => acc + (s.duration || 0), 0),
+    };
+  }
   return null;
 }
 
@@ -146,18 +146,28 @@ export function saveCuratedPlaylist(pl: Playlist) {
   } catch {}
 }
 
-export function getCachedShelves(): PlaylistShelfData[] | null {
+export function getCachedShelves(languages?: string[]): PlaylistShelfData[] | null {
   try {
     const raw = localStorage.getItem(SHELVES_CACHE_KEY);
     if (raw) {
       const parsed: PlaylistShelfData[] = JSON.parse(raw);
       if (Array.isArray(parsed) && parsed.length > 0) {
-        parsed.forEach((shelf) => {
+        let valid = parsed;
+        if (languages && languages.length > 0) {
+          const hasBhojpuri = languages.some((l) => l.toLowerCase() === 'bhojpuri');
+          const hasHindi = languages.some((l) => l.toLowerCase() === 'hindi');
+          valid = parsed.filter((shelf) => {
+            if (shelf.id === 'shelf_bhojpuri' && !hasBhojpuri) return false;
+            if ((shelf.id === 'shelf_happy' || shelf.id === 'shelf_party' || shelf.id === 'shelf_throwback') && !hasHindi) return false;
+            return true;
+          });
+        }
+        valid.forEach((shelf) => {
           shelf.playlists.forEach((pl) => {
             curatedPlaylistsMap.set(pl.id, pl);
           });
         });
-        return parsed;
+        return valid;
       }
     }
   } catch {}
@@ -276,12 +286,14 @@ export async function generateSpotifyStyleShelves(signals: ShelfSignals): Promis
       'Hindi',
       35
     ),
-    // Bhojpuri pool (strict Bhojpuri)
-    fetchLanguageStrictPool(
-      ['Top Bhojpuri hits 2025 2026', 'Pawan Singh Khesari Lal Bhojpuri songs', 'Bhojpuri dance chartbusters', 'Bhojpuri romantic songs'],
-      'Bhojpuri',
-      40
-    ),
+    // Bhojpuri pool (strict Bhojpuri) - only fetched if user selected Bhojpuri during onboarding
+    hasBhojpuri
+      ? fetchLanguageStrictPool(
+          ['Top Bhojpuri hits 2025 2026', 'Pawan Singh Khesari Lal Bhojpuri songs', 'Bhojpuri dance chartbusters', 'Bhojpuri romantic songs'],
+          'Bhojpuri',
+          40
+        )
+      : Promise.resolve([]),
   ]);
 
   const happyHindi = hindiHappyPool.status === 'fulfilled' ? hindiHappyPool.value : [];
@@ -665,8 +677,8 @@ export async function generateSpotifyStyleShelves(signals: ShelfSignals): Promis
       subtitle: 'Classic Hindi hits',
       playlists: throwbackPlaylists,
     },
-    // Always include Bhojpuri shelf if user selected Bhojpuri or as regional shelf
-    ...(hasBhojpuri || bhojpuriTracks.length > 0 ? [{
+    // Strictly ONLY include Bhojpuri shelf if user selected Bhojpuri during onboarding
+    ...(hasBhojpuri && bhojpuriTracks.length > 0 ? [{
       id: 'shelf_bhojpuri',
       title: 'Bhojpuri Hits',
       subtitle: 'Popular Bhojpuri songs',
@@ -680,6 +692,18 @@ export async function generateSpotifyStyleShelves(signals: ShelfSignals): Promis
       playlists: recommendationsPlaylists,
     },
   ];
+
+  // Guarantee all playlists in every shelf contain only unique, deduplicated songs
+  allShelves.forEach((shelf) => {
+    shelf.playlists = shelf.playlists.map((pl) => {
+      const uTracks = deduplicateSongs(pl.tracks);
+      return {
+        ...pl,
+        tracks: uTracks,
+        totalDuration: uTracks.reduce((acc, s) => acc + (s.duration || 0), 0),
+      };
+    });
+  });
 
   saveCachedShelves(allShelves);
   return allShelves;

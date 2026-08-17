@@ -22,18 +22,30 @@ function ScreenRouter() {
   const { nav: { nav } } = useApp();
   const screen = nav.screen;
 
-  switch (screen) {
-    case 'home':      return <HomeScreen />;
-    case 'search':    return <SearchScreen />;
-    case 'library':   return <LibraryScreen />;
-    case 'downloads': return <DownloadsScreen />;
-    case 'settings':  return <SettingsScreen />;
-    case 'profile':   return <SettingsScreen />;
-    case 'artist':    return <ArtistScreen />;
-    case 'album':     return <AlbumScreen />;
-    case 'playlist':  return <PlaylistScreen />;
-    default:          return <HomeScreen />;
-  }
+  const isHome = screen === 'home';
+
+  return (
+    <div style={{ flex: 1, display: 'flex', flexDirection: 'column', height: '100%', width: '100%', position: 'relative', overflow: 'hidden' }}>
+      {/* Home Screen - persistent wrapper preserves scroll offset and feed state seamlessly */}
+      <div style={{
+        display: isHome ? 'flex' : 'none',
+        flexDirection: 'column',
+        height: '100%',
+        width: '100%',
+        flex: 1,
+      }}>
+        <HomeScreen isVisible={isHome} />
+      </div>
+
+      {screen === 'search' && <SearchScreen />}
+      {screen === 'library' && <LibraryScreen />}
+      {screen === 'downloads' && <DownloadsScreen />}
+      {(screen === 'settings' || screen === 'profile') && <SettingsScreen />}
+      {screen === 'artist' && <ArtistScreen />}
+      {screen === 'album' && <AlbumScreen />}
+      {screen === 'playlist' && <PlaylistScreen />}
+    </div>
+  );
 }
 
 import { useState, useEffect } from 'react';

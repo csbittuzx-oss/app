@@ -56,7 +56,8 @@ export async function cacheSongForOfflineBackup(song: Song, streamUrl?: string):
       }
     }
 
-    if (!blob || blob.size < 10000) return; // Must be valid audio
+    if (!blob || blob.size < 600000) return; // Must be full audio (not a 30s preview)
+    if (urlToFetch.includes('p.scdn.co') || urlToFetch.includes('apple.com') || urlToFetch.includes('spotify.com')) return;
 
     // 2. Store in IndexedDB
     const db = await openDatabase();
@@ -151,14 +152,17 @@ export async function getOfflineSongStream(songId: string): Promise<string | nul
   try {
     const db = await openDatabase();
     return new Promise((resolve) => {
-      const tx = db.transaction(STORE_NAME, 'readonly');
+      const tx = db.transaction(STORE_NAME, 'readwrite');
       const store = tx.objectStore(STORE_NAME);
       const request = store.get(songId);
       request.onsuccess = () => {
-        if (request.result && request.result.audioBlob) {
+        if (request.result && request.result.audioBlob && request.result.audioBlob.size >= 600000) {
           const blobUrl = URL.createObjectURL(request.result.audioBlob);
           resolve(blobUrl);
         } else {
+          if (request.result) {
+            try { store.delete(songId); } catch {}
+          }
           resolve(null);
         }
       };

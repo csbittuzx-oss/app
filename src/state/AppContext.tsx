@@ -1,5 +1,7 @@
 import { createContext, useContext, useReducer, useEffect, useState, useRef, type ReactNode } from 'react';
 import type { Song, Artist, Playlist, AppConfig, Screen } from '../data/models';
+import { userProfileTracker } from '../domain/recommendation/UserProfileTracker';
+import { aiTasteProfileEngine } from '../domain/ai/AITasteProfileEngine';
 
 // ─── LocalStorage helpers ───────────────────────────────────────────────────
 
@@ -102,6 +104,10 @@ function appReducer(state: AppState, action: AppAction): AppState {
       lsSet('sw_onboarding_done', true);
       lsSet('sw_user_gender', gender);
       lsSet('sw_music_languages', languages);
+      try {
+        localStorage.removeItem('sw_home_sections_cache');
+        localStorage.removeItem('sw_curated_shelves_cache');
+      } catch {}
       return {
         ...state,
         onboardingCompleted: true,
@@ -111,6 +117,10 @@ function appReducer(state: AppState, action: AppAction): AppState {
     }
     case 'SET_MUSIC_LANGUAGES': {
       lsSet('sw_music_languages', action.payload);
+      try {
+        localStorage.removeItem('sw_home_sections_cache');
+        localStorage.removeItem('sw_curated_shelves_cache');
+      } catch {}
       return { ...state, musicLanguages: action.payload };
     }
     case 'RESET_ONBOARDING': {
@@ -187,9 +197,8 @@ function appReducer(state: AppState, action: AppAction): AppState {
     case 'ADD_SEARCH_HISTORY': {
       if (!action.payload.trim()) return state;
       try {
-        import('../domain/recommendation/UserProfileTracker').then(({ userProfileTracker }) => {
-          userProfileTracker.recordSearch(action.payload);
-        }).catch(() => {});
+        userProfileTracker.recordSearch(action.payload);
+        aiTasteProfileEngine.recordSearch(action.payload);
       } catch {}
       const filtered = state.searchHistory.filter((s) => s !== action.payload);
       const searchHistory = [action.payload, ...filtered].slice(0, 30);
@@ -380,7 +389,11 @@ export function AppProvider({ children }: { children: ReactNode }) {
   };
 
   const isFavorite = (songId: string) => state.favorites.some((f) => f.id === songId);
-  const toggleFavorite = (song: Song) => dispatch({ type: 'TOGGLE_FAVORITE', payload: song });
+  const toggleFavorite = (song: Song) => {
+    const isCurrentlyFav = state.favorites.some((f) => f.id === song.id);
+    aiTasteProfileEngine.recordSongLiked(song, !isCurrentlyFav);
+    dispatch({ type: 'TOGGLE_FAVORITE', payload: song });
+  };
   const isFavoriteArtist = (artistId: string) => state.favoriteArtists.some((a) => a.id === artistId);
   const toggleFavoriteArtist = (artist: Artist) => dispatch({ type: 'TOGGLE_FAVORITE_ARTIST', payload: artist });
   const addRecentlyPlayed = (song: Song) => dispatch({ type: 'ADD_RECENTLY_PLAYED', payload: song });

@@ -2,8 +2,9 @@ import React, { useState, useEffect, useRef } from 'react';
 import { usePlayer } from '../../state/PlayerContext';
 import { useApp } from '../../state/AppContext';
 import { getLyrics } from '../../data/api/lyricsApi';
+import { getTrackCanvas } from '../../data/api/canvasApi';
 import { NowPlayingMenuSheet } from './NowPlayingMenuSheet';
-import type { Lyrics } from '../../data/models';
+import type { Lyrics, TrackCanvas } from '../../data/models';
 import { formatDuration } from '../../core/utils';
 import { showToast } from '../../core/utils/toast';
 import { CONFIG } from '../../config';
@@ -36,16 +37,24 @@ const icons = {
   ),
   queue: <svg width="20" height="20" viewBox="0 0 24 24" fill="none" aria-hidden="true"><line x1="8" y1="6" x2="21" y2="6" stroke="currentColor" strokeWidth="1.75" strokeLinecap="round"/><line x1="8" y1="12" x2="21" y2="12" stroke="currentColor" strokeWidth="1.75" strokeLinecap="round"/><line x1="8" y1="18" x2="21" y2="18" stroke="currentColor" strokeWidth="1.75" strokeLinecap="round"/><circle cx="3" cy="6" r="1.5" fill="currentColor"/><circle cx="3" cy="12" r="1.5" fill="currentColor"/><circle cx="3" cy="18" r="1.5" fill="currentColor"/></svg>,
   lyrics: <svg width="20" height="20" viewBox="0 0 24 24" fill="none" aria-hidden="true"><path d="M21 15a2 2 0 01-2 2H7l-4 4V5a2 2 0 012-2h14a2 2 0 012 2z" stroke="currentColor" strokeWidth="1.75" strokeLinecap="round" strokeLinejoin="round"/></svg>,
+  canvas: (on: boolean) => (
+    <svg width="20" height="20" viewBox="0 0 24 24" fill="none" style={{ color: on ? 'var(--color-accent)' : 'currentColor' }} aria-hidden="true">
+      <rect x="2" y="4" width="20" height="16" rx="3" stroke="currentColor" strokeWidth="1.75" />
+      <polygon points="10 8 16 12 10 16 10 8" fill={on ? 'var(--color-accent)' : 'currentColor'} />
+    </svg>
+  ),
   loading: <svg width="24" height="24" viewBox="0 0 24 24" fill="none" aria-hidden="true" style={{ animation: 'spin 0.8s linear infinite' }}><circle cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="2.5" strokeOpacity="0.25"/><path d="M12 2a10 10 0 0110 10" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round"/></svg>,
 };
 
 export function FullPlayer() {
-  const { state, togglePlay, next, previous, seek, seekToTime, toggleShuffle, toggleRepeat, closeFullPlayer, openQueue } = usePlayer();
+  const { state, playSong, togglePlay, next, previous, seek, seekToTime, toggleShuffle, toggleRepeat, closeFullPlayer, openQueue } = usePlayer();
   const { isFavorite, toggleFavorite } = useApp();
   const { currentSong, isPlaying, progress, currentTime, duration, isLoading, shuffle, repeat, queue, queueIndex, error } = state;
 
   const [showMenuSheet, setShowMenuSheet] = useState(false);
   const [showLyrics, setShowLyrics] = useState(false);
+  const [trackCanvas, setTrackCanvas] = useState<TrackCanvas | null>(null);
+  const [showCanvasBackdrop, setShowCanvasBackdrop] = useState(true);
   const [lyrics, setLyrics] = useState<Lyrics | null>(null);
   const [lyricsLoading, setLyricsLoading] = useState(false);
   const [lyricsError, setLyricsError] = useState(false);
@@ -53,8 +62,20 @@ export function FullPlayer() {
   const [dragProgress, setDragProgress] = useState(0);
   const progressRef = useRef<HTMLDivElement>(null);
   const lineRefs = useRef<(HTMLParagraphElement | null)[]>([]);
+  const lyricsContainerRef = useRef<HTMLDivElement | null>(null);
   const isUserScrollingRef = useRef(false);
   const scrollTimeoutRef = useRef<any>(null);
+
+  // Load animated video canvas when currentSong changes
+  useEffect(() => {
+    if (!currentSong) {
+      setTrackCanvas(null);
+      return;
+    }
+    getTrackCanvas(currentSong.title, currentSong.artist, currentSong.id)
+      .then((canvas) => setTrackCanvas(canvas))
+      .catch(() => setTrackCanvas(null));
+  }, [currentSong?.id]);
 
   // Artwork swipe gestures state
   const [artworkOffsetX, setArtworkOffsetX] = useState(0);
@@ -162,13 +183,18 @@ export function FullPlayer() {
     return active;
   }, [lyrics, currentTime]);
 
-  // Auto-scroll the active lyric line to viewport center smoothly
+  // Auto-scroll the active lyric line to viewport center smoothly without whole list jumping
   useEffect(() => {
-    if (activeLineIndex >= 0 && lineRefs.current[activeLineIndex] && !isUserScrollingRef.current) {
-      lineRefs.current[activeLineIndex]?.scrollIntoView({
-        behavior: 'smooth',
-        block: 'center',
-      });
+    if (activeLineIndex >= 0 && lyricsContainerRef.current && !isUserScrollingRef.current) {
+      const container = lyricsContainerRef.current;
+      const activeEl = lineRefs.current[activeLineIndex];
+      if (activeEl) {
+        const targetScrollTop = activeEl.offsetTop - (container.clientHeight / 2) + (activeEl.clientHeight / 2);
+        container.scrollTo({
+          top: Math.max(0, targetScrollTop),
+          behavior: 'smooth',
+        });
+      }
     }
   }, [activeLineIndex]);
 
@@ -208,14 +234,41 @@ export function FullPlayer() {
         overflow: 'hidden',
       }}
     >
+      {/* Animated Video Canvas Backdrop */}
+      {showCanvasBackdrop && trackCanvas?.canvasUrl && (
+        <div style={{ position: 'absolute', inset: 0, zIndex: 0, overflow: 'hidden', pointerEvents: 'none' }}>
+          <video
+            src={trackCanvas.canvasUrl}
+            autoPlay
+            loop
+            muted
+            playsInline
+            style={{
+              width: '100%',
+              height: '100%',
+              objectFit: 'cover',
+              opacity: isPlaying ? 0.38 : 0.18,
+              transition: 'opacity 600ms ease',
+              filter: 'blur(2px) brightness(0.85)',
+            }}
+          />
+          <div style={{
+            position: 'absolute',
+            inset: 0,
+            background: 'linear-gradient(to bottom, rgba(10,10,12,0.65) 0%, rgba(10,10,12,0.4) 40%, rgba(10,10,12,0.92) 100%)',
+          }} />
+        </div>
+      )}
+
       {/* Background artwork blur */}
       <div style={{
-        position: 'absolute', inset: 0, zIndex: -1,
+        position: 'absolute', inset: 0, zIndex: 0,
         background: `radial-gradient(ellipse at 50% 30%, rgba(245,158,11,0.08) 0%, transparent 65%)`,
+        pointerEvents: 'none',
       }} aria-hidden="true" />
 
       {/* ── Header ── */}
-      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '12px 20px 8px' }}>
+      <div style={{ position: 'relative', zIndex: 1, display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '12px 20px 8px' }}>
         <button id="full-player-close-btn" aria-label="Collapse player" onClick={closeFullPlayer} className="btn-icon" style={{ minWidth: 44, minHeight: 44 }}>
           {icons.close}
         </button>
@@ -241,7 +294,7 @@ export function FullPlayer() {
         {/* Artwork or Lyrics */}
         <div style={{ flex: 1, display: 'flex', flexDirection: 'column', justifyContent: 'center', minHeight: 0 }}>
           {!showLyrics ? (
-            /* Artwork with Swipe Gesture Support */
+            /* Artwork with Pause/Play Morphing & Swipe Gesture Support */
             <div
               style={{
                 display: 'flex',
@@ -260,14 +313,23 @@ export function FullPlayer() {
               onMouseLeave={handleArtworkTouchEnd}
             >
               <div
+                id="now-playing-artwork-card"
+                onClick={togglePlay}
                 style={{
                   position: 'relative',
-                  borderRadius: 'var(--radius-xl)',
+                  width: 'min(280px, calc(100vw - 80px))',
+                  height: 'min(280px, calc(100vw - 80px))',
+                  borderRadius: isPlaying ? 'var(--radius-xl, 20px)' : '50%',
                   overflow: 'hidden',
-                  boxShadow: '0 20px 60px rgba(0,0,0,0.6), var(--shadow-accent)',
-                  transform: `translate3d(${artworkOffsetX}px, 0, 0) rotate(${artworkOffsetX * 0.04}deg)`,
-                  transition: isDraggingArtwork ? 'none' : 'transform 320ms cubic-bezier(0.16, 1, 0.3, 1)',
-                  cursor: isDraggingArtwork ? 'grabbing' : 'grab',
+                  boxShadow: isPlaying
+                    ? '0 20px 60px rgba(0,0,0,0.6), var(--shadow-accent)'
+                    : '0 16px 44px rgba(0,0,0,0.5), 0 0 0 2px var(--color-border)',
+                  transform: `translate3d(${artworkOffsetX}px, 0, 0) rotate(${artworkOffsetX * 0.04}deg) scale(${isPlaying ? 1 : 0.92})`,
+                  transition: isDraggingArtwork
+                    ? 'none'
+                    : 'border-radius 420ms cubic-bezier(0.2, 0.8, 0.2, 1), transform 420ms cubic-bezier(0.2, 0.8, 0.2, 1), box-shadow 420ms cubic-bezier(0.2, 0.8, 0.2, 1)',
+                  cursor: isDraggingArtwork ? 'grabbing' : 'pointer',
+                  userSelect: 'none',
                 }}
               >
                 <img
@@ -278,15 +340,54 @@ export function FullPlayer() {
                   onError={(e) => { (e.target as HTMLImageElement).src = CONFIG.ARTWORK_PLACEHOLDER; }}
                   style={{
                     display: 'block',
-                    width: 'min(280px, calc(100vw - 80px))',
-                    height: 'min(280px, calc(100vw - 80px))',
+                    width: '100%',
+                    height: '100%',
                     objectFit: 'cover',
-                    transform: isPlaying ? 'scale(1)' : 'scale(0.94)',
-                    transition: 'transform 400ms var(--ease-spring)',
                     pointerEvents: 'none',
                     animation: 'scaleIn 300ms var(--ease-spring)',
                   }}
                 />
+
+                {/* Paused State: Subtle Pause SVG Icon Overlay centered on top of circular artwork */}
+                <div
+                  id="now-playing-pause-overlay"
+                  style={{
+                    position: 'absolute',
+                    inset: 0,
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                    background: 'rgba(0, 0, 0, 0.32)',
+                    backdropFilter: 'blur(2px)',
+                    WebkitBackdropFilter: 'blur(2px)',
+                    opacity: !isPlaying && !isLoading ? 1 : 0,
+                    pointerEvents: 'none',
+                    transition: 'opacity 320ms cubic-bezier(0.2, 0.8, 0.2, 1), transform 320ms cubic-bezier(0.2, 0.8, 0.2, 1)',
+                    transform: !isPlaying && !isLoading ? 'scale(1)' : 'scale(0.8)',
+                  }}
+                >
+                  <div
+                    style={{
+                      width: 54,
+                      height: 54,
+                      borderRadius: '50%',
+                      background: 'rgba(0, 0, 0, 0.65)',
+                      backdropFilter: 'blur(12px)',
+                      WebkitBackdropFilter: 'blur(12px)',
+                      border: '1px solid rgba(255, 255, 255, 0.25)',
+                      boxShadow: '0 8px 24px rgba(0,0,0,0.5)',
+                      display: 'flex',
+                      alignItems: 'center',
+                      justifyContent: 'center',
+                      color: '#FFFFFF',
+                    }}
+                  >
+                    <svg width="24" height="24" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true">
+                      <rect x="6" y="5" width="4" height="14" rx="1.5"/>
+                      <rect x="14" y="5" width="4" height="14" rx="1.5"/>
+                    </svg>
+                  </div>
+                </div>
 
                 {/* Swipe Action Overlay Indicator */}
                 {Math.abs(artworkOffsetX) > 20 && (
@@ -341,14 +442,15 @@ export function FullPlayer() {
           ) : (
             /* Real-time Synced Lyrics panel */
             <div
+              ref={lyricsContainerRef}
               onScroll={handleLyricsUserScroll}
               style={{
                 flex: 1,
                 overflowY: 'auto',
-                padding: '120px 0 160px',
+                padding: '140px 0 180px',
                 scrollbarWidth: 'none',
-                WebkitMaskImage: 'linear-gradient(to bottom, transparent 0%, black 18%, black 82%, transparent 100%)',
-                maskImage: 'linear-gradient(to bottom, transparent 0%, black 18%, black 82%, transparent 100%)',
+                WebkitMaskImage: 'linear-gradient(to bottom, transparent 0%, black 20%, black 80%, transparent 100%)',
+                maskImage: 'linear-gradient(to bottom, transparent 0%, black 20%, black 80%, transparent 100%)',
               }}
             >
               {lyricsLoading && (
@@ -382,6 +484,31 @@ export function FullPlayer() {
                   <p style={{ color: 'var(--color-text-muted)', fontSize: 'var(--text-xs)', marginTop: 6, maxWidth: 240, lineHeight: 1.5 }}>
                     Lyrics for this track haven't been synchronized yet. Enjoy the music!
                   </p>
+                  <button
+                    onClick={() => {
+                      if (!currentSong) return;
+                      setLyricsError(false);
+                      setLyricsLoading(true);
+                      getLyrics(currentSong.artist, currentSong.title, currentSong.duration)
+                        .then((l) => {
+                          setLyrics(l);
+                          setLyricsError(!l || l.lines.length === 0);
+                        })
+                        .catch(() => setLyricsError(true))
+                        .finally(() => setLyricsLoading(false));
+                    }}
+                    className="btn-ghost"
+                    style={{
+                      marginTop: 14,
+                      fontSize: 'var(--text-xs)',
+                      padding: '8px 16px',
+                      color: 'var(--color-accent)',
+                      background: 'var(--color-accent-dim)',
+                      borderRadius: 'var(--radius-full)',
+                    }}
+                  >
+                    Retry Loading
+                  </button>
                 </div>
               )}
               {lyrics && lyrics.lines.map((line, i) => {
@@ -399,21 +526,39 @@ export function FullPlayer() {
                     }}
                     style={{
                       margin: 0,
-                      padding: '10px 0',
-                      fontSize: isActive ? '1.35rem' : '1.08rem',
-                      fontWeight: isActive ? 700 : 500,
-                      lineHeight: 1.5,
-                      color: isActive
+                      padding: lyrics.synced ? (isActive ? '14px 0' : '8px 0') : '8px 0',
+                      fontFamily: 'var(--font-lyrics)',
+                      fontSize: lyrics.synced
+                        ? isActive
+                          ? 'clamp(2rem, 5.8vw, 2.75rem)'
+                          : 'clamp(1.2rem, 3.8vw, 1.55rem)'
+                        : 'clamp(1.3rem, 4.2vw, 1.65rem)',
+                      fontWeight: lyrics.synced ? (isActive ? 800 : 700) : 700,
+                      textTransform: 'uppercase',
+                      letterSpacing: '0.025em',
+                      lineHeight: lyrics.synced ? (isActive ? 1.14 : 1.22) : 1.35,
+                      color: !lyrics.synced
+                        ? 'var(--color-text-primary)'
+                        : isActive
                         ? 'var(--color-text-primary)'
                         : isPast
                         ? 'var(--color-text-secondary)'
                         : 'var(--color-text-muted)',
-                      opacity: isActive ? 1 : isPast ? 0.45 : 0.28,
-                      transform: isActive ? 'scale(1.04)' : 'scale(1)',
+                      opacity: !lyrics.synced ? 0.95 : isActive ? 1 : isPast ? 0.22 : 0.28,
+                      transform: lyrics.synced
+                        ? isActive
+                          ? 'translate3d(0, 0, 0) scale(1)'
+                          : isPast
+                          ? 'translate3d(0, -6px, 0) scale(0.96)'
+                          : 'translate3d(0, 6px, 0) scale(0.96)'
+                        : 'none',
                       transformOrigin: 'left center',
                       cursor: line.time !== undefined ? 'pointer' : 'default',
-                      transition: 'all 300ms cubic-bezier(0.2, 0.8, 0.2, 1)',
-                      textShadow: isActive ? '0 0 24px rgba(245,158,11,0.25)' : 'none',
+                      transition: 'transform 380ms cubic-bezier(0.25, 1, 0.5, 1), opacity 380ms ease, color 380ms ease, text-shadow 380ms ease',
+                      willChange: 'transform, opacity, color',
+                      textShadow: lyrics.synced && isActive
+                        ? '0 4px 28px rgba(245, 158, 11, 0.4), 0 0 16px rgba(255, 255, 255, 0.15)'
+                        : 'none',
                       userSelect: 'none',
                     }}
                   >
@@ -459,11 +604,44 @@ export function FullPlayer() {
           </button>
         </div>
 
-        {/* ── Error message ── */}
-        {error && (
-          <p style={{ fontSize: 'var(--text-sm)', color: 'var(--color-error)', marginBottom: 8, textAlign: 'center' }}>
-            {error}
-          </p>
+        {/* ── Error message with retry action ── */}
+        {error && !isPlaying && !isLoading && (
+          <div
+            id="player-error-banner"
+            style={{
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+              gap: 8,
+              background: 'rgba(239, 68, 68, 0.12)',
+              border: '1px solid rgba(239, 68, 68, 0.3)',
+              borderRadius: 'var(--radius-md, 10px)',
+              padding: '6px 12px',
+              marginBottom: 10,
+            }}
+          >
+            <span style={{ fontSize: 'var(--text-xs)', color: 'var(--color-error)', fontWeight: 500 }}>
+              {error}
+            </span>
+            <button
+              onClick={(e) => {
+                e.stopPropagation();
+                if (currentSong) playSong(currentSong, queue, queueIndex);
+              }}
+              style={{
+                background: 'var(--color-error)',
+                color: '#FFFFFF',
+                border: 'none',
+                borderRadius: 'var(--radius-sm, 6px)',
+                padding: '2px 8px',
+                fontSize: 11,
+                fontWeight: 600,
+                cursor: 'pointer',
+              }}
+            >
+              Retry
+            </button>
+          </div>
         )}
 
         {/* ── Progress Bar ── */}
@@ -590,6 +768,24 @@ export function FullPlayer() {
 
         {/* ── Secondary controls ── */}
         <div style={{ display: 'flex', justifyContent: 'center', gap: 8, paddingBottom: 16 }}>
+          {trackCanvas?.canvasUrl && (
+            <button
+              id="player-canvas-btn"
+              aria-label={showCanvasBackdrop ? 'Hide motion canvas' : 'Show motion canvas'}
+              aria-pressed={showCanvasBackdrop}
+              onClick={() => setShowCanvasBackdrop(!showCanvasBackdrop)}
+              className="btn-ghost"
+              style={{
+                fontSize: 'var(--text-xs)', gap: 6, fontWeight: 500,
+                color: showCanvasBackdrop ? 'var(--color-accent)' : 'var(--color-text-secondary)',
+                background: showCanvasBackdrop ? 'var(--color-accent-dim)' : 'transparent',
+                padding: '8px 14px',
+              }}
+            >
+              {icons.canvas(showCanvasBackdrop)}
+              Canvas
+            </button>
+          )}
           <button
             id="player-lyrics-btn"
             aria-label={showLyrics ? 'Hide lyrics' : 'Show lyrics'}

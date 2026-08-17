@@ -1,4 +1,4 @@
-import { useEffect, useState, useMemo, useCallback } from 'react';
+import { useEffect, useState, useMemo, useCallback, useRef, useLayoutEffect } from 'react';
 import { useApp } from '../state/AppContext';
 import { usePlayer } from '../state/PlayerContext';
 import {
@@ -15,6 +15,7 @@ import {
   type PlaylistShelfData,
 } from '../services/CuratedPlaylistsService';
 import { userProfileTracker } from '../domain/recommendation/UserProfileTracker';
+import { smartRecommendationEngine } from '../domain/recommendation/SmartRecommendationEngine';
 import type { Song, Artist, Playlist } from '../data/models';
 import { SongSquareCard } from '../components/cards/SongCard';
 import { ArtistCard } from '../components/cards/ArtistCard';
@@ -38,13 +39,35 @@ interface Section {
 const HOME_CACHE_KEY = 'sw_home_sections_cache';
 const ARTISTS_CACHE_KEY = 'sw_home_artists_cache';
 
-function getCachedSections(): Section[] | null {
+// Persistent memory of Home Screen scroll position across component re-mounts and screen switches
+let persistentHomeScrollTop = 0;
+
+export function resetHomeScrollPosition() {
+  persistentHomeScrollTop = 0;
+}
+
+export function getHomeScrollPosition() {
+  return persistentHomeScrollTop;
+}
+
+function getCachedSections(languages: string[]): Section[] | null {
   try {
     const raw = localStorage.getItem(HOME_CACHE_KEY);
     if (raw) {
       const parsed = JSON.parse(raw);
       if (Array.isArray(parsed) && parsed.length > 0) {
-        return parsed.map((s: Section) => ({ ...s, loading: false, error: false }));
+        const allowedIds = new Set([
+          'made_for_you',
+          'trending',
+          'recommend_for_you',
+          'new_releases',
+          'discover_new',
+          ...languages.map((l) => `lang_${l}`),
+        ]);
+        const valid = parsed
+          .filter((s: Section) => allowedIds.has(s.id) || s.id.startsWith('dynamic_'))
+          .map((s: Section) => ({ ...s, loading: false, error: false }));
+        return valid.length > 0 ? valid : null;
       }
     }
   } catch {}
@@ -62,18 +85,65 @@ function getCachedArtists(): Artist[] | null {
   return null;
 }
 
-export function HomeScreen() {
-  const { state: appState, nav: { navigate } } = useApp();
+export function HomeScreen({ isVisible = true }: { isVisible?: boolean }) {
+  const { state: appState, nav: { nav, navigate } } = useApp();
   const { playSong } = usePlayer();
-  const [sections, setSections] = useState<Section[]>(() => getCachedSections() || []);
-  const [shelves, setShelves] = useState<PlaylistShelfData[]>(() => getCachedShelves() || []);
-  const [shelvesLoading, setShelvesLoading] = useState(() => !getCachedShelves());
-  const [topArtists, setTopArtists] = useState<Artist[]>(() => getCachedArtists() || []);
-  const [artistsLoading, setArtistsLoading] = useState(() => !getCachedArtists());
+
+  const scrollRef = useRef<HTMLDivElement>(null);
+  const isRestoringScroll = useRef<boolean>(false);
 
   const languages = appState.musicLanguages && appState.musicLanguages.length > 0
     ? appState.musicLanguages
     : ['Hindi', 'International'];
+
+  const [sections, setSections] = useState<Section[]>(() => getCachedSections(languages) || []);
+  const [shelves, setShelves] = useState<PlaylistShelfData[]>(() => getCachedShelves(languages) || []);
+  const [shelvesLoading, setShelvesLoading] = useState(() => !getCachedShelves(languages));
+  const [topArtists, setTopArtists] = useState<Artist[]>(() => getCachedArtists() || []);
+  const [artistsLoading, setArtistsLoading] = useState(() => !getCachedArtists());
+
+  // Restore scroll position smoothly without visible jump or flicker
+  const restoreScrollPosition = useCallback(() => {
+    if (!scrollRef.current || persistentHomeScrollTop <= 0) return;
+    const el = scrollRef.current;
+    isRestoringScroll.current = true;
+    const prevBehavior = el.style.scrollBehavior;
+    el.style.scrollBehavior = 'auto';
+    el.scrollTop = persistentHomeScrollTop;
+    requestAnimationFrame(() => {
+      if (el && persistentHomeScrollTop > 0) {
+        el.scrollTop = persistentHomeScrollTop;
+        el.style.scrollBehavior = prevBehavior;
+      }
+      setTimeout(() => {
+        isRestoringScroll.current = false;
+      }, 80);
+    });
+  }, []);
+
+  // Instant layout effect restoration to guarantee zero jump/flicker
+  useLayoutEffect(() => {
+    if (isVisible) {
+      restoreScrollPosition();
+    }
+  }, [isVisible, restoreScrollPosition]);
+
+  // Secondary backup restoration when screen activates or mounts
+  useEffect(() => {
+    if (isVisible && nav.screen === 'home') {
+      restoreScrollPosition();
+      const raf = requestAnimationFrame(restoreScrollPosition);
+      return () => cancelAnimationFrame(raf);
+    }
+  }, [isVisible, nav.screen, restoreScrollPosition]);
+
+  const handleScroll = (e: React.UIEvent<HTMLDivElement>) => {
+    if (isRestoringScroll.current) return;
+    const top = e.currentTarget.scrollTop;
+    if (top >= 0) {
+      persistentHomeScrollTop = top;
+    }
+  };
 
   // Top artists from user profile intelligence
   const userTopArtists = useMemo(() => {
@@ -85,11 +155,11 @@ export function HomeScreen() {
 
     // If offline, maintain the exact existing cached content without reloading skeletons
     if (isOffline && !forceRefresh) {
-      const cached = getCachedSections();
+      const cached = getCachedSections(languages);
       if (cached && cached.length > 0) {
         setSections(cached);
       }
-      const cachedShelves = getCachedShelves();
+      const cachedShelves = getCachedShelves(languages);
       if (cachedShelves && cachedShelves.length > 0) {
         setShelves(cachedShelves);
         setShelvesLoading(false);
@@ -103,9 +173,11 @@ export function HomeScreen() {
     }
 
     const defaultInitialSections: Section[] = [
+      { id: 'made_for_you', title: 'Made For You', subtitle: 'Personalized AI blend curated from your taste', badge: 'AI Mix', songs: [], loading: true, error: false },
       { id: 'trending', title: 'Trending Now', subtitle: 'What listeners are loving right now', songs: [], loading: true, error: false },
       { id: 'recommend_for_you', title: 'Recommend for You', subtitle: 'Based on your listening history', badge: 'For You', songs: [], loading: true, error: false },
       { id: 'new_releases', title: 'New Releases', subtitle: 'Fresh drops in your languages', songs: [], loading: true, error: false },
+      { id: 'discover_new', title: 'Discover Something New', subtitle: 'Fresh picks curated just outside your comfort zone', badge: 'Discovery', songs: [], loading: true, error: false },
       ...languages.map((lang) => ({
         id: `lang_${lang}`,
         title: LANGUAGE_METADATA[lang]?.title || `${lang} Hits`,
@@ -117,8 +189,15 @@ export function HomeScreen() {
     ];
 
     setSections((prev) => {
-      if (prev.length > 0) return prev; // Keep existing visible content while fetching
-      return defaultInitialSections;
+      // Reconcile with defaultInitialSections: only show sections corresponding to active languages
+      const prevMap = new Map(prev.map((s) => [s.id, s]));
+      return defaultInitialSections.map((def) => {
+        const existing = prevMap.get(def.id);
+        if (existing && existing.songs && existing.songs.length > 0) {
+          return existing;
+        }
+        return def;
+      });
     });
 
     function loadSection(id: string, fetcher: () => Promise<Song[]>) {
@@ -128,7 +207,15 @@ export function HomeScreen() {
             const next = prev.map((s) => (s.id === id ? { ...s, songs, loading: false } : s));
             // Cache populated sections for offline resilience
             try {
-              const withData = next.filter((s) => s.songs && s.songs.length > 0);
+              const allowedIds = new Set([
+                'made_for_you',
+                'trending',
+                'recommend_for_you',
+                'new_releases',
+                'discover_new',
+                ...languages.map((l) => `lang_${l}`),
+              ]);
+              const withData = next.filter((s) => allowedIds.has(s.id) && s.songs && s.songs.length > 0);
               if (withData.length > 0) {
                 localStorage.setItem(HOME_CACHE_KEY, JSON.stringify(withData));
               }
@@ -141,19 +228,62 @@ export function HomeScreen() {
         });
     }
 
-    // 1. Trending Now
+    // 1. Made For You (AI Personalized Mix)
+    loadSection('made_for_you', () => smartRecommendationEngine.getPersonalizedMadeForYou({
+      recentlyPlayed: appState.recentlyPlayed,
+      favorites: appState.favorites,
+    }));
+
+    // 2. Trending Now
     loadSection('trending', () => getPersonalizedTrending(languages, 16));
 
-    // 2. Recommend for You (Personalized from listening history)
+    // 3. Recommend for You (Personalized from listening history)
     loadSection('recommend_for_you', () => getPersonalizedRecommendForYou(languages, appState.recentlyPlayed, appState.favorites, 16));
 
-    // 3. New Releases
+    // 4. New Releases
     loadSection('new_releases', () => getPersonalizedNewReleases(languages, 16));
 
-    // 4. Language-specific deep dives
+    // 5. Discover Something New
+    loadSection('discover_new', () => smartRecommendationEngine.getDiscoverSomethingNew(languages));
+
+    // 6. Language-specific deep dives
     languages.forEach((lang) => {
       loadSection(`lang_${lang}`, () => getPersonalizedTracksByLanguage(lang, 16));
     });
+
+    // 7. Dynamic Learned Behavior Sections (e.g. "Top Bhojpuri Hits", "Best of [Artist]" when user frequently listens to them)
+    if (!isOffline) {
+      smartRecommendationEngine.getLearnedBehaviorSections({
+        recentlyPlayed: appState.recentlyPlayed,
+        favorites: appState.favorites,
+        userPlaylists: appState.userPlaylists,
+      }, languages).then((dynamicList) => {
+        if (dynamicList && dynamicList.length > 0) {
+          setSections((prev) => {
+            const currentIds = new Set(prev.map((s) => s.id));
+            const newEntries: Section[] = dynamicList
+              .filter((d) => !currentIds.has(d.id))
+              .map((d) => ({
+                id: d.id,
+                title: d.title,
+                subtitle: d.subtitle,
+                badge: d.badge,
+                songs: d.songs,
+                loading: false,
+                error: false,
+              }));
+            if (newEntries.length > 0) {
+              const updated = [...prev, ...newEntries];
+              try {
+                localStorage.setItem(HOME_CACHE_KEY, JSON.stringify(updated));
+              } catch {}
+              return updated;
+            }
+            return prev;
+          });
+        }
+      }).catch(() => {});
+    }
 
     // 4. Spotify-Style Curated Playlist Shelves (Personalized)
     setShelvesLoading(true);
@@ -208,7 +338,11 @@ export function HomeScreen() {
   function retrySection(id: string) {
     if (!navigator.onLine) return;
     setSections((prev) => prev.map((s) => (s.id === id ? { ...s, loading: true, error: false } : s)));
-    if (id === 'trending') {
+    if (id === 'made_for_you') {
+      smartRecommendationEngine.getPersonalizedMadeForYou({ recentlyPlayed: appState.recentlyPlayed, favorites: appState.favorites }).then((songs) => setSections((prev) => prev.map((s) => (s.id === id ? { ...s, songs, loading: false } : s))));
+    } else if (id === 'discover_new') {
+      smartRecommendationEngine.getDiscoverSomethingNew(languages).then((songs) => setSections((prev) => prev.map((s) => (s.id === id ? { ...s, songs, loading: false } : s))));
+    } else if (id === 'trending') {
       getPersonalizedTrending(languages, 16).then((songs) => setSections((prev) => prev.map((s) => (s.id === id ? { ...s, songs, loading: false } : s))));
     } else if (id === 'recommend_for_you') {
       getPersonalizedRecommendForYou(languages, appState.recentlyPlayed, appState.favorites, 16).then((songs) => setSections((prev) => prev.map((s) => (s.id === id ? { ...s, songs, loading: false } : s))));
@@ -221,6 +355,9 @@ export function HomeScreen() {
   }
 
   const handleOpenPlaylist = (playlist: Playlist) => {
+    if (scrollRef.current) {
+      persistentHomeScrollTop = scrollRef.current.scrollTop;
+    }
     navigate('playlist', { playlistId: playlist.id, playlist });
   };
 
@@ -241,7 +378,12 @@ export function HomeScreen() {
   const recShelf = shelves.find((sh) => sh.id === 'shelf_recommendations');
 
   return (
-    <div className="scroll-area" style={{ paddingBottom: 'var(--content-bottom-pad)' }}>
+    <div
+      ref={scrollRef}
+      onScroll={handleScroll}
+      className="scroll-area"
+      style={{ flex: 1, paddingBottom: 'var(--content-bottom-pad)' }}
+    >
       {/* ── Header ── */}
       <header style={{ padding: '20px 20px 8px', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
         <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>

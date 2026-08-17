@@ -1022,24 +1022,52 @@ export async function getAlbumTracks(albumId: string): Promise<Song[]> {
 
 // ─── Deduplication Helpers ───────────────────────────────────────────────────
 
-function normalizeKey(str: string): string {
-  return str.toLowerCase().replace(/[^a-z0-9]/g, '');
+export function normalizeSongKey(str: string): string {
+  return (str || '')
+    .toLowerCase()
+    .replace(/\(.*?\)|\[.*?\]/g, '')
+    .replace(/[^a-z0-9]/g, '');
 }
 
-function deduplicateSongs(songs: Song[]): Song[] {
-  const seen = new Set<string>();
-  return songs.filter((s) => {
-    const key = `${normalizeKey(s.title)}_${normalizeKey(s.artist)}`;
-    if (seen.has(key)) return false;
-    seen.add(key);
-    return true;
-  });
+export function deduplicateSongs(songs: Song[]): Song[] {
+  if (!Array.isArray(songs) || songs.length === 0) return [];
+
+  const seenIds = new Set<string>();
+  const seenArtistTitle = new Set<string>();
+  const uniqueSongs: Song[] = [];
+
+  for (const s of songs) {
+    if (!s) continue;
+
+    // 1. Direct stable unique ID check
+    const id = s.id ? s.id.trim() : '';
+    if (id) {
+      if (seenIds.has(id)) continue;
+      seenIds.add(id);
+    }
+
+    // 2. Exact Title + Primary Artist match (deduplicates multi-source identical tracks while preserving different songs with same title)
+    const cleanTitle = (s.title || '').trim().toLowerCase().replace(/\(.*?\)|\[.*?\]/g, '').replace(/[^\p{L}\p{N}]/gu, '');
+    const primaryArtist = (s.artist || '').trim().toLowerCase().split(/[,&/|+]|\bfeat\b|\bft\b/i)[0]?.trim().replace(/[^\p{L}\p{N}]/gu, '') || '';
+
+    if (cleanTitle && primaryArtist) {
+      const artistTitleKey = `${primaryArtist}_${cleanTitle}`;
+      if (seenArtistTitle.has(artistTitleKey)) {
+        continue;
+      }
+      seenArtistTitle.add(artistTitleKey);
+    }
+
+    uniqueSongs.push(s);
+  }
+
+  return uniqueSongs;
 }
 
 function deduplicateArtists(artists: Artist[]): Artist[] {
   const seen = new Set<string>();
   return artists.filter((a) => {
-    const key = normalizeKey(a.name);
+    const key = normalizeSongKey(a.name);
     if (seen.has(key)) return false;
     seen.add(key);
     return true;
@@ -1049,9 +1077,60 @@ function deduplicateArtists(artists: Artist[]): Artist[] {
 function deduplicateAlbums(albums: Album[]): Album[] {
   const seen = new Set<string>();
   return albums.filter((a) => {
-    const key = `${normalizeKey(a.title)}_${normalizeKey(a.artist)}`;
+    const key = `${normalizeSongKey(a.title)}_${normalizeSongKey(a.artist)}`;
     if (seen.has(key)) return false;
     seen.add(key);
     return true;
   });
+}
+
+/**
+ * Generates an automix radio queue based on current track using YouTube Music + JioSaavn fallback.
+ */
+export async function getAutomixRadio(song: Song, limit = 15): Promise<Song[]> {
+  try {
+    const { getYouTubeMusicRadio } = await import('../api/youtubeMusicApi');
+    const ytRadio = await getYouTubeMusicRadio(song.id.startsWith('yt_') ? song.id : `${song.title} ${song.artist}`, limit);
+    if (ytRadio && ytRadio.length > 0) {
+      return deduplicateSongs(ytRadio.filter(s => s.id !== song.id));
+    }
+  } catch {}
+
+  // Fallback to JioSaavn artist / genre recommendation
+  try {
+    const fallbackRes = await searchJioSaavn(`${song.artist} radio`, limit);
+    if (fallbackRes.songs && fallbackRes.songs.length > 0) {
+      return deduplicateSongs(fallbackRes.songs.filter(s => s.id !== song.id));
+    }
+  } catch {}
+
+  return [];
+}
+
+/**
+ * Universal playlist importer: automatically parses Spotify or YouTube links and imports tracks.
+ */
+export async function importUniversalPlaylist(
+  urlOrId: string
+): Promise<{ title: string; artwork: string; tracks: Song[]; source: 'spotify' | 'youtube' } | null> {
+  const trimmed = urlOrId.trim();
+
+  // 1. Check if YouTube link
+  if (trimmed.includes('youtube.com') || trimmed.includes('youtu.be') || trimmed.startsWith('PL') || trimmed.startsWith('RD')) {
+    const { importYouTubePlaylist } = await import('../api/youtubeMusicApi');
+    const res = await importYouTubePlaylist(trimmed);
+    if (res && res.tracks.length > 0) {
+      return { ...res, source: 'youtube' };
+    }
+  }
+
+  // 2. Check if Spotify link
+  const { extractSpotifyPlaylistId } = await import('../api/spotifyApi');
+  const spotifyId = extractSpotifyPlaylistId(trimmed);
+  if (spotifyId) {
+    // Spotify playlist importer is handled via existing Spotify import pipeline
+    return null;
+  }
+
+  return null;
 }

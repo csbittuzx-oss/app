@@ -16,7 +16,7 @@ import type { Song, Playlist } from '../../data/models';
 import { searchJioSaavn, resolveFullTrack } from '../../data/api/saavnApi';
 import { searchYouTubeMusic } from '../../data/api/youtubeMusicApi';
 import { userProfileTracker } from './UserProfileTracker';
-import { isSongMatchingLanguage } from '../../data/repository/musicRepository';
+import { isSongMatchingLanguage, deduplicateSongs } from '../../data/repository/musicRepository';
 import { filterSpotifyAvailableTracks } from '../../services/SpotifyAvailabilityService';
 
 export interface RecommendationContext {
@@ -172,23 +172,6 @@ function isSameOrSimilarTitle(titleA: string, titleB: string): boolean {
     if (coreA.includes(coreB) || coreB.includes(coreA)) return true;
   }
   return false;
-}
-
-function deduplicateSongs(songs: Song[]): Song[] {
-  const seenIds = new Set<string>();
-  const seenCoreKeys = new Set<string>();
-
-  return songs.filter((s) => {
-    if (!s || !s.title) return false;
-    if (seenIds.has(s.id)) return false;
-
-    const coreKey = `${getCoreTitle(s.title)}_${normalizeArtist(s.artist)}`;
-    if (seenCoreKeys.has(coreKey)) return false;
-
-    seenIds.add(s.id);
-    seenCoreKeys.add(coreKey);
-    return true;
-  });
 }
 
 function isPhonkSong(song: Song): boolean {
@@ -449,6 +432,161 @@ class SmartRecommendationEngineService {
     }
 
     return selected;
+  }
+
+  /**
+   * Generates "Made For You" personalized tracklist based on user's highest taste affinities.
+   */
+  async getPersonalizedMadeForYou(context: RecommendationContext = {}): Promise<Song[]> {
+    const favorites = context.favorites || [];
+    const recent = context.recentlyPlayed || [];
+    const topArtists = userProfileTracker.getTopArtists(4);
+
+    const queries: string[] = [];
+    if (topArtists.length > 0) {
+      queries.push(`${topArtists[0]} superhits`, `${topArtists.slice(0, 2).join(' ')} best songs`);
+    } else {
+      queries.push('Bollywood Trending Superhits', 'Global Top Hits 2025');
+    }
+
+    const songs: Song[] = [...favorites.slice(0, 6), ...recent.slice(0, 4)];
+    for (const q of queries) {
+      try {
+        const res = await searchJioSaavn(q, 10);
+        songs.push(...res.songs);
+      } catch {}
+    }
+
+    return deduplicateSongs(songs).slice(0, 20);
+  }
+
+  /**
+   * Generates "Because You Listened To [Artist / Song]" contextual similarity shelf.
+   */
+  async getBecauseYouListenedTo(context: RecommendationContext = {}): Promise<{ seedSong: Song | null; title: string; subtitle: string; songs: Song[] } | null> {
+    const recent = context.recentlyPlayed || [];
+    const favorites = context.favorites || [];
+    const seedSong = recent[0] || favorites[0] || null;
+
+    if (!seedSong) return null;
+
+    const query = `${seedSong.artist} similar songs top hits`;
+    let songs: Song[] = [];
+    try {
+      const res = await searchJioSaavn(query, 16);
+      songs = res.songs.filter((s) => s.id !== seedSong.id);
+    } catch {}
+
+    if (songs.length === 0) {
+      try {
+        const res = await searchJioSaavn(`${seedSong.artist} hits`, 16);
+        songs = res.songs.filter((s) => s.id !== seedSong.id);
+      } catch {}
+    }
+
+    return {
+      seedSong,
+      title: `Because you listened to ${seedSong.title}`,
+      subtitle: `Similar tracks inspired by ${seedSong.artist}`,
+      songs: deduplicateSongs(songs).slice(0, 15),
+    };
+  }
+
+  /**
+   * Generates "Discover Something New" shelf for fresh exploration outside immediate history.
+   */
+  async getDiscoverSomethingNew(languages: string[] = ['Hindi', 'International']): Promise<Song[]> {
+    const lang = languages[0] || 'Hindi';
+    const discoveryQueries = [
+      `${lang} Fresh New Discoveries 2025`,
+      `${lang} Indie Acoustic Underground Hits`,
+      'Viral Underground Tracks 2025',
+    ];
+
+    const songs: Song[] = [];
+    for (const q of discoveryQueries) {
+      try {
+        const res = await searchJioSaavn(q, 8);
+        songs.push(...res.songs);
+      } catch {}
+    }
+
+    return deduplicateSongs(songs).slice(0, 15);
+  }
+
+  /**
+   * Generates dynamic personalized Home sections based on actual user listening behavior
+   * (e.g. "Top Bhojpuri Hits" when listening to Bhojpuri, top artist mixes, or genre styles).
+   */
+  async getLearnedBehaviorSections(
+    context: RecommendationContext = {},
+    _defaultLanguages: string[] = []
+  ): Promise<{ id: string; title: string; subtitle: string; badge?: string; songs: Song[] }[]> {
+    const recent = context.recentlyPlayed || [];
+    const favorites = context.favorites || [];
+    const allInteractionTracks = deduplicateSongs([...recent, ...favorites]);
+
+    if (allInteractionTracks.length === 0) {
+      return [];
+    }
+
+    const dynamicSections: { id: string; title: string; subtitle: string; badge?: string; songs: Song[] }[] = [];
+
+    // 1. Language behavior signals analysis
+    const langCounts: Record<string, number> = {};
+    for (const song of allInteractionTracks) {
+      const ctx = classifySongContext(song);
+      if (ctx.language) {
+        langCounts[ctx.language] = (langCounts[ctx.language] || 0) + 1;
+      }
+    }
+
+    // Languages to dynamically promote when user listens frequently
+    const candidateLangs = ['Bhojpuri', 'Punjabi', 'Haryanvi', 'Tamil', 'Telugu', 'Phonk', 'Bengali', 'Marathi', 'Gujarati'];
+    for (const lang of candidateLangs) {
+      const count = langCounts[lang] || 0;
+      // Only generate if user actually listens to it (at least 2 plays/interactions)
+      if (count >= 2) {
+        const query = lang === 'Phonk'
+          ? 'Drift Phonk viral hits 2025'
+          : `${lang} superhits top songs 2025`;
+        try {
+          const res = await searchJioSaavn(query, 16);
+          const uniqueTracks = deduplicateSongs(res.songs);
+          if (uniqueTracks.length > 0) {
+            dynamicSections.push({
+              id: `dynamic_lang_${lang.toLowerCase()}`,
+              title: lang === 'Phonk' ? 'Top Phonk Drift Mix' : `Top ${lang} Hits`,
+              subtitle: `Because you frequently listen to ${lang} music`,
+              badge: 'For You',
+              songs: uniqueTracks.slice(0, 16),
+            });
+          }
+        } catch {}
+      }
+    }
+
+    // 2. Top Artist behavior signals analysis
+    const topArtists = userProfileTracker.getTopArtists(3);
+    for (const artist of topArtists) {
+      if (!artist) continue;
+      try {
+        const res = await searchJioSaavn(`${artist} best songs superhits`, 16);
+        const uniqueTracks = deduplicateSongs(res.songs);
+        if (uniqueTracks.length >= 4) {
+          const capitalizedArtist = artist.split(' ').map(w => w.charAt(0).toUpperCase() + w.slice(1)).join(' ');
+          dynamicSections.push({
+            id: `dynamic_artist_${artist.replace(/[^a-z0-9]/gi, '_').toLowerCase()}`,
+            title: `Best of ${capitalizedArtist}`,
+            subtitle: `Because you love ${capitalizedArtist}`,
+            badge: 'Artist Mix',
+            songs: uniqueTracks.slice(0, 16),
+          });
+        }
+      } catch {}
+    }
+
+    return dynamicSections;
   }
 
   /**
