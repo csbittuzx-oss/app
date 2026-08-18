@@ -2,12 +2,12 @@ import React, { useState, useEffect, useRef } from 'react';
 import { usePlayer } from '../../state/PlayerContext';
 import { useApp } from '../../state/AppContext';
 import { getLyrics } from '../../data/api/lyricsApi';
-import { getTrackCanvas } from '../../data/api/canvasApi';
 import { NowPlayingMenuSheet } from './NowPlayingMenuSheet';
-import type { Lyrics, TrackCanvas } from '../../data/models';
+import type { Lyrics } from '../../data/models';
 import { formatDuration } from '../../core/utils';
 import { showToast } from '../../core/utils/toast';
 import { CONFIG } from '../../config';
+import { extractArtworkTheme, DEFAULT_DARK_ARTWORK_THEME, type ExtractedArtworkTheme } from '../../core/utils/colorExtractor';
 
 // ─── SVG Icons ────────────────────────────────────────────────────────────────
 
@@ -37,24 +37,36 @@ const icons = {
   ),
   queue: <svg width="20" height="20" viewBox="0 0 24 24" fill="none" aria-hidden="true"><line x1="8" y1="6" x2="21" y2="6" stroke="currentColor" strokeWidth="1.75" strokeLinecap="round"/><line x1="8" y1="12" x2="21" y2="12" stroke="currentColor" strokeWidth="1.75" strokeLinecap="round"/><line x1="8" y1="18" x2="21" y2="18" stroke="currentColor" strokeWidth="1.75" strokeLinecap="round"/><circle cx="3" cy="6" r="1.5" fill="currentColor"/><circle cx="3" cy="12" r="1.5" fill="currentColor"/><circle cx="3" cy="18" r="1.5" fill="currentColor"/></svg>,
   lyrics: <svg width="20" height="20" viewBox="0 0 24 24" fill="none" aria-hidden="true"><path d="M21 15a2 2 0 01-2 2H7l-4 4V5a2 2 0 012-2h14a2 2 0 012 2z" stroke="currentColor" strokeWidth="1.75" strokeLinecap="round" strokeLinejoin="round"/></svg>,
-  canvas: (on: boolean) => (
-    <svg width="20" height="20" viewBox="0 0 24 24" fill="none" style={{ color: on ? 'var(--color-accent)' : 'currentColor' }} aria-hidden="true">
-      <rect x="2" y="4" width="20" height="16" rx="3" stroke="currentColor" strokeWidth="1.75" />
-      <polygon points="10 8 16 12 10 16 10 8" fill={on ? 'var(--color-accent)' : 'currentColor'} />
-    </svg>
-  ),
   loading: <svg width="24" height="24" viewBox="0 0 24 24" fill="none" aria-hidden="true" style={{ animation: 'spin 0.8s linear infinite' }}><circle cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="2.5" strokeOpacity="0.25"/><path d="M12 2a10 10 0 0110 10" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round"/></svg>,
 };
 
 export function FullPlayer() {
   const { state, playSong, togglePlay, next, previous, seek, seekToTime, toggleShuffle, toggleRepeat, closeFullPlayer, openQueue } = usePlayer();
-  const { isFavorite, toggleFavorite } = useApp();
+  const { isFavorite, toggleFavorite, state: appState } = useApp();
   const { currentSong, isPlaying, progress, currentTime, duration, isLoading, shuffle, repeat, queue, queueIndex, error } = state;
+  const isDark = appState.theme === 'dark';
+
+  const [artworkTheme, setArtworkTheme] = useState<ExtractedArtworkTheme>(DEFAULT_DARK_ARTWORK_THEME);
+
+  // Dynamically extract dominant background colors from currently playing song's artwork
+  useEffect(() => {
+    if (!currentSong) return;
+    const artworkUrl = currentSong.artworkLg || currentSong.artwork;
+    let isCancelled = false;
+
+    extractArtworkTheme(artworkUrl).then((theme) => {
+      if (!isCancelled) {
+        setArtworkTheme(theme);
+      }
+    });
+
+    return () => {
+      isCancelled = true;
+    };
+  }, [currentSong?.id, currentSong?.artwork, currentSong?.artworkLg]);
 
   const [showMenuSheet, setShowMenuSheet] = useState(false);
   const [showLyrics, setShowLyrics] = useState(false);
-  const [trackCanvas, setTrackCanvas] = useState<TrackCanvas | null>(null);
-  const [showCanvasBackdrop, setShowCanvasBackdrop] = useState(true);
   const [lyrics, setLyrics] = useState<Lyrics | null>(null);
   const [lyricsLoading, setLyricsLoading] = useState(false);
   const [lyricsError, setLyricsError] = useState(false);
@@ -66,66 +78,138 @@ export function FullPlayer() {
   const isUserScrollingRef = useRef(false);
   const scrollTimeoutRef = useRef<any>(null);
 
-  // Load animated video canvas when currentSong changes
-  useEffect(() => {
-    if (!currentSong) {
-      setTrackCanvas(null);
-      return;
-    }
-    getTrackCanvas(currentSong.title, currentSong.artist, currentSong.id)
-      .then((canvas) => setTrackCanvas(canvas))
-      .catch(() => setTrackCanvas(null));
-  }, [currentSong?.id]);
+  // ── Gestures State ──
+  const [dismissOffsetY, setDismissOffsetY] = useState(0);
+  const [isDraggingDismiss, setIsDraggingDismiss] = useState(false);
+  const [isClosing, setIsClosing] = useState(false);
 
   // Artwork swipe gestures state
   const [artworkOffsetX, setArtworkOffsetX] = useState(0);
   const [isDraggingArtwork, setIsDraggingArtwork] = useState(false);
+
   const touchStartXRef = useRef(0);
   const touchStartYRef = useRef(0);
-  const isHorizontalSwipeRef = useRef(false);
+  const touchStartTimeRef = useRef(0);
+  const activeGestureRef = useRef<'none' | 'dismiss' | 'artwork' | 'ignore'>('none');
 
   const liked = currentSong ? isFavorite(currentSong.id) : false;
 
-  // Swipe gesture handlers for Album Artwork
-  const handleArtworkTouchStart = (e: React.TouchEvent | React.MouseEvent) => {
+  // Root container touch handlers (Swipe down to close Now Playing)
+  const handleRootTouchStart = (e: React.TouchEvent | React.MouseEvent) => {
+    if (isClosing) return;
+    const target = e.target as HTMLElement | null;
+    if (target?.closest('button, [role="slider"], #player-progress-bar, input, .btn-icon, .btn-ghost, #full-player-menu-sheet, #now-playing-artwork-card')) {
+      activeGestureRef.current = 'ignore';
+      return;
+    }
+
     const clientX = 'touches' in e ? e.touches[0].clientX : e.clientX;
     const clientY = 'touches' in e ? e.touches[0].clientY : e.clientY;
     touchStartXRef.current = clientX;
     touchStartYRef.current = clientY;
-    isHorizontalSwipeRef.current = false;
-    setIsDraggingArtwork(true);
+    touchStartTimeRef.current = Date.now();
+    activeGestureRef.current = 'none';
   };
 
-  const handleArtworkTouchMove = (e: React.TouchEvent | React.MouseEvent) => {
-    if (!isDraggingArtwork) return;
+  const handleRootTouchMove = (e: React.TouchEvent | React.MouseEvent) => {
+    if (isClosing || activeGestureRef.current === 'ignore' || activeGestureRef.current === 'artwork') return;
     const clientX = 'touches' in e ? e.touches[0].clientX : e.clientX;
     const clientY = 'touches' in e ? e.touches[0].clientY : e.clientY;
     const dx = clientX - touchStartXRef.current;
     const dy = clientY - touchStartYRef.current;
 
-    if (!isHorizontalSwipeRef.current) {
-      if (Math.abs(dy) > Math.abs(dx) && Math.abs(dy) > 8) {
-        setIsDraggingArtwork(false);
-        return;
-      }
-      if (Math.abs(dx) > 8) {
-        isHorizontalSwipeRef.current = true;
+    // Check if touching inside lyrics container while scrolled down
+    if (showLyrics && lyricsContainerRef.current && lyricsContainerRef.current.scrollTop > 0) {
+      return;
+    }
+
+    if (activeGestureRef.current === 'none') {
+      if (dy > 8 && dy > Math.abs(dx) * 1.2) {
+        activeGestureRef.current = 'dismiss';
+        setIsDraggingDismiss(true);
+      } else if (Math.abs(dx) > 8) {
+        activeGestureRef.current = 'ignore';
       }
     }
 
-    if (isHorizontalSwipeRef.current) {
+    if (activeGestureRef.current === 'dismiss') {
+      if (dy > 0) {
+        const clampedDy = dy > 200 ? 200 + (dy - 200) * 0.55 : dy;
+        setDismissOffsetY(clampedDy);
+      } else {
+        setDismissOffsetY(0);
+      }
+    }
+  };
+
+  const handleRootTouchEnd = () => {
+    if (activeGestureRef.current === 'dismiss') {
+      const elapsed = Math.max(1, Date.now() - touchStartTimeRef.current);
+      const velocity = dismissOffsetY / elapsed;
+
+      // Threshold: >110px or quick flick downward (>0.45px/ms & >35px)
+      if (dismissOffsetY >= 110 || (velocity > 0.45 && dismissOffsetY > 35)) {
+        setIsClosing(true);
+        setTimeout(() => {
+          closeFullPlayer();
+        }, 220);
+      } else {
+        setDismissOffsetY(0);
+        setIsDraggingDismiss(false);
+      }
+    }
+    activeGestureRef.current = 'none';
+  };
+
+  // Swipe gesture handlers specifically for Album Artwork
+  const handleArtworkTouchStart = (e: React.TouchEvent | React.MouseEvent) => {
+    if (isClosing) return;
+    const clientX = 'touches' in e ? e.touches[0].clientX : e.clientX;
+    const clientY = 'touches' in e ? e.touches[0].clientY : e.clientY;
+    touchStartXRef.current = clientX;
+    touchStartYRef.current = clientY;
+    touchStartTimeRef.current = Date.now();
+    activeGestureRef.current = 'none';
+    setIsDraggingArtwork(true);
+  };
+
+  const handleArtworkTouchMove = (e: React.TouchEvent | React.MouseEvent) => {
+    if (isClosing) return;
+    const clientX = 'touches' in e ? e.touches[0].clientX : e.clientX;
+    const clientY = 'touches' in e ? e.touches[0].clientY : e.clientY;
+    const dx = clientX - touchStartXRef.current;
+    const dy = clientY - touchStartYRef.current;
+
+    if (activeGestureRef.current === 'none') {
+      if (Math.abs(dx) > Math.abs(dy) && Math.abs(dx) > 8) {
+        activeGestureRef.current = 'artwork';
+      } else if (dy > 8 && dy > Math.abs(dx) * 1.2) {
+        activeGestureRef.current = 'dismiss';
+        setIsDraggingArtwork(false);
+        setIsDraggingDismiss(true);
+      }
+    }
+
+    if (activeGestureRef.current === 'artwork') {
       // Elastic resistance
-      const clampedDx = Math.abs(dx) > 120
-        ? Math.sign(dx) * (120 + (Math.abs(dx) - 120) * 0.4)
+      const clampedDx = Math.abs(dx) > 130
+        ? Math.sign(dx) * (130 + (Math.abs(dx) - 130) * 0.35)
         : dx;
       setArtworkOffsetX(clampedDx);
+    } else if (activeGestureRef.current === 'dismiss') {
+      if (dy > 0) {
+        const clampedDy = dy > 200 ? 200 + (dy - 200) * 0.55 : dy;
+        setDismissOffsetY(clampedDy);
+      } else {
+        setDismissOffsetY(0);
+      }
     }
   };
 
   const handleArtworkTouchEnd = () => {
-    if (isHorizontalSwipeRef.current && Math.abs(artworkOffsetX) >= 55) {
-      if (artworkOffsetX > 0) {
-        // Swipe Right -> Next track
+    if (activeGestureRef.current === 'artwork') {
+      // Swipe left (artworkOffsetX <= -50) -> NEXT track
+      if (artworkOffsetX <= -50) {
         const hasNext = (queue && queue.length > 1 && queueIndex < queue.length - 1) || repeat === 'all' || state.autoPlay;
         if (hasNext) {
           if (typeof navigator !== 'undefined' && navigator.vibrate) {
@@ -135,8 +219,9 @@ export function FullPlayer() {
         } else {
           showToast('No next track available', 'info');
         }
-      } else {
-        // Swipe Left -> Previous track (force track change)
+      }
+      // Swipe right (artworkOffsetX >= 50) -> PREVIOUS track
+      else if (artworkOffsetX >= 50) {
         const hasPrev = (queue && queue.length > 1 && queueIndex > 0) || repeat === 'all';
         if (hasPrev) {
           if (typeof navigator !== 'undefined' && navigator.vibrate) {
@@ -147,10 +232,23 @@ export function FullPlayer() {
           showToast('No previous track available', 'info');
         }
       }
+      setArtworkOffsetX(0);
+      setIsDraggingArtwork(false);
+    } else if (activeGestureRef.current === 'dismiss') {
+      const elapsed = Math.max(1, Date.now() - touchStartTimeRef.current);
+      const velocity = dismissOffsetY / elapsed;
+      if (dismissOffsetY >= 110 || (velocity > 0.45 && dismissOffsetY > 35)) {
+        setIsClosing(true);
+        setTimeout(() => {
+          closeFullPlayer();
+        }, 220);
+      } else {
+        setDismissOffsetY(0);
+        setIsDraggingDismiss(false);
+      }
     }
-    setArtworkOffsetX(0);
     setIsDraggingArtwork(false);
-    isHorizontalSwipeRef.current = false;
+    activeGestureRef.current = 'none';
   };
 
   // Fetch lyrics with multi-tiered LRCLIB & JioSaavn engine
@@ -224,51 +322,49 @@ export function FullPlayer() {
   return (
     <div
       id="full-player"
+      onTouchStart={handleRootTouchStart}
+      onTouchMove={handleRootTouchMove}
+      onTouchEnd={handleRootTouchEnd}
+      onTouchCancel={handleRootTouchEnd}
+      onMouseDown={handleRootTouchStart}
+      onMouseMove={handleRootTouchMove}
+      onMouseUp={handleRootTouchEnd}
       style={{
         position: 'fixed', inset: 0, zIndex: 200,
-        background: 'var(--color-bg)',
+        background: isDark ? artworkTheme.gradient : 'var(--color-bg)',
         display: 'flex', flexDirection: 'column',
         paddingTop: 'env(safe-area-inset-top, 0px)',
         paddingBottom: 'env(safe-area-inset-bottom, 0px)',
-        animation: 'slideUp 350ms var(--ease-decelerate)',
+        transform: isClosing
+          ? 'translate3d(0, 100%, 0)'
+          : dismissOffsetY > 0
+          ? `translate3d(0, ${dismissOffsetY}px, 0)`
+          : 'translate3d(0, 0, 0)',
+        opacity: isClosing ? 0 : dismissOffsetY > 0 ? Math.max(0.65, 1 - (dismissOffsetY / 600)) : 1,
+        borderRadius: dismissOffsetY > 0 ? `${Math.min(28, dismissOffsetY * 0.18)}px` : '0px',
+        animation: !isClosing && dismissOffsetY === 0 ? 'slideUp 350ms var(--ease-decelerate)' : 'none',
+        transition: (isDraggingDismiss || isDraggingArtwork)
+          ? 'background 650ms cubic-bezier(0.2, 0.8, 0.2, 1)'
+          : isClosing
+          ? 'transform 220ms var(--ease-decelerate), opacity 220ms ease, border-radius 220ms ease, background 650ms cubic-bezier(0.2, 0.8, 0.2, 1)'
+          : 'transform 280ms cubic-bezier(0.2, 0.9, 0.3, 1), opacity 280ms ease, border-radius 280ms ease, background 650ms cubic-bezier(0.2, 0.8, 0.2, 1)',
         overflow: 'hidden',
+        willChange: 'transform, opacity, border-radius',
+        touchAction: 'pan-x pan-y',
       }}
     >
-      {/* Animated Video Canvas Backdrop */}
-      {showCanvasBackdrop && trackCanvas?.canvasUrl && (
-        <div style={{ position: 'absolute', inset: 0, zIndex: 0, overflow: 'hidden', pointerEvents: 'none' }}>
-          <video
-            src={trackCanvas.canvasUrl}
-            autoPlay
-            loop
-            muted
-            playsInline
-            style={{
-              width: '100%',
-              height: '100%',
-              objectFit: 'cover',
-              opacity: isPlaying ? 0.38 : 0.18,
-              transition: 'opacity 600ms ease',
-              filter: 'blur(2px) brightness(0.85)',
-            }}
-          />
-          <div style={{
-            position: 'absolute',
-            inset: 0,
-            background: 'linear-gradient(to bottom, rgba(10,10,12,0.65) 0%, rgba(10,10,12,0.4) 40%, rgba(10,10,12,0.92) 100%)',
-          }} />
-        </div>
-      )}
-
-      {/* Background artwork blur */}
+      {/* Background artwork dynamic atmospheric glow */}
       <div style={{
-        position: 'absolute', inset: 0, zIndex: 0,
-        background: `radial-gradient(ellipse at 50% 30%, rgba(245,158,11,0.08) 0%, transparent 65%)`,
+        position: 'absolute', inset: 0, zIndex: -1,
+        background: isDark
+          ? artworkTheme.ambientGlow
+          : `radial-gradient(ellipse at 50% 30%, rgba(245,158,11,0.08) 0%, transparent 65%)`,
+        transition: 'background 650ms cubic-bezier(0.2, 0.8, 0.2, 1)',
         pointerEvents: 'none',
       }} aria-hidden="true" />
 
       {/* ── Header ── */}
-      <div style={{ position: 'relative', zIndex: 1, display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '12px 20px 8px' }}>
+      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '12px 20px 8px' }}>
         <button id="full-player-close-btn" aria-label="Collapse player" onClick={closeFullPlayer} className="btn-icon" style={{ minWidth: 44, minHeight: 44 }}>
           {icons.close}
         </button>
@@ -414,17 +510,17 @@ export function FullPlayer() {
                         width: 52,
                         height: 52,
                         borderRadius: '50%',
-                        background: Math.abs(artworkOffsetX) >= 55 ? 'var(--color-accent)' : 'rgba(255,255,255,0.22)',
-                        color: Math.abs(artworkOffsetX) >= 55 ? 'var(--color-accent-on)' : '#FFFFFF',
+                        background: Math.abs(artworkOffsetX) >= 50 ? 'var(--color-accent)' : 'rgba(255,255,255,0.22)',
+                        color: Math.abs(artworkOffsetX) >= 50 ? 'var(--color-accent-on)' : '#FFFFFF',
                         display: 'flex',
                         alignItems: 'center',
                         justifyContent: 'center',
-                        transform: `scale(${Math.min(1.2, 0.85 + (Math.abs(artworkOffsetX) / 55) * 0.35)})`,
+                        transform: `scale(${Math.min(1.2, 0.85 + (Math.abs(artworkOffsetX) / 50) * 0.35)})`,
                         transition: 'transform 120ms ease, background 120ms ease',
                         boxShadow: '0 8px 24px rgba(0,0,0,0.4)',
                       }}
                     >
-                      {artworkOffsetX > 0 ? icons.next : icons.prev}
+                      {artworkOffsetX < 0 ? icons.next : icons.prev}
                     </div>
                     <span style={{
                       fontSize: 'var(--text-xs)',
@@ -433,7 +529,7 @@ export function FullPlayer() {
                       textTransform: 'uppercase',
                       textShadow: '0 2px 8px rgba(0,0,0,0.6)',
                     }}>
-                      {artworkOffsetX > 0 ? 'Next' : 'Previous'}
+                      {artworkOffsetX < 0 ? 'Next' : 'Previous'}
                     </span>
                   </div>
                 )}
@@ -768,24 +864,6 @@ export function FullPlayer() {
 
         {/* ── Secondary controls ── */}
         <div style={{ display: 'flex', justifyContent: 'center', gap: 8, paddingBottom: 16 }}>
-          {trackCanvas?.canvasUrl && (
-            <button
-              id="player-canvas-btn"
-              aria-label={showCanvasBackdrop ? 'Hide motion canvas' : 'Show motion canvas'}
-              aria-pressed={showCanvasBackdrop}
-              onClick={() => setShowCanvasBackdrop(!showCanvasBackdrop)}
-              className="btn-ghost"
-              style={{
-                fontSize: 'var(--text-xs)', gap: 6, fontWeight: 500,
-                color: showCanvasBackdrop ? 'var(--color-accent)' : 'var(--color-text-secondary)',
-                background: showCanvasBackdrop ? 'var(--color-accent-dim)' : 'transparent',
-                padding: '8px 14px',
-              }}
-            >
-              {icons.canvas(showCanvasBackdrop)}
-              Canvas
-            </button>
-          )}
           <button
             id="player-lyrics-btn"
             aria-label={showLyrics ? 'Hide lyrics' : 'Show lyrics'}
