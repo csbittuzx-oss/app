@@ -362,6 +362,22 @@ class AdaptiveStreamingService {
     }
   }
 
+  /**
+   * Purges a song from in-memory and IndexedDB stream caches.
+   */
+  async evictCachedSong(songId: string): Promise<void> {
+    const existing = this.blobUrlCache.get(songId);
+    if (existing) {
+      URL.revokeObjectURL(existing);
+      this.blobUrlCache.delete(songId);
+    }
+    try {
+      const db = await openStreamDB();
+      const tx = db.transaction(STREAM_STORE, 'readwrite');
+      tx.objectStore(STREAM_STORE).delete(songId);
+    } catch {}
+  }
+
   // ─── Private: Streaming Engine ─────────────────────────────────────────────
 
   private async streamWithChunking(

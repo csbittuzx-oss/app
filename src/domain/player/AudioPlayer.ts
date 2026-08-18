@@ -319,12 +319,53 @@ class AudioPlayer {
         }
       });
 
-      el.addEventListener('error', () => {
+      el.addEventListener('error', async () => {
         if (!getIsActive()) return;
         const err = el.error;
         if (!el.src || !this.currentSong || err?.code === MediaError.MEDIA_ERR_ABORTED) {
           return;
         }
+
+        const current = this.currentSong;
+        const failedSrc = el.src;
+
+        // Auto-recovery 1: Corrupted or expired offline blob
+        if (failedSrc.startsWith('blob:') || current.provider === 'offline' || current.isDownloaded) {
+          console.warn('Offline blob playback failed, purging corrupt entry:', current.id);
+          try {
+            const { deleteOfflineSong } = await import('../../services/OfflineBackupService');
+            await deleteOfflineSong(current.id);
+          } catch {}
+          try {
+            adaptiveStreaming.evictCachedSong(current.id);
+          } catch {}
+
+          if (navigator.onLine) {
+            console.log('Auto-recovering via live online stream for:', current.title);
+            current.previewUrl = '';
+            current.provider = 'saavn';
+            current.isDownloaded = false;
+            this.play(current, this._queue, this._queueIndex);
+            return;
+          }
+        }
+
+        // Auto-recovery 2: Live stream error -> fallback to YouTube stream resolver
+        if (navigator.onLine && !failedSrc.startsWith('blob:')) {
+          try {
+            console.log('Attempting live stream auto-recovery via YouTube for:', current.title);
+            const { resolveYouTubeFullAudioStream } = await import('../../data/api/youtubeMusicApi');
+            const ytStream = await resolveYouTubeFullAudioStream(current.title, current.artist, current.duration);
+            if (ytStream?.streamUrl && this.currentSong?.id === current.id) {
+              current.previewUrl = ytStream.streamUrl;
+              current.provider = 'youtube';
+              el.src = ytStream.streamUrl;
+              el.play().catch(() => {});
+              return;
+            }
+          } catch {}
+        }
+
         this.emit({ type: 'loading', isLoading: false });
         this.emit({ type: 'error', error: 'Playback failed. Tap to retry.' });
       });
@@ -941,24 +982,27 @@ class AudioPlayer {
     this.emit({ type: 'loading', isLoading: true });
     this.updateMediaSession(targetSong);
 
-    // ── Offline check ──
+    // ── Offline & Cached Stream Resolution ──
+    let offlineUrl: string | null = null;
+    try {
+      offlineUrl = await getOfflineSongStream(targetSong.id);
+    } catch {}
+
+    if (!offlineUrl && targetSong.previewUrl?.startsWith('blob:')) {
+      offlineUrl = targetSong.previewUrl;
+    }
+
+    if (!offlineUrl) {
+      try {
+        const cached = await adaptiveStreaming.getCachedUrl(targetSong.id, targetSong.previewUrl || '');
+        if (cached) offlineUrl = cached;
+      } catch {}
+    }
+
+    if (myGen !== this._playGeneration) return;   // newer song selected, bail
+
+    // ── If device is OFFLINE ──
     if (!navigator.onLine) {
-      let offlineUrl: string | null = null;
-      try { offlineUrl = await getOfflineSongStream(targetSong.id); } catch {}
-
-      if (!offlineUrl && targetSong.previewUrl?.startsWith('blob:')) {
-        offlineUrl = targetSong.previewUrl;
-      }
-
-      if (!offlineUrl) {
-        try {
-          const cached = await adaptiveStreaming.getCachedUrl(targetSong.id, targetSong.previewUrl || '');
-          if (cached) offlineUrl = cached;
-        } catch {}
-      }
-
-      if (myGen !== this._playGeneration) return;   // newer song selected, bail
-
       if (offlineUrl) {
         targetSong.previewUrl = offlineUrl;
         targetSong.isDownloaded = true;
@@ -992,8 +1036,41 @@ class AudioPlayer {
       } else {
         this.emit({ type: 'loading', isLoading: false });
         this.emit({ type: 'error', error: `Audio source unavailable for "${targetSong.title}".` });
-        showToast("You're offline. This song isn't available for offline playback.", 'danger', 3200);
+        showToast("You're offline. This song isn't cached for offline playback.", 'danger', 3200);
         return;
+      }
+    }
+
+    // ── If device is ONLINE and song was from Offline Backup / Downloaded ──
+    if (offlineUrl && (targetSong.provider === 'offline' || targetSong.isDownloaded || targetSong.previewUrl?.startsWith('blob:'))) {
+      try {
+        targetSong.previewUrl = offlineUrl;
+        targetSong.isDownloaded = true;
+        targetSong.provider = 'offline';
+        this.audio.src = offlineUrl;
+        this.audio.volume = this._volume;
+
+        if (this.pendingSeekPosition > 0) {
+          this.audio.currentTime = this.pendingSeekPosition;
+          this.pendingSeekPosition = 0;
+        } else {
+          this.audio.currentTime = 0;
+        }
+
+        this.emit({ type: 'songchange', song: { ...targetSong } });
+        this.emit({ type: 'loading', isLoading: false });
+        this.updateMediaSession(targetSong);
+        this.saveCurrentSession();
+
+        const playPromise = this.audio.play();
+        if (playPromise !== undefined) await playPromise;
+        return; // Successfully playing cached offline copy
+      } catch (err) {
+        console.warn('Offline blob playback failed, automatically resolving online stream:', err);
+        // Reset and fall through to live stream resolution below
+        targetSong.previewUrl = '';
+        targetSong.provider = 'saavn';
+        targetSong.isDownloaded = false;
       }
     }
 
@@ -1001,7 +1078,8 @@ class AudioPlayer {
     const isShortPreview = (!targetSong.previewUrl && navigator.onLine)
       || targetSong.provider === 'itunes'
       || targetSong.id.startsWith('spotify_')
-      || isPreviewAudioUrl(targetSong.previewUrl);
+      || (typeof targetSong.previewUrl === 'string' && !targetSong.previewUrl.startsWith('blob:') && isPreviewAudioUrl(targetSong.previewUrl))
+      || (targetSong.provider !== 'offline' && (!targetSong.previewUrl || (!targetSong.previewUrl.startsWith('http') && !targetSong.previewUrl.startsWith('blob:'))));
 
     if (isShortPreview && navigator.onLine) {
       try {

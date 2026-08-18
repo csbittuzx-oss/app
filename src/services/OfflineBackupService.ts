@@ -8,13 +8,13 @@
 // ═══════════════════════════════════════════════════════════════════════════════
 
 import type { Song, Playlist } from '../data/models';
-import { universalGet } from '../core/utils/http';
+import { Capacitor, CapacitorHttp } from '@capacitor/core';
 
 const DB_NAME = 'soundwave_offline_db';
 const DB_VERSION = 1;
 const STORE_NAME = 'cached_tracks';
 const MAX_OFFLINE_TRACKS = 50;
-const MIN_VALID_AUDIO_BYTES = 400_000; // 400 KB minimum for complete audio
+const MIN_VALID_AUDIO_BYTES = 350_000; // 350 KB minimum for complete audio
 
 export interface CachedRecord {
   id: string;
@@ -46,6 +46,59 @@ function openDatabase(): Promise<IDBDatabase> {
 }
 
 /**
+ * Downloads audio binary with native CORS bypass on Android or fetch on web.
+ */
+async function fetchAudioBlob(url: string): Promise<Blob | null> {
+  if (!url) return null;
+
+  // 1. Native Capacitor download (bypasses CORS completely)
+  if (Capacitor.isNativePlatform()) {
+    try {
+      const res = await CapacitorHttp.get({
+        url,
+        responseType: 'blob',
+        headers: {
+          'User-Agent': 'Mozilla/5.0 (Linux; Android 14) AppleWebKit/537.36',
+          Accept: 'audio/*, */*',
+        },
+      });
+      if (res.status >= 200 && res.status < 300 && res.data) {
+        if (typeof res.data === 'string' && res.data.length > 500) {
+          const byteCharacters = atob(res.data);
+          const byteNumbers = new Uint8Array(byteCharacters.length);
+          for (let i = 0; i < byteCharacters.length; i++) {
+            byteNumbers[i] = byteCharacters.charCodeAt(i);
+          }
+          const mime = url.includes('.mp3') ? 'audio/mpeg' : url.includes('.flac') ? 'audio/flac' : 'audio/mp4';
+          const blob = new Blob([byteNumbers], { type: mime });
+          if (blob.size >= MIN_VALID_AUDIO_BYTES) {
+            return blob;
+          }
+        }
+      }
+    } catch (err) {
+      console.warn('Native binary download fallback:', err);
+    }
+  }
+
+  // 2. Browser / Standard Fetch
+  try {
+    const res = await fetch(url, { mode: 'cors' });
+    if (res.ok) {
+      const arrayBuf = await res.arrayBuffer();
+      if (arrayBuf && arrayBuf.byteLength >= MIN_VALID_AUDIO_BYTES) {
+        const mime = url.includes('.mp3') ? 'audio/mpeg' : url.includes('.flac') ? 'audio/flac' : 'audio/mp4';
+        return new Blob([arrayBuf], { type: mime });
+      }
+    }
+  } catch (err) {
+    console.warn('Browser audio fetch fallback:', err);
+  }
+
+  return null;
+}
+
+/**
  * Saves a fully completed song into the offline backup storage.
  * Only stores the track if the entire audio blob is successfully downloaded & verified.
  */
@@ -57,7 +110,7 @@ export async function cacheCompletedSongForOfflineBackup(
   if (!navigator.onLine) return false;
 
   const urlToFetch = streamUrl || song.previewUrl;
-  if (!urlToFetch || !urlToFetch.startsWith('http')) return false;
+  if (!urlToFetch || !urlToFetch.startsWith('http') || urlToFetch.startsWith('blob:')) return false;
 
   // Ignore 30s preview URLs from Spotify/Apple
   if (
@@ -72,24 +125,10 @@ export async function cacheCompletedSongForOfflineBackup(
   activeCacheDownloads.add(song.id);
 
   try {
-    // 1. Fetch complete audio binary in background
-    let blob: Blob | null = null;
-    try {
-      const res = await fetch(urlToFetch, { mode: 'cors' });
-      if (res.ok) {
-        blob = await res.blob();
-      }
-    } catch {
-      // Fallback via universalGet (proxy / bypass CORS)
-      try {
-        const arrayBuf = await universalGet<ArrayBuffer>(urlToFetch);
-        if (arrayBuf && arrayBuf.byteLength >= MIN_VALID_AUDIO_BYTES) {
-          blob = new Blob([arrayBuf], { type: 'audio/mp4' });
-        }
-      } catch {}
-    }
+    // 1. Fetch complete playable audio binary in background
+    const blob = await fetchAudioBlob(urlToFetch);
 
-    // 2. Strict validation: Must be complete playable audio (>= 400 KB)
+    // 2. Strict validation: Must be complete playable audio
     if (!blob || blob.size < MIN_VALID_AUDIO_BYTES) {
       activeCacheDownloads.delete(song.id);
       return false;
@@ -105,15 +144,15 @@ export async function cacheCompletedSongForOfflineBackup(
         ...song,
         isDownloaded: true,
         previewUrl: '', // Cleaned so it never tries remote URL when offline
-        provider: song.provider || 'offline',
+        provider: 'offline',
       };
 
       const record: CachedRecord = {
         id: song.id,
         song: cleanSong,
-        audioBlob: blob!,
+        audioBlob: blob,
         cachedAt: Date.now(),
-        fileSize: blob!.size,
+        fileSize: blob.size,
       };
 
       const req = store.put(record);
@@ -153,6 +192,21 @@ export async function cacheCompletedSongForOfflineBackup(
     console.warn('Offline backup caching notice:', err);
     return false;
   }
+}
+
+/**
+ * Purges a specific corrupted or invalid song from offline cache.
+ */
+export async function deleteOfflineSong(songId: string): Promise<void> {
+  if (!songId) return;
+  try {
+    const db = await openDatabase();
+    const tx = db.transaction(STORE_NAME, 'readwrite');
+    tx.objectStore(STORE_NAME).delete(songId);
+    try {
+      window.dispatchEvent(new CustomEvent('sw_offline_backup_changed'));
+    } catch {}
+  } catch {}
 }
 
 /**

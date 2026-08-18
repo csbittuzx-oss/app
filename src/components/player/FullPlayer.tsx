@@ -784,7 +784,10 @@ export function FullPlayer() {
             <button
               onClick={(e) => {
                 e.stopPropagation();
-                if (currentSong) playSong(currentSong, queue, queueIndex);
+                if (currentSong) {
+                  const freshSong = { ...currentSong, previewUrl: '' };
+                  playSong(freshSong, queue, queueIndex);
+                }
               }}
               style={{
                 background: 'var(--color-error)',
