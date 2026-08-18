@@ -1,732 +1,374 @@
-import { useState, useEffect } from 'react';
-import { useApp } from '../state/AppContext';
-import { usePlayer } from '../state/PlayerContext';
-import { aiSmartSearchEngine, type AISmartSearchIntent } from '../domain/ai/AISmartSearchEngine';
-import { songRecognitionService } from '../services/SongRecognitionService';
-import type { SearchResult, Song, RecognitionResult } from '../data/models';
-import { SearchBar } from '../components/shared/SearchBar';
-import { SongCard } from '../components/cards/SongCard';
-import { ArtistCard } from '../components/cards/ArtistCard';
-import { AlbumCard } from '../components/cards/AlbumCard';
-import { SkeletonList } from '../components/shared/SkeletonCard';
-import { EmptyState } from '../components/shared/ErrorState';
-import { useDebounce } from '../core/hooks';
-import { CONFIG } from '../config';
+import { useState, useEffect, useRef, useCallback } from "react";
+import { useApp } from "../state/AppContext";
+import { usePlayer } from "../state/PlayerContext";
+import { aiSmartSearchEngine, type AISmartSearchIntent } from "../domain/ai/AISmartSearchEngine";
+import { onlineSearchSuggestionViewModel, type SearchSuggestionState } from "../services/OnlineSearchViewModel";
+import { insertSearchHistory, deleteSearchHistoryEntry, clearAllSearchHistory } from "../services/SearchHistoryService";
+import { isDirectMediaUrl } from "../services/DirectLinkParser";
+import { getYouTubeMusicTrending } from "../data/api/youtubeMusicApi";
+import type { SearchResult, Song } from "../data/models";
+import { SongCard } from "../components/cards/SongCard";
+import { ArtistCard } from "../components/cards/ArtistCard";
+import { AlbumCard } from "../components/cards/AlbumCard";
+import { SkeletonList } from "../components/shared/SkeletonCard";
+import { EmptyState } from "../components/shared/ErrorState";
+import { SearchHistoryItem } from "../components/search/SearchHistoryItem";
+import { SuggestionItem } from "../components/search/SuggestionItem";
+import { TopResultCard } from "../components/search/TopResultCard";
+import { ExploreGrid } from "../components/search/ExploreGrid";
+import { useDebounce } from "../core/hooks";
+
+type SearchMode = "online" | "local";
+type ActiveTab = "explore" | "echo-chart" | "albums";
+type ResultTab = "all" | "songs" | "artists" | "albums";
+
+// ─── Animated Search Bar ────────────────────────────────────────────────────
+
+interface AnimatedSearchBarProps {
+  query: string;
+  isActive: boolean;
+  mode: SearchMode;
+  onQueryChange: (v: string) => void;
+  onActivate: () => void;
+  onDeactivate: () => void;
+  onSubmit: (v: string) => void;
+  onClear: () => void;
+  onModeToggle: () => void;
+  inputRef: React.RefObject<HTMLInputElement | null>;
+}
+
+function AnimatedSearchBar({ query, isActive, mode, onQueryChange, onActivate, onDeactivate, onSubmit, onClear, onModeToggle, inputRef }: AnimatedSearchBarProps) {
+  const hPad = isActive ? 0 : 16;
+  const tPad = isActive ? 0 : 8;
+  return (
+    <div style={{ paddingLeft: hPad, paddingRight: hPad, paddingTop: tPad, transition: "padding 245ms cubic-bezier(0.4,0,0.2,1)" }}>
+      <div role="search" style={{ display: "flex", alignItems: "center", gap: 8, background: "var(--color-surface-2)", border: "1.5px solid", borderColor: isActive ? "var(--color-border-focus)" : "var(--color-border)", borderRadius: isActive ? "var(--radius-xl)" : "var(--radius-full)", padding: "0 12px", height: 52, transition: "border-color 200ms ease, border-radius 245ms cubic-bezier(0.4,0,0.2,1)", boxShadow: isActive ? "0 2px 12px rgba(0,0,0,0.15)" : "none" }}>
+        <button type="button" aria-label={isActive ? "Back" : "Search"} onClick={isActive ? onDeactivate : onActivate} style={{ background: "none", border: "none", padding: 4, cursor: "pointer", color: isActive ? "var(--color-accent)" : "var(--color-text-muted)", display: "flex", alignItems: "center", flexShrink: 0, transition: "color 200ms ease" }}>
+          {isActive
+            ? <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round"><polyline points="15 18 9 12 15 6" /></svg>
+            : <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.9" strokeLinecap="round" strokeLinejoin="round"><circle cx="11" cy="11" r="8" /><line x1="21" y1="21" x2="16.65" y2="16.65" /></svg>
+          }
+        </button>
+        <input
+          ref={inputRef as React.RefObject<HTMLInputElement>}
+          type="search" inputMode="search" autoComplete="off" autoCorrect="off" autoCapitalize="off" spellCheck={false}
+          value={query}
+          placeholder={mode === "online" ? "Search YouTube Music" : "Search Library"}
+          aria-label="Search"
+          onFocus={onActivate}
+          onChange={(e) => { onActivate(); onQueryChange(e.target.value); }}
+          onKeyDown={(e) => { if (e.key === "Enter") { onSubmit(query); inputRef.current?.blur(); } if (e.key === "Escape") onDeactivate(); }}
+          style={{ flex: 1, background: "transparent", border: "none", outline: "none", fontFamily: "var(--font-body)", fontSize: "var(--text-md)", fontWeight: 400, color: "var(--color-text-primary)", caretColor: "var(--color-accent)", minWidth: 0 }}
+        />
+        {query.length > 0 && (
+          <button type="button" aria-label="Clear" onClick={() => { onClear(); inputRef.current?.focus(); }} style={{ background: "var(--color-text-muted)", border: "none", borderRadius: "50%", width: 20, height: 20, display: "flex", alignItems: "center", justifyContent: "center", cursor: "pointer", flexShrink: 0, color: "var(--color-bg)", padding: 0 }}>
+            <svg width="12" height="12" viewBox="0 0 24 24" fill="none"><line x1="18" y1="6" x2="6" y2="18" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" /><line x1="6" y1="6" x2="18" y2="18" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" /></svg>
+          </button>
+        )}
+        <button type="button" aria-label={mode === "online" ? "Switch to local library" : "Switch to online"} onClick={onModeToggle} style={{ background: "none", border: "none", padding: 6, cursor: "pointer", flexShrink: 0, color: mode === "online" ? "var(--color-accent)" : "var(--color-text-secondary)", display: "flex", alignItems: "center", transition: "color 200ms ease" }}>
+          {mode === "online"
+            ? <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.9" strokeLinecap="round" strokeLinejoin="round"><circle cx="12" cy="12" r="10" /><line x1="2" y1="12" x2="22" y2="12" /><path d="M12 2a15.3 15.3 0 0 1 4 10 15.3 15.3 0 0 1-4 10 15.3 15.3 0 0 1-4-10 15.3 15.3 0 0 1 4-10z" /></svg>
+            : <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.9" strokeLinecap="round" strokeLinejoin="round"><path d="M4 19.5A2.5 2.5 0 0 1 6.5 17H20" /><path d="M6.5 2H20v20H6.5A2.5 2.5 0 0 1 4 19.5v-15A2.5 2.5 0 0 1 6.5 2z" /></svg>
+          }
+        </button>
+      </div>
+    </div>
+  );
+}
+
+// ─── Collapsed Tab Bar ──────────────────────────────────────────────────────
+
+interface CollapsedTabBarProps { activeTab: ActiveTab; onTabChange: (t: ActiveTab) => void; }
+function CollapsedTabBar({ activeTab, onTabChange }: CollapsedTabBarProps) {
+  const tabs: { key: ActiveTab; label: string }[] = [{ key: "explore", label: "Explore" }, { key: "echo-chart", label: "Echo Chart" }, { key: "albums", label: "Albums" }];
+  return (
+    <div style={{ display: "flex", padding: "4px 16px 0", borderBottom: "1.5px solid var(--color-border)" }}>
+      {tabs.map(t => {
+        const sel = activeTab === t.key;
+        return (
+          <button key={t.key} type="button" onClick={() => onTabChange(t.key)} style={{ flex: 1, background: "none", border: "none", padding: "10px 0 12px", fontFamily: "var(--font-body)", fontSize: "var(--text-sm)", fontWeight: sel ? 700 : 500, color: sel ? "var(--color-accent)" : "var(--color-text-secondary)", cursor: "pointer", position: "relative", transition: "color 200ms ease" }}>
+            {t.label}
+            {sel && <span style={{ position: "absolute", bottom: 0, left: "50%", transform: "translateX(-50%)", width: 32, height: 3, borderRadius: 2, background: "var(--color-accent)" }} />}
+          </button>
+        );
+      })}
+    </div>
+  );
+}
+
+// ─── Result Filter Tabs ──────────────────────────────────────────────────────
+
+interface ResultFilterTabsProps { activeTab: ResultTab; counts: { songs: number; artists: number; albums: number }; onTabChange: (t: ResultTab) => void; }
+function ResultFilterTabs({ activeTab, counts, onTabChange }: ResultFilterTabsProps) {
+  const tabs: { key: ResultTab; label: string; count?: number }[] = [{ key: "all", label: "All" }, { key: "songs", label: "Songs", count: counts.songs }, { key: "artists", label: "Artists", count: counts.artists }, { key: "albums", label: "Albums", count: counts.albums }];
+  return (
+    <div style={{ display: "flex", gap: 8, padding: "8px 16px 12px", overflowX: "auto", scrollbarWidth: "none" }}>
+      {tabs.map(t => {
+        if (t.count !== undefined && t.count === 0) return null;
+        const sel = activeTab === t.key;
+        return <button key={t.key} type="button" onClick={() => onTabChange(t.key)} aria-pressed={sel} style={{ background: sel ? "var(--color-accent)" : "var(--color-surface-2)", color: sel ? "var(--color-accent-on)" : "var(--color-text-secondary)", border: `1.5px solid ${sel ? "var(--color-accent)" : "var(--color-border)"}`, borderRadius: "var(--radius-full)", padding: "6px 16px", fontSize: "var(--text-sm)", fontWeight: 600, cursor: "pointer", fontFamily: "var(--font-body)", flexShrink: 0, transition: "all 200ms var(--ease-standard)" }}>{t.label}{t.count !== undefined ? ` (${t.count})` : ""}</button>;
+      })}
+    </div>
+  );
+}
+
+// ─── Section Header ──────────────────────────────────────────────────────────
+
+function SectionHeader({ label }: { label: string }) {
+  return <p style={{ margin: 0, padding: "14px 16px 8px", fontSize: "var(--text-xs)", fontWeight: 700, color: "var(--color-accent)", textTransform: "uppercase", letterSpacing: "0.07em" }}>{label}</p>;
+}
+
+// ─── Echo Chart Tab ──────────────────────────────────────────────────────────
+
+function EchoChartTab() {
+  const [trending, setTrending] = useState<Song[]>([]);
+  const [loading, setLoading] = useState(true);
+  const { addRecentlyPlayed } = useApp();
+
+  useEffect(() => {
+    setLoading(true);
+    getYouTubeMusicTrending(20).then(s => { setTrending(s); setLoading(false); }).catch(() => setLoading(false));
+  }, []);
+
+  if (loading) return <div style={{ padding: "0 16px" }}><SkeletonList count={6} /></div>;
+  return (
+    <div>
+      <SectionHeader label="Echo Chart — Trending Now" />
+      <div style={{ padding: "0 16px" }}>
+        {trending.map((song, i) => <SongCard key={song.id} song={song} queue={trending} index={i} showIndex onPlay={() => addRecentlyPlayed(song)} />)}
+      </div>
+    </div>
+  );
+}
+
+// ─── Local Search Results ────────────────────────────────────────────────────
+
+function LocalSearchResults({ query, onPlay }: { query: string; onPlay: (s: Song) => void }) {
+  const { state } = useApp();
+  const norm = query.toLowerCase();
+  const matches = [...state.favorites, ...state.recentlyPlayed, ...state.downloads].filter(s => (s.title || "").toLowerCase().includes(norm) || (s.artist || "").toLowerCase().includes(norm));
+  const unique = Array.from(new Map(matches.map(s => [s.id, s])).values());
+  if (unique.length === 0) return <EmptyState title={`No local results for "${query}"`} subtitle="Try searching online." />;
+  return (
+    <div>
+      <SectionHeader label={`Library Results (${unique.length})`} />
+      <div style={{ padding: "0 16px" }}>
+        {unique.map((song, i) => <SongCard key={song.id} song={song} queue={unique} index={i} onPlay={() => onPlay(song)} />)}
+      </div>
+    </div>
+  );
+}
+
+// ─── Main Search Screen ──────────────────────────────────────────────────────
 
 export function SearchScreen() {
-  const {
-    state: appState,
-    addSearchHistory,
-    addSearchRecentPlayed,
-    removeSearchRecentPlayed,
-    clearSearchRecentPlayed,
-    clearSearchHistory,
-    isFavorite,
-    toggleFavorite,
-  } = useApp();
+  const { state: appState, addSearchRecentPlayed, clearSearchRecentPlayed } = useApp();
   const { playSong } = usePlayer();
 
-  const [query, setQuery] = useState('');
+  const [query, setQuery] = useState("");
+  const [searchActive, setSearchActive] = useState(false);
+  const [searchMode, setSearchMode] = useState<SearchMode>("online");
+  const [collapsedTab, setCollapsedTab] = useState<ActiveTab>("explore");
+  const [resultTab, setResultTab] = useState<ResultTab>("all");
   const [results, setResults] = useState<SearchResult | null>(null);
   const [smartIntent, setSmartIntent] = useState<AISmartSearchIntent | null>(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState(false);
-  const [activeTab, setActiveTab] = useState<'songs' | 'artists' | 'albums'>('songs');
+  const [hasSearched, setHasSearched] = useState(false);
+  const [suggestions, setSuggestions] = useState<SearchSuggestionState>({ history: [], suggestions: [], items: [], isFromLink: false, isLoading: false });
 
-  // Shazam Song Recognition State
-  const [showShazamModal, setShowShazamModal] = useState(false);
-  const [recognitionState, setRecognitionState] = useState<'listening' | 'identifying' | 'success' | 'error'>('listening');
-  const [recognizedResult, setRecognizedResult] = useState<RecognitionResult | null>(null);
-  const [recognitionErrorMsg, setRecognitionErrorMsg] = useState<string | null>(null);
+  const searchReqIdRef = useRef<number>(0);
+  const suggReqIdRef = useRef<number>(0);
+  const inputRef = useRef<HTMLInputElement | null>(null);
+  const scrollAreaRef = useRef<HTMLDivElement | null>(null);
 
-  const debouncedQuery = useDebounce(query, 400);
+  const debouncedQuery = useDebounce(query, isDirectMediaUrl(query) ? 0 : 300);
 
+  // Hide keyboard on scroll
   useEffect(() => {
-    if (!debouncedQuery.trim()) {
-      setResults(null);
-      setSmartIntent(null);
-      setError(false);
-      return;
-    }
-    setLoading(true);
-    setError(false);
-    aiSmartSearchEngine.executeSearch(debouncedQuery, 24)
-      .then(({ result, intent }) => {
-        setResults(result);
-        setSmartIntent(intent);
-        setLoading(false);
-      })
-      .catch(() => { setError(true); setLoading(false); });
-  }, [debouncedQuery]);
+    const el = scrollAreaRef.current;
+    if (!el) return;
+    const onScroll = () => { if (document.activeElement === inputRef.current) inputRef.current?.blur(); };
+    el.addEventListener("scroll", onScroll, { passive: true });
+    return () => el.removeEventListener("scroll", onScroll);
+  }, []);
 
-  const handleSubmit = (q: string) => {
-    if (q.trim()) addSearchHistory(q.trim());
-  };
+  // Layer 1: suggestions
+  useEffect(() => {
+    const q = query.trim();
+    if (!q || !searchActive) { setSuggestions({ history: [], suggestions: [], items: [], isFromLink: false, isLoading: false }); return; }
+    const id = ++suggReqIdRef.current;
+    onlineSearchSuggestionViewModel.getSuggestions(q).then(s => { if (suggReqIdRef.current === id) setSuggestions(s); });
+  }, [query, searchActive]);
 
-  const handleStartShazam = async () => {
-    setShowShazamModal(true);
-    setRecognitionState('listening');
-    setRecognizedResult(null);
-    setRecognitionErrorMsg(null);
+  // Layer 2: full search
+  useEffect(() => {
+    const trimmed = debouncedQuery.trim();
+    if (!trimmed || !hasSearched) { if (!trimmed) { setResults(null); setSmartIntent(null); setError(false); setHasSearched(false); } return; }
+    const id = ++searchReqIdRef.current;
+    setLoading(true); setError(false); setResultTab("all");
+    aiSmartSearchEngine.executeSearch(trimmed, 24)
+      .then(({ result, intent }) => { if (searchReqIdRef.current === id) { setResults(result); setSmartIntent(intent); setLoading(false); } })
+      .catch(() => { if (searchReqIdRef.current === id) { setError(true); setLoading(false); } });
+  }, [debouncedQuery, hasSearched]);
 
-    const unsubscribe = songRecognitionService.subscribe((e) => {
-      if (e.state === 'listening' || e.state === 'identifying') {
-        setRecognitionState(e.state);
-      } else if (e.state === 'success' && e.result) {
-        setRecognitionState('success');
-        setRecognizedResult(e.result);
-      } else if (e.state === 'error') {
-        setRecognitionState('error');
-        setRecognitionErrorMsg(e.error || 'No match found.');
-      }
-    });
-
-    await songRecognitionService.startListening();
-    unsubscribe();
-  };
+  const handleActivate = useCallback(() => { setSearchActive(true); setTimeout(() => inputRef.current?.focus(), 50); }, []);
+  const handleDeactivate = useCallback(() => { setSearchActive(false); setQuery(""); setResults(null); setHasSearched(false); setSmartIntent(null); setError(false); setSuggestions({ history: [], suggestions: [], items: [], isFromLink: false, isLoading: false }); inputRef.current?.blur(); }, []);
+  const handleSubmit = useCallback((q: string) => { const t = q.trim(); if (!t) return; insertSearchHistory(t); setHasSearched(true); setSearchActive(false); inputRef.current?.blur(); }, []);
+  const handleSuggestionSelect = useCallback((s: string) => { setQuery(s); handleSubmit(s); }, [handleSubmit]);
+  const handleFill = useCallback((s: string) => { setQuery(s); setTimeout(() => inputRef.current?.focus(), 50); }, []);
+  const handleHistoryDelete = useCallback((q: string) => { deleteSearchHistoryEntry(q); setSuggestions(prev => ({ ...prev, history: prev.history.filter(h => h.query !== q) })); }, []);
+  const handleChipSelect = useCallback((q: string) => { setQuery(q); handleSubmit(q); }, [handleSubmit]);
+  const handleClear = useCallback(() => { setResults(null); setSmartIntent(null); setError(false); setHasSearched(false); setSuggestions({ history: [], suggestions: [], items: [], isFromLink: false, isLoading: false }); }, []);
+  const handleSongPlay = useCallback((song: Song, queue: Song[] = [song], index = 0) => { playSong(song, queue, index); addSearchRecentPlayed(song); }, [playSong, addSearchRecentPlayed]);
 
   const hasResults = results && (results.songs.length + results.artists.length + results.albums.length) > 0;
-  // ONLY songs searched and played by the user
-  const recentSongs: Song[] = appState.searchRecentlyPlayed.slice(0, 30);
+  const topSong = results?.songs[0] ?? null;
+  const remainingSongs = results?.songs.slice(1) ?? [];
 
   return (
-    <div style={{ display: 'flex', flexDirection: 'column', height: '100%' }}>
-      {/* ── Header ── */}
-      <header style={{ padding: '20px 20px 8px', flexShrink: 0 }}>
-        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 14 }}>
-          <h1 style={{ margin: 0, fontFamily: 'var(--font-display)', fontSize: 'var(--text-2xl)', color: 'var(--color-text-primary)' }}>
-            Search
-          </h1>
-          <button
-            id="shazam-recognize-btn"
-            onClick={handleStartShazam}
-            style={{
-              display: 'flex',
-              alignItems: 'center',
-              gap: 6,
-              padding: '6px 14px',
-              borderRadius: 'var(--radius-full)',
-              background: 'rgba(245, 158, 11, 0.14)',
-              border: '1px solid rgba(245, 158, 11, 0.35)',
-              color: 'var(--color-accent)',
-              fontSize: 'var(--text-xs)',
-              fontWeight: 600,
-              cursor: 'pointer',
-              transition: 'all 150ms ease',
-            }}
-          >
-            <svg width="15" height="15" viewBox="0 0 24 24" fill="currentColor">
-              <path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm-1 14h2v2h-2v-2zm0-10h2v8h-2V6z"/>
-            </svg>
-            Recognize Song
-          </button>
+    <div style={{ display: "flex", flexDirection: "column", height: "100%" }}>
+      {/* Sticky Header */}
+      <div style={{ flexShrink: 0 }}>
+        {!searchActive && <header style={{ padding: "20px 16px 10px" }}><h1 style={{ margin: 0, fontFamily: "var(--font-display)", fontSize: "var(--text-2xl)", color: "var(--color-text-primary)" }}>Search</h1></header>}
+        <div style={{ paddingTop: searchActive ? 10 : 0 }}>
+          <AnimatedSearchBar query={query} isActive={searchActive} mode={searchMode} onQueryChange={setQuery} onActivate={handleActivate} onDeactivate={handleDeactivate} onSubmit={handleSubmit} onClear={handleClear} onModeToggle={() => setSearchMode(m => m === "online" ? "local" : "online")} inputRef={inputRef} />
         </div>
-        <SearchBar
-          value={query}
-          onChange={setQuery}
-          onSubmit={handleSubmit}
-          onClear={() => { setResults(null); setSmartIntent(null); setError(false); }}
-          autoFocus={false}
-        />
-      </header>
+        {!searchActive && !hasResults && <CollapsedTabBar activeTab={collapsedTab} onTabChange={setCollapsedTab} />}
+      </div>
 
-      {/* ── AI Smart Search Intent Quick Inspiration Chips ── */}
-      {!query && (
-        <div style={{ padding: '4px 20px 14px', display: 'flex', gap: 8, overflowX: 'auto', scrollbarWidth: 'none', flexShrink: 0 }}>
-          {[
-            {
-              icon: (
-                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
-                  <path d="M3 18v-6a9 9 0 0 1 18 0v6"/>
-                  <path d="M21 19a2 2 0 0 1-2 2h-1a2 2 0 0 1-2-2v-3a2 2 0 0 1 2-2h3zM3 19a2 2 0 0 0 2 2h1a2 2 0 0 0 2-2v-3a2 2 0 0 0-2-2H3z"/>
-                </svg>
-              ),
-              text: 'Chill songs for studying',
-            },
-            {
-              icon: (
-                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
-                  <polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2"/>
-                </svg>
-              ),
-              text: 'Energetic workout hits',
-            },
-            {
-              icon: (
-                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
-                  <path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z"/>
-                </svg>
-              ),
-              text: 'Late night drive vibes',
-            },
-            {
-              icon: (
-                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
-                  <path d="M19 14c1.49-1.46 3-3.21 3-5.5A5.5 5.5 0 0 0 16.5 3c-1.76 0-3 .5-4.5 2-1.5-1.5-2.74-2-4.5-2A5.5 5.5 0 0 0 2 8.5c0 2.3 1.5 4.05 3 5.5l7 7Z"/>
-                  <path d="m12 5-1 5 3 2-2 5"/>
-                </svg>
-              ),
-              text: 'Sad Hindi songs',
-            },
-            {
-              icon: (
-                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
-                  <path d="M9 18V5l12-2v13"/>
-                  <circle cx="6" cy="18" r="3"/>
-                  <circle cx="18" cy="16" r="3"/>
-                </svg>
-              ),
-              text: 'Relaxing instrumental',
-            },
-            {
-              icon: (
-                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
-                  <polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2"/>
-                </svg>
-              ),
-              text: 'Popular songs from the 2000s',
-            },
-          ].map((chip) => (
-            <button
-              key={chip.text}
-              type="button"
-              onClick={() => {
-                setQuery(chip.text);
-                handleSubmit(chip.text);
-              }}
-              style={{
-                background: 'var(--color-surface)',
-                border: '1px solid var(--color-border)',
-                borderRadius: 'var(--radius-full)',
-                padding: '6px 14px',
-                fontSize: 'var(--text-xs)',
-                fontWeight: 600,
-                color: 'var(--color-text-secondary)',
-                cursor: 'pointer',
-                whiteSpace: 'nowrap',
-                display: 'flex',
-                alignItems: 'center',
-                gap: 7,
-                flexShrink: 0,
-                boxShadow: 'var(--shadow-sm)',
-              }}
-            >
-              <span style={{ display: 'inline-flex', alignItems: 'center', color: 'var(--color-accent)' }}>
-                {chip.icon}
-              </span>
-              <span>{chip.text}</span>
-            </button>
-          ))}
-        </div>
-      )}
+      {/* Scrollable Content */}
+      <div ref={scrollAreaRef} className="scroll-area" style={{ flex: 1, paddingBottom: "var(--content-bottom-pad)" }}>
 
-      <div className="scroll-area" style={{ flex: 1, paddingBottom: 'var(--content-bottom-pad)' }}>
-
-        {/* ── No query: show Spotify-style Recents list if available, else clean EmptyState ── */}
-        {!query && (
-          recentSongs.length > 0 ? (
-            <section style={{ padding: '4px 20px 20px' }} aria-label="Recent played searched songs">
-              <div style={{ marginBottom: 12 }}>
-                <h2 style={{
-                  margin: 0,
-                  fontSize: 'var(--text-xl)',
-                  fontWeight: 800,
-                  color: 'var(--color-text-primary)',
-                  fontFamily: 'var(--font-display)',
-                  letterSpacing: '-0.02em',
-                }}>
-                  Recents
-                </h2>
+        {/* ACTIVE: Suggestions */}
+        {searchActive && (
+          <div style={{ paddingBottom: 24 }}>
+            {suggestions.isFromLink && (
+              <div style={{ margin: "12px 16px 0", padding: "10px 14px", borderRadius: "var(--radius-md)", background: "var(--color-accent-dim)", border: "1px solid rgba(245,158,11,0.25)", display: "flex", alignItems: "center", gap: 8, fontSize: "var(--text-sm)", fontWeight: 600, color: "var(--color-accent)" }}>
+                <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round"><path d="M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71" /><path d="M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71" /></svg>
+                Direct link detected — press Enter to play instantly
               </div>
+            )}
 
-              {/* Vertical Recents Song List (up to 30 items) */}
-              <div style={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
-                {recentSongs.map((song) => {
-                  const liked = isFavorite(song.id);
-                  return (
-                    <div
-                      key={song.id}
-                      id={`recent-song-${song.id}`}
-                      onClick={() => {
-                        playSong(song, [song], 0);
-                        addSearchRecentPlayed(song);
-                      }}
-                      style={{
-                        display: 'flex',
-                        alignItems: 'center',
-                        padding: '8px 0',
-                        gap: 14,
-                        cursor: 'pointer',
-                        borderRadius: 'var(--radius-md)',
-                        transition: 'background 120ms ease',
-                      }}
-                    >
-                      {/* Artwork */}
-                      <div style={{
-                        width: 52,
-                        height: 52,
-                        borderRadius: 'var(--radius-md)',
-                        overflow: 'hidden',
-                        background: 'var(--color-surface-2)',
-                        flexShrink: 0,
-                      }}>
-                        <img
-                          src={song.artwork || CONFIG.ARTWORK_PLACEHOLDER}
-                          alt=""
-                          width={52}
-                          height={52}
-                          loading="lazy"
-                          onError={(e) => { (e.target as HTMLImageElement).src = CONFIG.ARTWORK_PLACEHOLDER; }}
-                          style={{ objectFit: 'cover', width: '100%', height: '100%' }}
-                        />
-                      </div>
-
-                      {/* Title & Subtitle */}
-                      <div style={{ flex: 1, minWidth: 0 }}>
-                        <p style={{
-                          margin: 0,
-                          fontWeight: 600,
-                          fontSize: 'var(--text-md)',
-                          color: 'var(--color-text-primary)',
-                          overflow: 'hidden',
-                          textOverflow: 'ellipsis',
-                          whiteSpace: 'nowrap',
-                        }}>
-                          {song.title}
-                        </p>
-                        <p style={{
-                          margin: '3px 0 0',
-                          fontSize: 'var(--text-sm)',
-                          color: 'var(--color-text-secondary)',
-                          overflow: 'hidden',
-                          textOverflow: 'ellipsis',
-                          whiteSpace: 'nowrap',
-                        }}>
-                          Song • {song.artist}
-                        </p>
-                      </div>
-
-                      {/* Right Actions: Favorite Check/Plus + Remove X */}
-                      <div style={{ display: 'flex', alignItems: 'center', gap: 14, flexShrink: 0 }} onClick={(e) => e.stopPropagation()}>
-                        {/* Like / Added status */}
-                        <button
-                          type="button"
-                          aria-label={liked ? 'Remove from library' : 'Save to library'}
-                          onClick={() => toggleFavorite(song)}
-                          style={{
-                            background: 'none',
-                            border: 'none',
-                            color: liked ? 'var(--color-accent)' : 'var(--color-text-secondary)',
-                            cursor: 'pointer',
-                            display: 'flex',
-                            alignItems: 'center',
-                            justifyContent: 'center',
-                            padding: 4,
-                          }}
-                        >
-                          {liked ? (
-                            <svg width="22" height="22" viewBox="0 0 24 24" fill="currentColor">
-                              <path d="M12 21.35l-1.45-1.32C5.4 15.36 2 12.28 2 8.5 2 5.42 4.42 3 7.5 3c1.74 0 3.41.81 4.5 2.09C13.09 3.81 14.76 3 16.5 3 19.58 3 22 5.42 22 8.5c0 3.78-3.4 6.86-8.55 11.54L12 21.35z"/>
-                            </svg>
-                          ) : (
-                            <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                              <circle cx="12" cy="12" r="10" />
-                              <line x1="12" y1="8" x2="12" y2="16" />
-                              <line x1="8" y1="12" x2="16" y2="12" />
-                            </svg>
-                          )}
-                        </button>
-
-                        {/* Close / Dismiss X icon */}
-                        <button
-                          type="button"
-                          id={`remove-recent-${song.id}`}
-                          aria-label="Remove from recents"
-                          onClick={() => removeSearchRecentPlayed(song.id)}
-                          style={{
-                            background: 'none',
-                            border: 'none',
-                            color: 'var(--color-text-secondary)',
-                            cursor: 'pointer',
-                            display: 'flex',
-                            alignItems: 'center',
-                            justifyContent: 'center',
-                            padding: 4,
-                          }}
-                        >
-                          <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                            <line x1="18" y1="6" x2="6" y2="18" />
-                            <line x1="6" y1="6" x2="18" y2="18" />
-                          </svg>
-                        </button>
-                      </div>
-                    </div>
-                  );
-                })}
-              </div>
-
-              {/* Option for Clear Recent Searches at the bottom */}
-              <div style={{ marginTop: 16, marginBottom: 8, display: 'flex', justifyContent: 'center' }}>
-                <button
-                  id="clear-all-recents-btn"
-                  onClick={() => {
-                    clearSearchRecentPlayed();
-                    clearSearchHistory();
-                  }}
-                  style={{
-                    background: 'rgba(255, 255, 255, 0.05)',
-                    border: '1px solid var(--color-border)',
-                    borderRadius: 'var(--radius-full)',
-                    padding: '10px 22px',
-                    fontSize: 'var(--text-sm)',
-                    fontWeight: 600,
-                    color: 'var(--color-text-secondary)',
-                    cursor: 'pointer',
-                    fontFamily: 'var(--font-body)',
-                    display: 'flex',
-                    alignItems: 'center',
-                    gap: 8,
-                    transition: 'all 150ms ease',
-                  }}
-                >
-                  <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
-                    <polyline points="3 6 5 6 21 6" />
-                    <path d="M19 6v14a2 2 0 01-2 2H7a2 2 0 01-2-2V6m3 0V4a2 2 0 012-2h4a2 2 0 012 2v2" />
-                  </svg>
-                  <span>Clear recent searches</span>
+            {suggestions.history.length > 0 && (
+              <div>
+                <SectionHeader label="Search History" />
+                {suggestions.history.map(e => <SearchHistoryItem key={e.query} query={e.query} onDelete={handleHistoryDelete} onFill={handleFill} />)}
+                <button type="button" onClick={() => { clearAllSearchHistory(); setSuggestions(prev => ({ ...prev, history: [] })); }} style={{ background: "none", border: "none", padding: "8px 16px", fontSize: "var(--text-xs)", fontWeight: 600, color: "var(--color-text-muted)", cursor: "pointer" }}>
+                  Clear search history
                 </button>
               </div>
-            </section>
-          ) : (
-            <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', minHeight: '50vh' }}>
-              <EmptyState
-                icon={
-                  <svg width="52" height="52" viewBox="0 0 24 24" fill="none" stroke="var(--color-text-muted)" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
-                    <circle cx="11" cy="11" r="8" />
-                    <line x1="21" y1="21" x2="16.65" y2="16.65" />
-                  </svg>
-                }
-                title="Play what you love"
-                subtitle="Search for songs, artists, albums, and more."
-              />
-            </div>
-          )
-        )}
+            )}
 
-        {/* ── Loading ── */}
-        {loading && (
-          <div style={{ padding: '16px 20px' }}>
-            <SkeletonList count={6} />
-          </div>
-        )}
+            {suggestions.suggestions.length > 0 && (
+              <div>
+                <SectionHeader label="Suggestions" />
+                {suggestions.suggestions.map(s => <SuggestionItem key={s} suggestion={s} onSelect={handleSuggestionSelect} onFill={handleFill} />)}
+              </div>
+            )}
 
-        {/* ── Error ── */}
-        {error && !loading && (
-          <div style={{ padding: '16px 20px' }}>
-            <EmptyState
-              title="Search unavailable"
-              subtitle="Couldn't reach the music service. Check your connection."
-            />
-          </div>
-        )}
+            {!suggestions.isFromLink && suggestions.history.length === 0 && suggestions.suggestions.length === 0 && query.length > 0 && (
+              <div style={{ padding: "24px 16px", textAlign: "center" }}>
+                <p style={{ color: "var(--color-text-muted)", fontSize: "var(--text-sm)", margin: 0 }}>Press Enter to search for <strong style={{ color: "var(--color-text-secondary)" }}>"{query}"</strong></p>
+              </div>
+            )}
 
-        {/* ── No results ── */}
-        {results && !hasResults && !loading && (
-          <EmptyState
-            title={`No results for "${query}"`}
-            subtitle="Try a different song, artist, or album name."
-          />
-        )}
-
-        {/* ── Results ── */}
-        {hasResults && !loading && (
-          <>
-            {/* AI Smart Intent Badge */}
-            {smartIntent?.isNaturalLanguage && smartIntent.smartTag && (
-              <div style={{
-                margin: '0 20px 10px',
-                padding: '8px 14px',
-                borderRadius: 'var(--radius-md)',
-                background: 'var(--color-accent-dim)',
-                border: '1px solid rgba(245, 158, 11, 0.25)',
-                display: 'flex',
-                alignItems: 'center',
-                justifyContent: 'space-between',
-                color: 'var(--color-accent)',
-                fontSize: 'var(--text-xs)',
-                fontWeight: 600,
-              }}>
-                <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-                  <span style={{ fontSize: '13px' }}>✨</span>
-                  <span>AI Intent: <strong>{smartIntent.smartTag}</strong></span>
+            {!query && appState.searchRecentlyPlayed.length > 0 && (
+              <div>
+                <SectionHeader label="Recents" />
+                <div style={{ padding: "0 16px" }}>
+                  {appState.searchRecentlyPlayed.slice(0, 20).map((song, i) => <SongCard key={song.id} song={song} queue={appState.searchRecentlyPlayed.slice(0, 20)} index={i} onPlay={() => addSearchRecentPlayed(song)} />)}
                 </div>
-                {smartIntent.categoryHint && (
-                  <span style={{ opacity: 0.75, fontSize: '11px', fontWeight: 500 }}>
-                    {smartIntent.categoryHint}
-                  </span>
+                <div style={{ display: "flex", justifyContent: "center", padding: "12px 0" }}>
+                  <button type="button" onClick={clearSearchRecentPlayed} style={{ background: "rgba(255,255,255,0.05)", border: "1px solid var(--color-border)", borderRadius: "var(--radius-full)", padding: "9px 20px", fontSize: "var(--text-sm)", fontWeight: 600, color: "var(--color-text-secondary)", cursor: "pointer" }}>Clear recents</button>
+                </div>
+              </div>
+            )}
+          </div>
+        )}
+
+        {/* COLLAPSED: Explore / Echo Chart / Albums */}
+        {!searchActive && !hasResults && !loading && (
+          <div>
+            {collapsedTab === "explore" && (
+              <div>
+                <p style={{ padding: "12px 16px 8px", margin: 0, fontSize: "var(--text-xs)", fontWeight: 700, color: "var(--color-text-muted)", textTransform: "uppercase", letterSpacing: "0.07em" }}>Browse by Mood</p>
+                <ExploreGrid onChipSelect={handleChipSelect} />
+              </div>
+            )}
+            {collapsedTab === "echo-chart" && <EchoChartTab />}
+            {collapsedTab === "albums" && <EmptyState title="New Releases" subtitle="Browse new album releases in your library." />}
+          </div>
+        )}
+
+        {/* RESULTS */}
+        {!searchActive && (
+          <>
+            {loading && <div style={{ padding: "16px" }}><SkeletonList count={6} /></div>}
+            {error && !loading && <div style={{ padding: "16px" }}><EmptyState title="Search unavailable" subtitle="Couldn't reach the music service. Check your connection." /></div>}
+            {results && !hasResults && !loading && <EmptyState title={`No results for "${query}"`} subtitle="Try a different song, artist, or album name." />}
+
+            {searchMode === "local" && query && !loading && <LocalSearchResults query={query} onPlay={s => handleSongPlay(s)} />}
+
+            {hasResults && !loading && searchMode === "online" && (
+              <>
+                {smartIntent?.isNaturalLanguage && smartIntent.smartTag && (
+                  <div style={{ margin: "8px 16px 4px", padding: "8px 14px", borderRadius: "var(--radius-md)", background: "var(--color-accent-dim)", border: "1px solid rgba(245,158,11,0.25)", display: "flex", alignItems: "center", justifyContent: "space-between", color: "var(--color-accent)", fontSize: "var(--text-xs)", fontWeight: 600 }}>
+                    <div style={{ display: "flex", alignItems: "center", gap: 8 }}><span>✨</span><span>AI Intent: <strong>{smartIntent.smartTag}</strong></span></div>
+                    {smartIntent.categoryHint && <span style={{ opacity: 0.75, fontSize: "11px" }}>{smartIntent.categoryHint}</span>}
+                  </div>
                 )}
-              </div>
-            )}
 
-            {/* Tab bar */}
-            <div style={{ display: 'flex', gap: 8, padding: '4px 20px 12px', overflowX: 'auto', scrollbarWidth: 'none' }}>
-              {(['songs', 'artists', 'albums'] as const).map(tab => {
-                const counts: Record<string, number> = {
-                  songs: results.songs.length,
-                  artists: results.artists.length,
-                  albums: results.albums.length,
-                };
-                if (counts[tab] === 0) return null;
-                return (
-                  <button
-                    key={tab}
-                    id={`tab-${tab}`}
-                    onClick={() => setActiveTab(tab)}
-                    style={{
-                      background: activeTab === tab ? 'var(--color-accent)' : 'var(--color-surface-2)',
-                      color: activeTab === tab ? 'var(--color-accent-on)' : 'var(--color-text-secondary)',
-                      border: '1px solid var(--color-border)',
-                      borderRadius: 'var(--radius-full)',
-                      padding: '6px 16px',
-                      fontSize: 'var(--text-sm)',
-                      fontWeight: 600,
-                      cursor: 'pointer',
-                      fontFamily: 'var(--font-body)',
-                      flexShrink: 0,
-                      transition: 'all 200ms var(--ease-standard)',
-                    }}
-                    aria-pressed={activeTab === tab}
-                  >
-                    {tab.charAt(0).toUpperCase() + tab.slice(1)} ({counts[tab]})
-                  </button>
-                );
-              })}
-            </div>
+                <ResultFilterTabs activeTab={resultTab} counts={{ songs: results!.songs.length, artists: results!.artists.length, albums: results!.albums.length }} onTabChange={setResultTab} />
 
-            {/* Songs tab */}
-            {activeTab === 'songs' && results.songs.length > 0 && (
-              <div style={{ padding: '0 20px' }}>
-                {results.songs.map((song) => (
-                  <SongCard
-                    key={song.id}
-                    song={song}
-                    queue={[song]}
-                    index={0}
-                    onPlay={() => addSearchRecentPlayed(song)}
-                  />
-                ))}
-              </div>
-            )}
+                {resultTab === "all" && (
+                  <div>
+                    {topSong && <TopResultCard song={topSong} label={suggestions.isFromLink ? "From Link" : "Top Result"} onPlay={s => handleSongPlay(s, results!.songs, 0)} onMore={() => {}} />}
+                    {remainingSongs.length > 0 && (
+                      <div>
+                        <SectionHeader label="Songs" />
+                        <div style={{ padding: "0 16px" }}>
+                          {remainingSongs.slice(0, 12).map((song, i) => <SongCard key={song.id} song={song} queue={results!.songs} index={i + 1} onPlay={() => handleSongPlay(song, results!.songs, i + 1)} />)}
+                        </div>
+                      </div>
+                    )}
+                    {results!.artists.length > 0 && (
+                      <div>
+                        <SectionHeader label="Artists" />
+                        <div style={{ display: "flex", flexWrap: "wrap", gap: 16, padding: "4px 16px 8px" }}>
+                          {results!.artists.slice(0, 8).map(a => <ArtistCard key={a.id} artist={a} size={72} />)}
+                        </div>
+                      </div>
+                    )}
+                    {results!.albums.length > 0 && (
+                      <div>
+                        <SectionHeader label="Albums" />
+                        <div style={{ display: "grid", gridTemplateColumns: "repeat(2, 1fr)", gap: 14, padding: "4px 16px 12px" }}>
+                          {results!.albums.slice(0, 6).map(al => <AlbumCard key={al.id} album={al} size={140} />)}
+                        </div>
+                      </div>
+                    )}
+                  </div>
+                )}
 
-            {/* Artists tab */}
-            {activeTab === 'artists' && results.artists.length > 0 && (
-              <div style={{ display: 'flex', flexWrap: 'wrap', gap: 16, padding: '0 20px' }}>
-                {results.artists.map(artist => (
-                  <ArtistCard key={artist.id} artist={artist} size={80} />
-                ))}
-              </div>
-            )}
+                {resultTab === "songs" && results!.songs.length > 0 && (
+                  <div>
+                    {topSong && <TopResultCard song={topSong} label="Top Result" onPlay={s => handleSongPlay(s, results!.songs, 0)} onMore={() => {}} />}
+                    <div style={{ padding: "4px 16px" }}>
+                      {results!.songs.slice(1).map((song, i) => <SongCard key={song.id} song={song} queue={results!.songs} index={i + 1} onPlay={() => handleSongPlay(song, results!.songs, i + 1)} />)}
+                    </div>
+                  </div>
+                )}
 
-            {/* Albums tab */}
-            {activeTab === 'albums' && results.albums.length > 0 && (
-              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(2, 1fr)', gap: 16, padding: '0 20px' }}>
-                {results.albums.map(album => (
-                  <AlbumCard key={album.id} album={album} size={150} />
-                ))}
-              </div>
+                {resultTab === "artists" && <div style={{ display: "flex", flexWrap: "wrap", gap: 16, padding: "8px 16px" }}>{results!.artists.map(a => <ArtistCard key={a.id} artist={a} size={80} />)}</div>}
+                {resultTab === "albums" && <div style={{ display: "grid", gridTemplateColumns: "repeat(2, 1fr)", gap: 16, padding: "8px 16px" }}>{results!.albums.map(al => <AlbumCard key={al.id} album={al} size={150} />)}</div>}
+              </>
             )}
           </>
         )}
 
         <div style={{ height: 24 }} />
       </div>
-
-      {/* ── Shazam Ambient Song Recognition Modal ── */}
-      {showShazamModal && (
-        <div
-          id="shazam-modal-backdrop"
-          role="dialog"
-          aria-modal="true"
-          style={{
-            position: 'fixed',
-            inset: 0,
-            zIndex: 350,
-            background: 'var(--color-scrim)',
-            display: 'flex',
-            alignItems: 'flex-end',
-            justifyContent: 'center',
-          }}
-          onClick={(e) => {
-            if (e.target === e.currentTarget && recognitionState !== 'listening') {
-              songRecognitionService.cancel();
-              setShowShazamModal(false);
-            }
-          }}
-        >
-          <div
-            style={{
-              background: 'var(--color-surface)',
-              width: '100%',
-              maxWidth: 480,
-              borderRadius: 'var(--radius-xl) var(--radius-xl) 0 0',
-              padding: '28px 24px',
-              paddingBottom: 'calc(28px + env(safe-area-inset-bottom, 0px))',
-              animation: 'slideUp 300ms var(--ease-decelerate)',
-              borderTop: '1px solid var(--color-border)',
-              display: 'flex',
-              flexDirection: 'column',
-              alignItems: 'center',
-              textAlign: 'center',
-              position: 'relative',
-            }}
-          >
-            {/* Close Button */}
-            <button
-              onClick={() => {
-                songRecognitionService.cancel();
-                setShowShazamModal(false);
-              }}
-              className="btn-icon"
-              style={{ position: 'absolute', top: 16, right: 16, color: 'var(--color-text-muted)' }}
-              aria-label="Close"
-            >
-              <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-                <line x1="18" y1="6" x2="6" y2="18" />
-                <line x1="6" y1="6" x2="18" y2="18" />
-              </svg>
-            </button>
-
-            {/* Listening / Identifying Radar Animation */}
-            {(recognitionState === 'listening' || recognitionState === 'identifying') && (
-              <div style={{ padding: '20px 0 10px', display: 'flex', flexDirection: 'column', alignItems: 'center' }}>
-                <div style={{ position: 'relative', width: 96, height: 96, marginBottom: 20 }}>
-                  <div
-                    style={{
-                      position: 'absolute',
-                      inset: 0,
-                      borderRadius: '50%',
-                      background: 'rgba(245, 158, 11, 0.2)',
-                      animation: 'pulse 1.5s infinite',
-                    }}
-                  />
-                  <div
-                    style={{
-                      position: 'absolute',
-                      inset: 12,
-                      borderRadius: '50%',
-                      background: 'var(--color-accent)',
-                      display: 'flex',
-                      alignItems: 'center',
-                      justifyContent: 'center',
-                      color: 'var(--color-accent-on)',
-                      boxShadow: 'var(--shadow-accent)',
-                    }}
-                  >
-                    <svg width="36" height="36" viewBox="0 0 24 24" fill="currentColor">
-                      <path d="M12 14c1.66 0 3-1.34 3-3V5c0-1.66-1.34-3-3-3S9 3.34 9 5v6c0 1.66 1.34 3 3 3z"/>
-                      <path d="M17 11c0 2.76-2.24 5-5 5s-5-2.24-5-5H5c0 3.53 2.61 6.43 6 6.92V21h2v-3.08c3.39-.49 6-3.39 6-6.92h-2z"/>
-                    </svg>
-                  </div>
-                </div>
-                <h3 style={{ margin: '0 0 6px', fontSize: 'var(--text-lg)', fontWeight: 700, color: 'var(--color-text-primary)' }}>
-                  {recognitionState === 'listening' ? 'Listening to Music...' : 'Identifying Song...'}
-                </h3>
-                <p style={{ margin: 0, fontSize: 'var(--text-xs)', color: 'var(--color-text-muted)', maxWidth: 280, lineHeight: 1.5 }}>
-                  {recognitionState === 'listening'
-                    ? 'Hold your device close to the audio source for 4 seconds.'
-                    : 'Searching audio fingerprints across music catalogs...'}
-                </p>
-              </div>
-            )}
-
-            {/* Success Match Found */}
-            {recognitionState === 'success' && recognizedResult && (
-              <div style={{ width: '100%', padding: '8px 0', display: 'flex', flexDirection: 'column', alignItems: 'center' }}>
-                <div style={{
-                  width: 48,
-                  height: 48,
-                  borderRadius: '50%',
-                  background: 'rgba(34, 197, 94, 0.15)',
-                  color: 'var(--color-success)',
-                  display: 'flex',
-                  alignItems: 'center',
-                  justifyContent: 'center',
-                  marginBottom: 14,
-                }}>
-                  <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5">
-                    <polyline points="20 6 9 17 4 12"/>
-                  </svg>
-                </div>
-                <h3 style={{ margin: '0 0 4px', fontSize: 'var(--text-sm)', fontWeight: 600, color: 'var(--color-success)', textTransform: 'uppercase', letterSpacing: '0.08em' }}>
-                  Song Recognized!
-                </h3>
-                <h2 style={{ margin: '2px 0', fontSize: 'var(--text-xl)', fontWeight: 700, color: 'var(--color-text-primary)' }}>
-                  {recognizedResult.title}
-                </h2>
-                <p style={{ margin: '0 0 16px', fontSize: 'var(--text-sm)', color: 'var(--color-text-secondary)' }}>
-                  {recognizedResult.artist} {recognizedResult.album ? `· ${recognizedResult.album}` : ''}
-                </p>
-
-                {recognizedResult.song && (
-                  <div style={{ width: '100%', marginBottom: 16 }}>
-                    <SongCard song={recognizedResult.song} queue={[recognizedResult.song]} index={0} />
-                  </div>
-                )}
-
-                <button
-                  onClick={() => {
-                    if (recognizedResult.song) {
-                      playSong(recognizedResult.song, [recognizedResult.song], 0);
-                      addSearchRecentPlayed(recognizedResult.song);
-                    }
-                    setShowShazamModal(false);
-                  }}
-                  className="btn-primary"
-                  style={{ width: '100%', padding: '12px', fontSize: 'var(--text-sm)' }}
-                >
-                  Play Now
-                </button>
-              </div>
-            )}
-
-            {/* Error / No Match Found */}
-            {recognitionState === 'error' && (
-              <div style={{ padding: '12px 0', display: 'flex', flexDirection: 'column', alignItems: 'center' }}>
-                <div style={{
-                  width: 48,
-                  height: 48,
-                  borderRadius: '50%',
-                  background: 'rgba(239, 68, 68, 0.15)',
-                  color: 'var(--color-error)',
-                  display: 'flex',
-                  alignItems: 'center',
-                  justifyContent: 'center',
-                  marginBottom: 14,
-                }}>
-                  <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-                    <circle cx="12" cy="12" r="10" />
-                    <line x1="12" y1="8" x2="12" y2="12" />
-                    <line x1="12" y1="16" x2="12.01" y2="16" />
-                  </svg>
-                </div>
-                <h3 style={{ margin: '0 0 6px', fontSize: 'var(--text-lg)', fontWeight: 700, color: 'var(--color-text-primary)' }}>
-                  Couldn't Identify Song
-                </h3>
-                <p style={{ margin: '0 0 20px', fontSize: 'var(--text-xs)', color: 'var(--color-text-muted)', maxWidth: 280, lineHeight: 1.5 }}>
-                  {recognitionErrorMsg || 'Make sure the music is clearly audible and try again.'}
-                </p>
-                <button
-                  onClick={handleStartShazam}
-                  className="btn-primary"
-                  style={{ padding: '10px 24px', fontSize: 'var(--text-xs)' }}
-                >
-                  Try Again
-                </button>
-              </div>
-            )}
-          </div>
-        </div>
-      )}
     </div>
   );
 }
