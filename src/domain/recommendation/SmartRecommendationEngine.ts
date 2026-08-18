@@ -131,11 +131,11 @@ export function classifySongContext(song: Song | null): MusicContext {
   return { language: 'Hindi', isPhonk: false, genre: song.genre || 'Bollywood', artist: song.artist };
 }
 
-function normalizeKey(str: string): string {
+export function normalizeKey(str: string): string {
   return (str || '').toLowerCase().replace(/[^a-z0-9]/g, '');
 }
 
-function normalizeArtist(str: string): string {
+export function normalizeArtist(str: string): string {
   return (str || '')
     .toLowerCase()
     .split(/[,&/]|feat\.|ft\.|with|\s+x\s+/i)[0]
@@ -145,7 +145,7 @@ function normalizeArtist(str: string): string {
 /**
  * Extracts clean core title without version/cover/remix/movie tags
  */
-function getCoreTitle(str: string): string {
+export function getCoreTitle(str: string): string {
   if (!str) return '';
   return str
     .toLowerCase()
@@ -163,7 +163,7 @@ function getCoreTitle(str: string): string {
 /**
  * Checks if two song titles are essentially the same song (covers, remixes, edits).
  */
-function isSameOrSimilarTitle(titleA: string, titleB: string): boolean {
+export function isSameOrSimilarTitle(titleA: string, titleB: string): boolean {
   const coreA = getCoreTitle(titleA);
   const coreB = getCoreTitle(titleB);
   if (!coreA || !coreB) return false;
@@ -174,7 +174,7 @@ function isSameOrSimilarTitle(titleA: string, titleB: string): boolean {
   return false;
 }
 
-function isPhonkSong(song: Song): boolean {
+export function isPhonkSong(song: Song): boolean {
   const text = `${song.title} ${song.artist} ${song.genre || ''}`.toLowerCase();
   return text.includes('phonk') || text.includes('drift') || text.includes('brazilian') ||
     text.includes('kordhell') || text.includes('gvrido') || text.includes('interworld') ||

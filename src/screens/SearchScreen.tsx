@@ -220,7 +220,10 @@ export function SearchScreen() {
   const handleHistoryDelete = useCallback((q: string) => { deleteSearchHistoryEntry(q); setSuggestions(prev => ({ ...prev, history: prev.history.filter(h => h.query !== q) })); }, []);
   const handleChipSelect = useCallback((q: string) => { setQuery(q); handleSubmit(q); }, [handleSubmit]);
   const handleClear = useCallback(() => { setResults(null); setSmartIntent(null); setError(false); setHasSearched(false); setSuggestions({ history: [], suggestions: [], items: [], isFromLink: false, isLoading: false }); }, []);
-  const handleSongPlay = useCallback((song: Song, queue: Song[] = [song], index = 0) => { playSong(song, queue, index); addSearchRecentPlayed(song); }, [playSong, addSearchRecentPlayed]);
+  const handleSongPlay = useCallback((song: Song) => {
+    playSong(song, [song], 0);
+    addSearchRecentPlayed(song);
+  }, [playSong, addSearchRecentPlayed]);
 
   const hasResults = results && (results.songs.length + results.artists.length + results.albums.length) > 0;
   const topSong = results?.songs[0] ?? null;
@@ -277,7 +280,7 @@ export function SearchScreen() {
               <div>
                 <SectionHeader label="Recents" />
                 <div style={{ padding: "0 16px" }}>
-                  {appState.searchRecentlyPlayed.slice(0, 20).map((song, i) => <SongCard key={song.id} song={song} queue={appState.searchRecentlyPlayed.slice(0, 20)} index={i} onPlay={() => addSearchRecentPlayed(song)} />)}
+                  {appState.searchRecentlyPlayed.slice(0, 20).map((song) => <SongCard key={song.id} song={song} queue={[song]} index={0} onPlay={() => handleSongPlay(song)} />)}
                 </div>
                 <div style={{ display: "flex", justifyContent: "center", padding: "12px 0" }}>
                   <button type="button" onClick={clearSearchRecentPlayed} style={{ background: "rgba(255,255,255,0.05)", border: "1px solid var(--color-border)", borderRadius: "var(--radius-full)", padding: "9px 20px", fontSize: "var(--text-sm)", fontWeight: 600, color: "var(--color-text-secondary)", cursor: "pointer" }}>Clear recents</button>
@@ -323,12 +326,12 @@ export function SearchScreen() {
 
                 {resultTab === "all" && (
                   <div>
-                    {topSong && <TopResultCard song={topSong} label={suggestions.isFromLink ? "From Link" : "Top Result"} onPlay={s => handleSongPlay(s, results!.songs, 0)} onMore={() => {}} />}
+                    {topSong && <TopResultCard song={topSong} label={suggestions.isFromLink ? "From Link" : "Top Result"} onPlay={s => handleSongPlay(s)} onMore={() => {}} />}
                     {remainingSongs.length > 0 && (
                       <div>
                         <SectionHeader label="Songs" />
                         <div style={{ padding: "0 16px" }}>
-                          {remainingSongs.slice(0, 12).map((song, i) => <SongCard key={song.id} song={song} queue={results!.songs} index={i + 1} onPlay={() => handleSongPlay(song, results!.songs, i + 1)} />)}
+                          {remainingSongs.slice(0, 12).map((song) => <SongCard key={song.id} song={song} queue={[song]} index={0} onPlay={() => handleSongPlay(song)} />)}
                         </div>
                       </div>
                     )}
@@ -353,9 +356,9 @@ export function SearchScreen() {
 
                 {resultTab === "songs" && results!.songs.length > 0 && (
                   <div>
-                    {topSong && <TopResultCard song={topSong} label="Top Result" onPlay={s => handleSongPlay(s, results!.songs, 0)} onMore={() => {}} />}
+                    {topSong && <TopResultCard song={topSong} label="Top Result" onPlay={s => handleSongPlay(s)} onMore={() => {}} />}
                     <div style={{ padding: "4px 16px" }}>
-                      {results!.songs.slice(1).map((song, i) => <SongCard key={song.id} song={song} queue={results!.songs} index={i + 1} onPlay={() => handleSongPlay(song, results!.songs, i + 1)} />)}
+                      {results!.songs.slice(1).map((song) => <SongCard key={song.id} song={song} queue={[song]} index={0} onPlay={() => handleSongPlay(song)} />)}
                     </div>
                   </div>
                 )}

@@ -12,7 +12,11 @@ import { resolveFullTrack, formatMediaUrlWithQuality, isPreviewAudioUrl } from '
 import { cacheSongForOfflineBackup, getOfflineSongStream } from '../../services/OfflineBackupService';
 import { showToast } from '../../core/utils/toast';
 import { MediaNotificationService } from '../../services/MediaNotificationService';
-import { smartRecommendationEngine } from '../recommendation/SmartRecommendationEngine';
+import {
+  smartRecommendationEngine,
+  getCoreTitle,
+  isSameOrSimilarTitle,
+} from '../recommendation/SmartRecommendationEngine';
 import { userProfileTracker } from '../recommendation/UserProfileTracker';
 import { aiTasteProfileEngine } from '../ai/AITasteProfileEngine';
 import { adaptiveStreaming } from '../../services/AdaptiveStreamingService';
@@ -588,11 +592,32 @@ class AudioPlayer {
         target.id,
       ]);
 
-      const newRadioTracks = await YouTubeQueueService.generateSeedRadio(target, undefined, existingIds);
+      const targetCore = getCoreTitle(target.title);
+      const existingCores = new Set<string>([
+        ...this._queue.map((s) => getCoreTitle(s.title)).filter(Boolean),
+        ...this._automixQueue.map((s) => getCoreTitle(s.title)).filter(Boolean),
+      ]);
+      if (targetCore) existingCores.add(targetCore);
+
+      const newRadioTracks = await YouTubeQueueService.generateSeedRadio(
+        target,
+        undefined,
+        existingIds,
+        this._queue
+      );
       if (newRadioTracks && newRadioTracks.length > 0) {
         for (const track of newRadioTracks) {
-          if (!this._automixQueue.some((s) => s.id === track.id) && !this._queue.some((s) => s.id === track.id)) {
+          const trackCore = getCoreTitle(track.title);
+          const isSameTitle = (trackCore && targetCore && trackCore === targetCore) || isSameOrSimilarTitle(track.title, target.title);
+
+          if (
+            !isSameTitle &&
+            (!trackCore || !existingCores.has(trackCore)) &&
+            !this._automixQueue.some((s) => s.id === track.id) &&
+            !this._queue.some((s) => s.id === track.id)
+          ) {
             this._automixQueue.push(track);
+            if (trackCore) existingCores.add(trackCore);
           }
         }
         if (this._automixQueue.length > 30) {
@@ -613,7 +638,36 @@ class AudioPlayer {
    */
   injectNextAutomixTrack(): Song | null {
     if (this._automixQueue.length === 0) return null;
-    const nextSong = this._automixQueue.shift()!;
+
+    const currentCore = this.currentSong ? getCoreTitle(this.currentSong.title) : '';
+    const existingIds = new Set<string>(this._queue.map((s) => s.id));
+    const existingCores = new Set<string>(this._queue.map((s) => getCoreTitle(s.title)).filter(Boolean));
+    if (currentCore) existingCores.add(currentCore);
+
+    let nextSong: Song | null = null;
+
+    while (this._automixQueue.length > 0) {
+      const candidate = this._automixQueue.shift()!;
+      const candCore = getCoreTitle(candidate.title);
+
+      // Enforce ID and title uniqueness
+      if (
+        !existingIds.has(candidate.id) &&
+        (!candCore || !existingCores.has(candCore)) &&
+        (!this.currentSong || !isSameOrSimilarTitle(candidate.title, this.currentSong.title))
+      ) {
+        nextSong = candidate;
+        break;
+      }
+    }
+
+    if (!nextSong) {
+      this.saveAutomixQueue();
+      this.emit({ type: 'automixchange', automixQueue: [...this._automixQueue] });
+      if (this.currentSong) this.replenishAutomixQueue(this.currentSong, true);
+      return null;
+    }
+
     this._queue.push(nextSong);
     this._originalQueue.push(nextSong);
     this.saveAutomixQueue();
@@ -636,6 +690,12 @@ class AudioPlayer {
     const targetSong = song || (queue && queue.length > 0 ? (startIndex !== undefined && startIndex >= 0 && startIndex < queue.length ? queue[startIndex] : queue[0]) : this._queue[this._queueIndex]);
     if (!targetSong) return;
 
+    // If starting a single song explicitly (e.g. from Search), clear stale automix buffer
+    const isSingleSongSelect = queue && queue.length <= 1;
+    if (isSingleSongSelect) {
+      this._automixQueue = [];
+    }
+
     if (queue && queue.length > 0) {
       this._originalQueue = [...queue];
       this._queue = this._shuffle ? shuffle(queue) : [...queue];
@@ -645,7 +705,7 @@ class AudioPlayer {
 
     // Trigger proactive automix seed radio buffer replenishment in background
     if (this._autoPlay) {
-      this.replenishAutomixQueue(targetSong);
+      this.replenishAutomixQueue(targetSong, isSingleSongSelect);
     }
 
     // ── Generation counter – every play() call gets a unique ID.
@@ -1241,7 +1301,12 @@ class AudioPlayer {
         // If buffer is currently empty, fetch on-the-fly via YouTubeQueue 3-tier pipeline
         const current = this.currentSong;
         const existingIds = new Set<string>(this._queue.map((s) => s.id));
-        const freshTracks = await YouTubeQueueService.generateSeedRadio(current, undefined, existingIds);
+        const freshTracks = await YouTubeQueueService.generateSeedRadio(
+          current,
+          undefined,
+          existingIds,
+          this._queue
+        );
         if (freshTracks && freshTracks.length > 0) {
           nextTrack = freshTracks[0];
           this._queue.push(...freshTracks);
