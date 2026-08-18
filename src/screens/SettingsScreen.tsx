@@ -3,6 +3,7 @@ import { useApp } from '../state/AppContext';
 import { usePlayer } from '../state/PlayerContext';
 import { aiTasteProfileEngine } from '../domain/ai/AITasteProfileEngine';
 import { showToast } from '../core/utils/toast';
+import { getQualityDisplayName } from '../core/utils/audioQualityDetector';
 import type { AudioQuality } from '../data/models';
 
 export function SettingsScreen() {
@@ -38,8 +39,7 @@ export function SettingsScreen() {
   const handleQualityChange = (q: AudioQuality) => {
     dispatch({ type: 'SET_CONFIG', payload: { audioQuality: q } });
     setAudioQuality(q);
-    const label = q === 'high' ? 'High (320 kbps Studio HD)' : q === 'medium' ? 'Medium (192 kbps)' : 'Low (96 kbps Data Saver)';
-    showToast(`Audio quality switched to ${label}`, 'info');
+    showToast(`Audio quality switched to ${getQualityDisplayName(q)}`, 'info');
   };
 
   const handleAutoUpdateToggle = () => {
@@ -144,6 +144,56 @@ export function SettingsScreen() {
             }}>
               Audio Quality
             </h2>
+
+            {/* Live Detected Stream Inspector */}
+            {playerState.currentSong && playerState.activeAudioInfo && (
+              <div style={{
+                background: 'var(--color-surface)',
+                border: '1px solid var(--color-border)',
+                borderRadius: 'var(--radius-lg)',
+                padding: '8px 11px',
+                marginBottom: 8,
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'space-between',
+                gap: 8,
+              }}>
+                <div style={{ minWidth: 0 }}>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+                    <span style={{ width: 6, height: 6, borderRadius: '50%', background: '#10B981', boxShadow: '0 0 6px #10B981', flexShrink: 0 }} />
+                    <span style={{ fontSize: '11px', fontWeight: 700, color: 'var(--color-text-primary)' }}>
+                      Active Source: {playerState.activeAudioInfo.label}
+                    </span>
+                  </div>
+                  <p style={{ margin: '1px 0 0', fontSize: '9.5px', color: 'var(--color-text-secondary)', lineHeight: 1.3 }}>
+                    {playerState.activeAudioInfo.details}
+                  </p>
+                </div>
+                <span style={{
+                  fontSize: '8.5px',
+                  fontWeight: 700,
+                  letterSpacing: '0.04em',
+                  padding: '2px 5px',
+                  borderRadius: '4px',
+                  background: playerState.activeAudioInfo.isDolbyAtmos
+                    ? 'rgba(168, 85, 247, 0.2)'
+                    : playerState.activeAudioInfo.isHiRes
+                    ? 'rgba(245, 158, 11, 0.18)'
+                    : 'rgba(255, 255, 255, 0.08)',
+                  color: playerState.activeAudioInfo.isDolbyAtmos
+                    ? '#A855F7'
+                    : playerState.activeAudioInfo.isHiRes
+                    ? 'var(--color-accent)'
+                    : 'var(--color-text-muted)',
+                  border: '1px solid ' + (playerState.activeAudioInfo.isDolbyAtmos ? 'rgba(168, 85, 247, 0.4)' : playerState.activeAudioInfo.isHiRes ? 'rgba(245, 158, 11, 0.3)' : 'rgba(255, 255, 255, 0.1)'),
+                  flexShrink: 0,
+                  textTransform: 'uppercase',
+                }}>
+                  {playerState.activeAudioInfo.badge}
+                </span>
+              </div>
+            )}
+
             <div style={{
               background: 'var(--color-surface)',
               border: '1px solid var(--color-border)',
@@ -151,11 +201,49 @@ export function SettingsScreen() {
               overflow: 'hidden',
             }}>
               {[
-                { id: 'high' as AudioQuality, title: 'High Quality', bitrate: '320 kbps', desc: 'Best sound quality & crystal clear audio (Recommended)' },
-                { id: 'medium' as AudioQuality, title: 'Medium Quality', bitrate: '192 kbps', desc: 'Balanced streaming with moderate data usage' },
-                { id: 'low' as AudioQuality, title: 'Low Quality', bitrate: '96 kbps', desc: 'Data saver mode for slower connections' },
-              ].map((item, index) => {
-                const isSelected = audioQuality === item.id;
+                {
+                  id: 'aac_256' as AudioQuality,
+                  title: 'AAC',
+                  desc: '256 kbps · High quality',
+                  badge: '256 kbps',
+                },
+                {
+                  id: 'flac_16_44' as AudioQuality,
+                  title: 'FLAC',
+                  desc: '16-bit / 44.1 kHz · Lossless',
+                  badge: 'CD Quality',
+                },
+                {
+                  id: 'flac_24_48' as AudioQuality,
+                  title: 'FLAC',
+                  desc: '24-bit / 48 kHz · Hi-Res Lossless',
+                  badge: '24-bit / 48 kHz',
+                },
+                {
+                  id: 'flac_24_96' as AudioQuality,
+                  title: 'FLAC',
+                  desc: '24-bit / 96 kHz · Hi-Res Lossless',
+                  badge: '24-bit / 96 kHz',
+                },
+                {
+                  id: 'flac_24_192' as AudioQuality,
+                  title: 'FLAC',
+                  desc: '24-bit / 192 kHz · Hi-Res Lossless',
+                  badge: '24-bit / 192 kHz',
+                },
+                {
+                  id: 'dolby_atmos' as AudioQuality,
+                  title: 'Dolby Atmos',
+                  desc: 'Spatial audio · Compatible devices',
+                  badge: 'Spatial Audio',
+                },
+              ].map((item, index, arr) => {
+                const isSelected =
+                  audioQuality === item.id ||
+                  (audioQuality === 'high' && item.id === 'aac_256') ||
+                  (audioQuality === 'medium' && item.id === 'aac_256') ||
+                  (audioQuality === 'low' && item.id === 'aac_256');
+
                 return (
                   <div
                     key={item.id}
@@ -170,7 +258,7 @@ export function SettingsScreen() {
                       justifyContent: 'space-between',
                       padding: '9px 12px',
                       cursor: 'pointer',
-                      borderBottom: index < 2 ? '1px solid var(--color-border)' : 'none',
+                      borderBottom: index < arr.length - 1 ? '1px solid var(--color-border)' : 'none',
                       background: isSelected ? 'var(--color-accent-dim)' : 'transparent',
                       transition: 'background 150ms ease',
                     }}
@@ -181,14 +269,14 @@ export function SettingsScreen() {
                           {item.title}
                         </p>
                         <span style={{
-                          fontSize: '9px',
+                          fontSize: '8.5px',
                           fontWeight: 700,
                           padding: '1px 5px',
                           borderRadius: '4px',
                           background: isSelected ? 'var(--color-accent)' : 'var(--color-surface-2)',
                           color: isSelected ? 'var(--color-accent-on)' : 'var(--color-text-muted)',
                         }}>
-                          {item.bitrate}
+                          {item.badge}
                         </span>
                       </div>
                       <p style={{ margin: '1px 0 0', fontSize: '10px', color: 'var(--color-text-secondary)', lineHeight: 1.35 }}>

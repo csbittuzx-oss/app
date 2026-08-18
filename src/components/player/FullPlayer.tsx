@@ -43,7 +43,7 @@ const icons = {
 export function FullPlayer() {
   const { state, playSong, togglePlay, next, previous, seek, seekToTime, toggleShuffle, toggleRepeat, closeFullPlayer, openQueue } = usePlayer();
   const { isFavorite, toggleFavorite, state: appState } = useApp();
-  const { currentSong, isPlaying, progress, currentTime, duration, isLoading, shuffle, repeat, queue, queueIndex, error } = state;
+  const { currentSong, isPlaying, progress, currentTime, duration, isLoading, shuffle, repeat, queue, queueIndex, error, activeAudioInfo } = state;
   const isDark = appState.theme === 'dark';
 
   const [artworkTheme, setArtworkTheme] = useState<ExtractedArtworkTheme>(DEFAULT_DARK_ARTWORK_THEME);
@@ -696,14 +696,47 @@ export function FullPlayer() {
             }}>
               {currentSong.title}
             </h2>
-            <p style={{
-              margin: '2px 0 0',
-              fontSize: 'var(--text-base)',
-              color: 'var(--color-text-secondary)',
-              overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap',
-            }}>
-              {currentSong.artist}
-            </p>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 7, marginTop: 3 }}>
+              <p style={{
+                margin: 0,
+                fontSize: 'var(--text-base)',
+                color: 'var(--color-text-secondary)',
+                overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap',
+              }}>
+                {currentSong.artist}
+              </p>
+              {activeAudioInfo && (
+                <span
+                  title={activeAudioInfo.details}
+                  style={{
+                    fontSize: '9.5px',
+                    fontWeight: 700,
+                    letterSpacing: '0.04em',
+                    padding: '1.5px 6px',
+                    borderRadius: '4px',
+                    background: activeAudioInfo.isDolbyAtmos
+                      ? 'linear-gradient(135deg, rgba(99, 102, 241, 0.25) 0%, rgba(168, 85, 247, 0.25) 100%)'
+                      : activeAudioInfo.isHiRes
+                      ? 'rgba(245, 158, 11, 0.18)'
+                      : 'rgba(255, 255, 255, 0.08)',
+                    color: activeAudioInfo.isDolbyAtmos
+                      ? '#A855F7'
+                      : activeAudioInfo.isHiRes
+                      ? 'var(--color-accent)'
+                      : 'var(--color-text-muted)',
+                    border: '1px solid ' + (activeAudioInfo.isDolbyAtmos
+                      ? 'rgba(168, 85, 247, 0.4)'
+                      : activeAudioInfo.isHiRes
+                      ? 'rgba(245, 158, 11, 0.35)'
+                      : 'rgba(255, 255, 255, 0.12)'),
+                    flexShrink: 0,
+                    textTransform: 'uppercase',
+                  }}
+                >
+                  {activeAudioInfo.badge}
+                </span>
+              )}
+            </div>
           </div>
           <button
             id="full-player-heart-btn"

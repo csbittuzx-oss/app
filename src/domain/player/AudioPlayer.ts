@@ -6,12 +6,13 @@
 //  Adaptive Streaming — network-aware buffering, smart cache, pre-buffer
 // ═══════════════════════════════════════════
 
-import type { Song, RepeatMode, AudioQuality } from '../../data/models';
+import type { Song, RepeatMode, AudioQuality, ActiveAudioStreamInfo } from '../../data/models';
 import { shuffle } from '../../core/utils';
 import { resolveFullTrack, formatMediaUrlWithQuality, isPreviewAudioUrl } from '../../data/api/saavnApi';
 import { cacheCompletedSongForOfflineBackup, getOfflineSongStream } from '../../services/OfflineBackupService';
 import { showToast } from '../../core/utils/toast';
 import { MediaNotificationService } from '../../services/MediaNotificationService';
+import { detectAudioStreamQuality } from '../../core/utils/audioQualityDetector';
 import {
   smartRecommendationEngine,
   getCoreTitle,
@@ -52,6 +53,7 @@ export type AudioPlayerEvent =
   | { type: 'autoplaychange'; autoPlay: boolean }
   | { type: 'automixchange'; automixQueue: Song[] }
   | { type: 'qualitychange'; quality: AudioQuality }
+  | { type: 'streaminfochange'; info: ActiveAudioStreamInfo }
   | { type: 'ridingmodechange'; ridingMode: boolean };
 
 class AudioPlayer {
@@ -65,7 +67,7 @@ class AudioPlayer {
   private _volume = 1;
   private _autoPlay = true;
   private _ridingMode = false;
-  private _audioQuality: AudioQuality = 'high';
+  private _audioQuality: AudioQuality = 'aac_256';
   private callbacks: Set<AudioPlayerCallback> = new Set();
 
   // Endless Seed Radio & Automix state
@@ -469,6 +471,7 @@ class AudioPlayer {
     this._audioQuality = quality;
     studioAudioEngine.setQuality(quality);
     this.emit({ type: 'qualitychange', quality });
+    this.emit({ type: 'streaminfochange', info: this.getActiveAudioInfo() });
 
     // Save preference
     try {
@@ -477,14 +480,14 @@ class AudioPlayer {
       localStorage.setItem('sw_config', JSON.stringify(cfg));
     } catch {}
 
-    // If currently playing a Saavn track, switch stream seamlessly without losing position
+    // If currently playing a track with dynamic streaming, refresh audio source without losing position
     const current = this.currentSong;
-    if (current && current.provider === 'saavn' && current.previewUrl && !current.previewUrl.startsWith('blob:')) {
+    if (current && current.previewUrl && !current.previewUrl.startsWith('blob:')) {
       const currentTime = this.audio.currentTime;
       const wasPlaying = !this.audio.paused;
 
       const formattedUrl = formatMediaUrlWithQuality(current.previewUrl, quality);
-      if (formattedUrl !== current.previewUrl) {
+      if (formattedUrl && formattedUrl !== this.audio.src) {
         current.previewUrl = formattedUrl;
         this.audio.src = formattedUrl;
         this.audio.currentTime = currentTime;
@@ -493,6 +496,13 @@ class AudioPlayer {
         }
       }
     }
+  }
+
+  /**
+   * Returns verified real-time stream quality and codec specifications.
+   */
+  public getActiveAudioInfo(): ActiveAudioStreamInfo {
+    return detectAudioStreamQuality(this.currentSong, this.audio.src, this._audioQuality);
   }
 
   // ─── Getters / Setters ──────────────────────────────────────────────────────

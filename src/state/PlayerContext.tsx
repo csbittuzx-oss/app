@@ -27,6 +27,7 @@ function getInitialPlayerState(): PlayerState {
     showLyrics: false,
     autoPlay: true,
     ridingMode: audioPlayer.ridingMode,
+    activeAudioInfo: audioPlayer.getActiveAudioInfo(),
   };
 
   try {
@@ -43,6 +44,7 @@ function getInitialPlayerState(): PlayerState {
           duration: session.duration || session.song.duration || 0,
           progress: session.progress || (session.duration > 0 ? (session.playbackPosition / session.duration) : 0),
           isPlaying: false,
+          activeAudioInfo: audioPlayer.getActiveAudioInfo(),
         };
       }
     }
@@ -68,6 +70,7 @@ type PlayerAction =
   | { type: 'SET_MUTED'; payload: boolean }
   | { type: 'SET_AUTOPLAY'; payload: boolean }
   | { type: 'SET_RIDING_MODE'; payload: boolean }
+  | { type: 'SET_STREAM_INFO'; payload: any }
   | { type: 'SHOW_FULL_PLAYER'; payload: boolean }
   | { type: 'SHOW_QUEUE'; payload: boolean }
   | { type: 'SHOW_LYRICS'; payload: boolean };
@@ -86,6 +89,7 @@ function playerReducer(state: PlayerState, action: PlayerAction): PlayerState {
     case 'SET_MUTED':      return { ...state, isMuted: action.payload };
     case 'SET_AUTOPLAY':   return { ...state, autoPlay: action.payload };
     case 'SET_RIDING_MODE': return { ...state, ridingMode: action.payload };
+    case 'SET_STREAM_INFO': return { ...state, activeAudioInfo: action.payload };
     case 'SHOW_FULL_PLAYER': return { ...state, showFullPlayer: action.payload };
     case 'SHOW_QUEUE':     return { ...state, showQueue: action.payload };
     case 'SHOW_LYRICS':    return { ...state, showLyrics: action.payload };
@@ -156,6 +160,10 @@ export function PlayerProvider({ children }: { children: React.ReactNode }) {
           break;
         case 'songchange':
           dispatch({ type: 'SET_SONG', payload: event.song });
+          dispatch({ type: 'SET_STREAM_INFO', payload: audioPlayer.getActiveAudioInfo() });
+          break;
+        case 'streaminfochange':
+          dispatch({ type: 'SET_STREAM_INFO', payload: event.info });
           break;
         case 'queuechange':
           dispatch({

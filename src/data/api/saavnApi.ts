@@ -6,12 +6,10 @@ const BASE_URL = 'https://www.jiosaavn.com/api.php';
 const DES_KEY = '38346591';
 
 /**
- * Replaces stream URL with the requested bitrate:
- * high -> _320.mp4 / _320_m4a.mp4 (320kbps Extreme HD Studio Master Audio)
- * medium -> _160.mp4 / _160_m4a.mp4 (160/192kbps High Quality)
- * low -> _96.mp4 / _96_m4a.mp4 (96kbps Data Saver)
+ * Formats stream URL according to requested audio quality tier:
+ * Always fetches the best available master stream (_320_m4a.mp4 / _320.mp4).
  */
-export function formatMediaUrlWithQuality(url?: string | null, quality: AudioQuality = 'high'): string {
+export function formatMediaUrlWithQuality(url?: string | null, quality: AudioQuality = 'aac_256'): string {
   if (!url || typeof url !== 'string') return '';
   const targetSuffix = quality === 'low' ? '_96' : quality === 'medium' ? '_160' : '_320';
   let formatted = url.replace('http://', 'https://');
@@ -41,7 +39,7 @@ export function formatMediaUrlWithQuality(url?: string | null, quality: AudioQua
 /**
  * Decrypts JioSaavn encrypted media url to specified quality audio stream
  */
-export function decryptMediaUrl(encryptedUrl?: string, quality: AudioQuality = 'high'): string | null {
+export function decryptMediaUrl(encryptedUrl?: string, quality: AudioQuality = 'aac_256'): string | null {
   if (!encryptedUrl || typeof encryptedUrl !== 'string') return null;
   try {
     const key = CryptoJS.enc.Utf8.parse(DES_KEY);

@@ -117,9 +117,32 @@ export interface PlayerState {
   showLyrics: boolean;
   autoPlay: boolean;
   ridingMode?: boolean;
+  activeAudioInfo?: ActiveAudioStreamInfo;
 }
 
-export type AudioQuality = 'high' | 'medium' | 'low';
+export type AudioQuality =
+  | 'aac_256'
+  | 'flac_16_44'
+  | 'flac_24_48'
+  | 'flac_24_96'
+  | 'flac_24_192'
+  | 'dolby_atmos'
+  | 'high'
+  | 'medium'
+  | 'low';
+
+export interface ActiveAudioStreamInfo {
+  codec: string;           // 'AAC' | 'FLAC' | 'Dolby Atmos' | 'Opus' | 'MP3'
+  bitrate: string;         // '256 kbps' | 'Lossless' | 'Hi-Res Lossless' | 'Spatial Audio'
+  sampleRate: string;      // '44.1 kHz' | '48 kHz' | '96 kHz' | '192 kHz'
+  bitDepth: string;        // '16-bit' | '24-bit' | '32-bit float'
+  isLossless: boolean;
+  isHiRes: boolean;
+  isDolbyAtmos: boolean;
+  badge: string;           // 'AAC 256' | 'LOSSLESS' | 'HI-RES' | 'DOLBY ATMOS'
+  label: string;           // e.g. 'AAC 256 kbps · High Quality' | 'FLAC 24-bit / 96 kHz · Hi-Res Lossless'
+  details: string;         // e.g. 'Source: AAC 256 kbps (Studio Master) · 44.1 kHz / 24-bit DSP'
+}
 
 export interface AppState {
   theme: 'dark' | 'light';
