@@ -9,7 +9,7 @@
 import type { Song, RepeatMode, AudioQuality } from '../../data/models';
 import { shuffle } from '../../core/utils';
 import { resolveFullTrack, formatMediaUrlWithQuality, isPreviewAudioUrl } from '../../data/api/saavnApi';
-import { cacheSongForOfflineBackup, getOfflineSongStream } from '../../services/OfflineBackupService';
+import { cacheCompletedSongForOfflineBackup, getOfflineSongStream } from '../../services/OfflineBackupService';
 import { showToast } from '../../core/utils/toast';
 import { MediaNotificationService } from '../../services/MediaNotificationService';
 import {
@@ -99,6 +99,12 @@ class AudioPlayer {
   private savedResumePosition = 0;
   private pendingSeekPosition = 0;
   private lastSavedPositionTime = 0;
+
+  // Real listening & full completion tracking for Offline Backup
+  private currentSongAccumulatedPlaybackSec = 0;
+  private lastPlaybackTimestamp = 0;
+  private currentSongCachedForOffline = false;
+  private currentPlayingStreamUrl: string | null = null;
 
   constructor() {
     this.audio = new Audio();
@@ -287,6 +293,30 @@ class AudioPlayer {
       if (now - this.lastSavedPositionTime > 4000) {
         this.lastSavedPositionTime = now;
         this.saveCurrentSession();
+      }
+
+      // Track actual playback elapsed duration
+      if (this.lastPlaybackTimestamp > 0 && !this.audio.paused) {
+        const deltaSec = (now - this.lastPlaybackTimestamp) / 1000;
+        if (deltaSec > 0 && deltaSec < 3) {
+          this.currentSongAccumulatedPlaybackSec += deltaSec;
+        }
+      }
+      this.lastPlaybackTimestamp = now;
+
+      // Offline Backup: Strict Completion Rule (~95%+ duration + >= 85% actual playback time)
+      if (
+        !this.currentSongCachedForOffline &&
+        this.currentSong &&
+        duration > 25 &&
+        progress >= 0.95 &&
+        this.currentSongAccumulatedPlaybackSec >= duration * 0.85 &&
+        this.currentPlayingStreamUrl &&
+        !this.currentPlayingStreamUrl.startsWith('blob:') &&
+        navigator.onLine
+      ) {
+        this.currentSongCachedForOffline = true;
+        cacheCompletedSongForOfflineBackup(this.currentSong, this.currentPlayingStreamUrl).catch(() => {});
       }
 
       // Track listening duration in intelligence profile
@@ -752,13 +782,48 @@ class AudioPlayer {
         offlineUrl = targetSong.previewUrl;
       }
 
+      if (!offlineUrl) {
+        try {
+          const cached = await adaptiveStreaming.getCachedUrl(targetSong.id, targetSong.previewUrl || '');
+          if (cached) offlineUrl = cached;
+        } catch {}
+      }
+
       if (myGen !== this._playGeneration) return;   // newer song selected, bail
 
       if (offlineUrl) {
         targetSong.previewUrl = offlineUrl;
         targetSong.isDownloaded = true;
+        targetSong.provider = 'offline';
+        this.audio.src = offlineUrl;
+        this.audio.volume = this._volume;
+
+        if (this.pendingSeekPosition > 0) {
+          this.audio.currentTime = this.pendingSeekPosition;
+          this.pendingSeekPosition = 0;
+        } else {
+          this.audio.currentTime = 0;
+        }
+
+        this.emit({ type: 'songchange', song: { ...targetSong } });
+        this.emit({ type: 'loading', isLoading: false });
+        this.updateMediaSession(targetSong);
+        this.saveCurrentSession();
+
+        try {
+          const playPromise = this.audio.play();
+          if (playPromise !== undefined) await playPromise;
+        } catch {
+          const onCanPlay = () => {
+            this.audio.removeEventListener('canplay', onCanPlay);
+            if (myGen === this._playGeneration) this.audio.play().catch(() => {});
+          };
+          this.audio.addEventListener('canplay', onCanPlay, { once: true });
+        }
+        return; // Direct offline play completed!
       } else {
         this.emit({ type: 'loading', isLoading: false });
+        this.emit({ type: 'error', error: `Audio source unavailable for "${targetSong.title}".` });
         showToast("You're offline. This song isn't available for offline playback.", 'danger', 3200);
         return;
       }
@@ -833,21 +898,17 @@ class AudioPlayer {
 
     // ── Resolve stream URL ──
     // Strategy: check cache first for instant play, then fall back to native streaming.
-    // We do NOT wait for a full download before setting audio.src — native streaming starts immediately.
     let resolvedUrl = formatMediaUrlWithQuality(targetSong.previewUrl, this._audioQuality);
 
     if (!targetSong.previewUrl.startsWith('blob:') && navigator.onLine) {
       try {
-        // Check cache synchronously-ish (IndexedDB lookup only, no download)
         const cachedUrl = await adaptiveStreaming.getCachedUrl(targetSong.id, resolvedUrl);
         if (myGen !== this._playGeneration) return;
         if (cachedUrl) {
-          resolvedUrl = cachedUrl;   // instant cache hit – use blob URL
+          resolvedUrl = cachedUrl;
         }
-        // If no cache hit, use the direct stream URL immediately.
-        // The adaptive service will cache it in the background for next time.
       } catch {
-        // cache lookup failed – use direct URL
+        // cache lookup fallback
       }
     }
 
@@ -858,6 +919,12 @@ class AudioPlayer {
     this.audio.src = resolvedUrl;
     this.audio.volume = this._volume;
 
+    // Reset tracking state for full playback completion
+    this.currentSongAccumulatedPlaybackSec = 0;
+    this.lastPlaybackTimestamp = Date.now();
+    this.currentSongCachedForOffline = false;
+    this.currentPlayingStreamUrl = resolvedUrl;
+
     if (this.pendingSeekPosition > 0) {
       this.audio.currentTime = this.pendingSeekPosition;
       this.pendingSeekPosition = 0;
@@ -867,10 +934,8 @@ class AudioPlayer {
 
     this.saveCurrentSession();
 
-    // Background-cache for offline backup (non-blocking)
-    if (!resolvedUrl.startsWith('blob:')) {
-      cacheSongForOfflineBackup(targetSong, resolvedUrl).catch(() => {});
-      // Also background-download into the adaptive streaming cache for future instant-play
+    // Background-download into the adaptive streaming cache for future instant-play
+    if (!resolvedUrl.startsWith('blob:') && navigator.onLine) {
       adaptiveStreaming.preBufferSong(targetSong.id, resolvedUrl, this._audioQuality);
     }
 
@@ -1276,6 +1341,17 @@ class AudioPlayer {
     if (this.currentSong) {
       userProfileTracker.recordCompletion(this.currentSong);
       aiTasteProfileEngine.recordSongCompletion(this.currentSong);
+
+      // Offline Backup: Cache track if naturally completed and not cached yet
+      if (
+        !this.currentSongCachedForOffline &&
+        this.currentPlayingStreamUrl &&
+        !this.currentPlayingStreamUrl.startsWith('blob:') &&
+        navigator.onLine
+      ) {
+        this.currentSongCachedForOffline = true;
+        cacheCompletedSongForOfflineBackup(this.currentSong, this.currentPlayingStreamUrl).catch(() => {});
+      }
     }
 
     if (this._repeat === 'one') {

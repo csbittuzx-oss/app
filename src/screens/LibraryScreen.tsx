@@ -1,4 +1,4 @@
-import { useState, useRef } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { useApp } from '../state/AppContext';
 import { usePlayer } from '../state/PlayerContext';
 import { SongCard } from '../components/cards/SongCard';
@@ -7,6 +7,7 @@ import { EmptyState } from '../components/shared/ErrorState';
 import { SpotifyImportModal } from '../components/library/SpotifyImportModal';
 import { PlaylistActionModal } from '../components/library/PlaylistActionModal';
 import { filterSpotifyAvailableTracksSync } from '../services/SpotifyAvailabilityService';
+import { getOfflineTrackCount } from '../services/OfflineBackupService';
 import type { Playlist } from '../data/models';
 
 type LibTab = 'playlists' | 'songs' | 'artists';
@@ -25,6 +26,18 @@ export function LibraryScreen() {
   const [showSpotifyImport, setShowSpotifyImport] = useState(false);
   const [newPlaylistTitle, setNewPlaylistTitle] = useState('');
   const [activeActionPlaylist, setActiveActionPlaylist] = useState<Playlist | null>(null);
+  const [offlineTrackCount, setOfflineTrackCount] = useState(0);
+
+  useEffect(() => {
+    const updateCount = () => {
+      getOfflineTrackCount().then(setOfflineTrackCount);
+    };
+    updateCount();
+    window.addEventListener('sw_offline_backup_changed', updateCount);
+    return () => {
+      window.removeEventListener('sw_offline_backup_changed', updateCount);
+    };
+  }, []);
 
   const longPressTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const isLongPressTriggeredRef = useRef(false);
@@ -299,57 +312,57 @@ export function LibraryScreen() {
           ) : (
             <div>
               {/* Spotify-style Offline Backup Mix */}
-              {state.recentlyPlayed.length > 0 && (
-                <div
-                  id="playlist-item-offline-backup"
-                  onClick={() => navigate('playlist', { playlistId: 'offline_backup_mix' })}
-                  role="button" tabIndex={0}
-                  onKeyDown={e => e.key === 'Enter' && navigate('playlist', { playlistId: 'offline_backup_mix' })}
-                  style={{
-                    display: 'flex', alignItems: 'center', gap: 14,
-                    padding: '12px 0', cursor: 'pointer',
-                    borderBottom: '1px solid var(--color-border)',
-                  }}
-                  aria-label="Open Offline Backup Mix"
-                >
-                  <div style={{
-                    width: 56, height: 56, borderRadius: 'var(--radius-md)',
-                    background: 'linear-gradient(135deg, var(--color-accent) 0%, #D97706 100%)',
-                    border: '1px solid var(--color-border)',
-                    overflow: 'hidden', flexShrink: 0,
-                    display: 'flex', alignItems: 'center', justifyContent: 'center',
-                    color: '#000',
-                  }}>
-                    <svg width="26" height="26" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round">
-                      <path d="M12 3v12m0 0l-4-4m4 4l4-4" />
-                      <path d="M4 16v3a1 1 0 001 1h14a1 1 0 001-1v-3" />
-                    </svg>
-                  </div>
-                  <div style={{ flex: 1, minWidth: 0 }}>
-                    <p style={{ margin: 0, fontWeight: 700, fontSize: 'var(--text-md)', color: 'var(--color-text-primary)' }}>
-                      Offline Backup
-                    </p>
-                    <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginTop: 2 }}>
-                      <span style={{
-                        color: 'var(--color-accent)',
-                        fontSize: '10px',
-                        fontWeight: 700,
-                        background: 'rgba(245, 158, 11, 0.15)',
-                        padding: '1px 6px',
-                        borderRadius: '4px',
-                      }}>
-                        OFFLINE READY
-                      </span>
-                      <p style={{ margin: 0, fontSize: 'var(--text-sm)', color: 'var(--color-text-secondary)' }}>
-                        {state.recentlyPlayed.length} songs cached
-                      </p>
-                    </div>
-                  </div>
-                  <svg width="16" height="16" viewBox="0 0 24 24" fill="none" aria-hidden="true">
-                    <polyline points="9 18 15 12 9 6" stroke="var(--color-text-muted)" strokeWidth="1.75" strokeLinecap="round" strokeLinejoin="round"/>
+              <div
+                id="playlist-item-offline-backup"
+                onClick={() => navigate('playlist', { playlistId: 'offline_backup_mix' })}
+                role="button" tabIndex={0}
+                onKeyDown={e => e.key === 'Enter' && navigate('playlist', { playlistId: 'offline_backup_mix' })}
+                style={{
+                  display: 'flex', alignItems: 'center', gap: 14,
+                  padding: '12px 0', cursor: 'pointer',
+                  borderBottom: '1px solid var(--color-border)',
+                }}
+                aria-label="Open Offline Backup Mix"
+              >
+                <div style={{
+                  width: 56, height: 56, borderRadius: 'var(--radius-md)',
+                  background: 'linear-gradient(135deg, var(--color-accent) 0%, #D97706 100%)',
+                  border: '1px solid var(--color-border)',
+                  overflow: 'hidden', flexShrink: 0,
+                  display: 'flex', alignItems: 'center', justifyContent: 'center',
+                  color: '#000',
+                }}>
+                  <svg width="26" height="26" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round">
+                    <path d="M12 3v12m0 0l-4-4m4 4l4-4" />
+                    <path d="M4 16v3a1 1 0 001 1h14a1 1 0 001-1v-3" />
                   </svg>
                 </div>
-              )}
+                <div style={{ flex: 1, minWidth: 0 }}>
+                  <p style={{ margin: 0, fontWeight: 700, fontSize: 'var(--text-md)', color: 'var(--color-text-primary)' }}>
+                    Offline Backup
+                  </p>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginTop: 2 }}>
+                    <span style={{
+                      color: 'var(--color-accent)',
+                      fontSize: '10px',
+                      fontWeight: 700,
+                      background: 'rgba(245, 158, 11, 0.15)',
+                      padding: '1px 6px',
+                      borderRadius: '4px',
+                    }}>
+                      {offlineTrackCount > 0 ? 'OFFLINE READY' : 'AUTO-BACKUP'}
+                    </span>
+                    <p style={{ margin: 0, fontSize: 'var(--text-sm)', color: 'var(--color-text-secondary)' }}>
+                      {offlineTrackCount > 0
+                        ? `${offlineTrackCount} song${offlineTrackCount > 1 ? 's' : ''} cached`
+                        : 'Caches completed songs automatically'}
+                    </p>
+                  </div>
+                </div>
+                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" aria-hidden="true">
+                  <polyline points="9 18 15 12 9 6" stroke="var(--color-text-muted)" strokeWidth="1.75" strokeLinecap="round" strokeLinejoin="round"/>
+                </svg>
+              </div>
 
               {/* Sorted User Playlists with Touch & Hold (Long-Press) Support */}
               {sortedPlaylists.map(playlist => (

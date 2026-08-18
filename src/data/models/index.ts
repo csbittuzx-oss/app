@@ -94,7 +94,7 @@ export interface SearchResult {
   total: number;
 }
 
-export type MusicProvider = 'itunes' | 'jamendo' | 'lastfm' | 'saavn' | 'youtube' | 'local';
+export type MusicProvider = 'itunes' | 'jamendo' | 'lastfm' | 'saavn' | 'youtube' | 'local' | 'offline';
 
 export type RepeatMode = 'off' | 'one' | 'all';
 
