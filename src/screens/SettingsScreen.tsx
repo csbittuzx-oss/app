@@ -3,8 +3,8 @@ import { useApp } from '../state/AppContext';
 import { usePlayer } from '../state/PlayerContext';
 import { aiTasteProfileEngine } from '../domain/ai/AITasteProfileEngine';
 import { showToast } from '../core/utils/toast';
-import { getQualityDisplayName } from '../core/utils/audioQualityDetector';
 import type { AudioQuality } from '../data/models';
+import { AUDIO_QUALITY_OPTIONS } from '../core/utils/audioDeviceUtils';
 
 export function SettingsScreen() {
   const { state, dispatch, setMusicLanguages, resetOnboarding } = useApp();
@@ -39,7 +39,9 @@ export function SettingsScreen() {
   const handleQualityChange = (q: AudioQuality) => {
     dispatch({ type: 'SET_CONFIG', payload: { audioQuality: q } });
     setAudioQuality(q);
-    showToast(`Audio quality switched to ${getQualityDisplayName(q)}`, 'info');
+    const item = AUDIO_QUALITY_OPTIONS.find((o) => o.id === q);
+    const label = item ? item.title : q;
+    showToast(`Audio quality set to ${label}`, 'info');
   };
 
   const handleAutoUpdateToggle = () => {
@@ -134,115 +136,40 @@ export function SettingsScreen() {
 
           {/* ── 2. Audio Quality ── */}
           <section aria-label="Audio Quality">
-            <h2 style={{
-              margin: '0 0 6px',
-              fontSize: '9.5px',
-              fontWeight: 700,
-              color: 'var(--color-text-muted)',
-              textTransform: 'uppercase',
-              letterSpacing: '0.08em',
-            }}>
-              Audio Quality
-            </h2>
-
-            {/* Live Detected Stream Inspector */}
-            {playerState.currentSong && playerState.activeAudioInfo && (
-              <div style={{
-                background: 'var(--color-surface)',
-                border: '1px solid var(--color-border)',
-                borderRadius: 'var(--radius-lg)',
-                padding: '8px 11px',
-                marginBottom: 8,
-                display: 'flex',
-                alignItems: 'center',
-                justifyContent: 'space-between',
-                gap: 8,
+            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', margin: '0 0 6px' }}>
+              <h2 style={{
+                margin: 0,
+                fontSize: '9.5px',
+                fontWeight: 700,
+                color: 'var(--color-text-muted)',
+                textTransform: 'uppercase',
+                letterSpacing: '0.08em',
               }}>
-                <div style={{ minWidth: 0 }}>
-                  <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
-                    <span style={{ width: 6, height: 6, borderRadius: '50%', background: '#10B981', boxShadow: '0 0 6px #10B981', flexShrink: 0 }} />
-                    <span style={{ fontSize: '11px', fontWeight: 700, color: 'var(--color-text-primary)' }}>
-                      Active Source: {playerState.activeAudioInfo.label}
-                    </span>
-                  </div>
-                  <p style={{ margin: '1px 0 0', fontSize: '9.5px', color: 'var(--color-text-secondary)', lineHeight: 1.3 }}>
-                    {playerState.activeAudioInfo.details}
-                  </p>
-                </div>
+                Audio Quality
+              </h2>
+              {playerState.activeQualityLabel && (
                 <span style={{
-                  fontSize: '8.5px',
+                  fontSize: '9px',
                   fontWeight: 700,
-                  letterSpacing: '0.04em',
-                  padding: '2px 5px',
+                  color: 'var(--color-accent)',
+                  background: 'var(--color-accent-dim)',
+                  padding: '1px 6px',
                   borderRadius: '4px',
-                  background: playerState.activeAudioInfo.isDolbyAtmos
-                    ? 'rgba(168, 85, 247, 0.2)'
-                    : playerState.activeAudioInfo.isHiRes
-                    ? 'rgba(245, 158, 11, 0.18)'
-                    : 'rgba(255, 255, 255, 0.08)',
-                  color: playerState.activeAudioInfo.isDolbyAtmos
-                    ? '#A855F7'
-                    : playerState.activeAudioInfo.isHiRes
-                    ? 'var(--color-accent)'
-                    : 'var(--color-text-muted)',
-                  border: '1px solid ' + (playerState.activeAudioInfo.isDolbyAtmos ? 'rgba(168, 85, 247, 0.4)' : playerState.activeAudioInfo.isHiRes ? 'rgba(245, 158, 11, 0.3)' : 'rgba(255, 255, 255, 0.1)'),
-                  flexShrink: 0,
-                  textTransform: 'uppercase',
                 }}>
-                  {playerState.activeAudioInfo.badge}
+                  Active: {playerState.activeQualityLabel}
                 </span>
-              </div>
-            )}
-
+              )}
+            </div>
             <div style={{
               background: 'var(--color-surface)',
               border: '1px solid var(--color-border)',
               borderRadius: 'var(--radius-lg)',
               overflow: 'hidden',
             }}>
-              {[
-                {
-                  id: 'aac_256' as AudioQuality,
-                  title: 'AAC',
-                  desc: '256 kbps · High quality',
-                  badge: '256 kbps',
-                },
-                {
-                  id: 'flac_16_44' as AudioQuality,
-                  title: 'FLAC',
-                  desc: '16-bit / 44.1 kHz · Lossless',
-                  badge: 'CD Quality',
-                },
-                {
-                  id: 'flac_24_48' as AudioQuality,
-                  title: 'FLAC',
-                  desc: '24-bit / 48 kHz · Hi-Res Lossless',
-                  badge: '24-bit / 48 kHz',
-                },
-                {
-                  id: 'flac_24_96' as AudioQuality,
-                  title: 'FLAC',
-                  desc: '24-bit / 96 kHz · Hi-Res Lossless',
-                  badge: '24-bit / 96 kHz',
-                },
-                {
-                  id: 'flac_24_192' as AudioQuality,
-                  title: 'FLAC',
-                  desc: '24-bit / 192 kHz · Hi-Res Lossless',
-                  badge: '24-bit / 192 kHz',
-                },
-                {
-                  id: 'dolby_atmos' as AudioQuality,
-                  title: 'Dolby Atmos',
-                  desc: 'Spatial audio · Compatible devices',
-                  badge: 'Spatial Audio',
-                },
-              ].map((item, index, arr) => {
-                const isSelected =
-                  audioQuality === item.id ||
-                  (audioQuality === 'high' && item.id === 'aac_256') ||
-                  (audioQuality === 'medium' && item.id === 'aac_256') ||
-                  (audioQuality === 'low' && item.id === 'aac_256');
+              {AUDIO_QUALITY_OPTIONS.map((item, index) => {
+                const isSelected = audioQuality === item.id;
+                const isDolby = item.id === 'dolby_atmos';
+                const isDolbySupported = playerState.isDolbySupported ?? false;
 
                 return (
                   <div
@@ -256,16 +183,21 @@ export function SettingsScreen() {
                       display: 'flex',
                       alignItems: 'center',
                       justifyContent: 'space-between',
-                      padding: '9px 12px',
+                      padding: '8px 12px',
                       cursor: 'pointer',
-                      borderBottom: index < arr.length - 1 ? '1px solid var(--color-border)' : 'none',
+                      borderBottom: index < AUDIO_QUALITY_OPTIONS.length - 1 ? '1px solid var(--color-border)' : 'none',
                       background: isSelected ? 'var(--color-accent-dim)' : 'transparent',
                       transition: 'background 150ms ease',
                     }}
                   >
                     <div style={{ minWidth: 0, paddingRight: 8 }}>
-                      <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
-                        <p style={{ margin: 0, fontWeight: 600, fontSize: '13px', color: isSelected ? 'var(--color-accent)' : 'var(--color-text-primary)' }}>
+                      <div style={{ display: 'flex', alignItems: 'center', gap: 6, flexWrap: 'wrap' }}>
+                        <p style={{
+                          margin: 0,
+                          fontWeight: 600,
+                          fontSize: '12.5px',
+                          color: isSelected ? 'var(--color-accent)' : 'var(--color-text-primary)',
+                        }}>
                           {item.title}
                         </p>
                         <span style={{
@@ -273,21 +205,41 @@ export function SettingsScreen() {
                           fontWeight: 700,
                           padding: '1px 5px',
                           borderRadius: '4px',
-                          background: isSelected ? 'var(--color-accent)' : 'var(--color-surface-2)',
-                          color: isSelected ? 'var(--color-accent-on)' : 'var(--color-text-muted)',
+                          background: isSelected
+                            ? 'var(--color-accent)'
+                            : item.isLossless
+                            ? 'rgba(245, 158, 11, 0.15)'
+                            : 'var(--color-surface-2)',
+                          color: isSelected
+                            ? 'var(--color-accent-on)'
+                            : item.isLossless
+                            ? 'var(--color-accent)'
+                            : 'var(--color-text-muted)',
                         }}>
                           {item.badge}
                         </span>
+                        {isDolby && (
+                          <span style={{
+                            fontSize: '8px',
+                            fontWeight: 700,
+                            padding: '1px 4px',
+                            borderRadius: '3px',
+                            background: isDolbySupported ? 'rgba(34, 197, 94, 0.15)' : 'rgba(239, 68, 68, 0.12)',
+                            color: isDolbySupported ? '#22C55E' : 'var(--color-text-muted)',
+                          }}>
+                            {isDolbySupported ? 'Hardware Ready' : 'Device Dependent'}
+                          </span>
+                        )}
                       </div>
-                      <p style={{ margin: '1px 0 0', fontSize: '10px', color: 'var(--color-text-secondary)', lineHeight: 1.35 }}>
+                      <p style={{ margin: '1px 0 0', fontSize: '9.5px', color: 'var(--color-text-secondary)', lineHeight: 1.35 }}>
                         {item.desc}
                       </p>
                     </div>
 
                     {/* Radio Checkmark */}
                     <div style={{
-                      width: 18,
-                      height: 18,
+                      width: 17,
+                      height: 17,
                       borderRadius: '50%',
                       border: '1.5px solid ' + (isSelected ? 'var(--color-accent)' : 'var(--color-text-muted)'),
                       display: 'flex',
@@ -297,8 +249,8 @@ export function SettingsScreen() {
                     }}>
                       {isSelected && (
                         <div style={{
-                          width: 8,
-                          height: 8,
+                          width: 7,
+                          height: 7,
                           borderRadius: '50%',
                           background: 'var(--color-accent)',
                         }} />

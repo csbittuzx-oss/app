@@ -6,13 +6,12 @@
 //  Adaptive Streaming — network-aware buffering, smart cache, pre-buffer
 // ═══════════════════════════════════════════
 
-import type { Song, RepeatMode, AudioQuality, ActiveAudioStreamInfo } from '../../data/models';
+import type { Song, RepeatMode, AudioQuality } from '../../data/models';
 import { shuffle } from '../../core/utils';
 import { resolveFullTrack, formatMediaUrlWithQuality, isPreviewAudioUrl } from '../../data/api/saavnApi';
 import { cacheCompletedSongForOfflineBackup, getOfflineSongStream } from '../../services/OfflineBackupService';
 import { showToast } from '../../core/utils/toast';
 import { MediaNotificationService } from '../../services/MediaNotificationService';
-import { detectAudioStreamQuality } from '../../core/utils/audioQualityDetector';
 import {
   smartRecommendationEngine,
   getCoreTitle,
@@ -24,6 +23,8 @@ import { adaptiveStreaming } from '../../services/AdaptiveStreamingService';
 import { studioAudioEngine } from './StudioAudioEngine';
 import { YouTubeQueueService } from '../../services/YouTubeQueue';
 import { BeatAnalyzer } from './BeatAnalyzer';
+
+import { checkDolbyAtmosSupport } from '../../core/utils/audioDeviceUtils';
 
 export interface PlaybackSession {
   song: Song;
@@ -52,8 +53,7 @@ export type AudioPlayerEvent =
   | { type: 'songchange'; song: Song | null }
   | { type: 'autoplaychange'; autoPlay: boolean }
   | { type: 'automixchange'; automixQueue: Song[] }
-  | { type: 'qualitychange'; quality: AudioQuality }
-  | { type: 'streaminfochange'; info: ActiveAudioStreamInfo }
+  | { type: 'qualitychange'; quality: AudioQuality; activeQualityLabel: string }
   | { type: 'ridingmodechange'; ridingMode: boolean };
 
 class AudioPlayer {
@@ -67,7 +67,10 @@ class AudioPlayer {
   private _volume = 1;
   private _autoPlay = true;
   private _ridingMode = false;
-  private _audioQuality: AudioQuality = 'aac_256';
+  private _audioQuality: AudioQuality = 'high';
+  private _activeQuality: AudioQuality = 'high';
+  private _activeQualityLabel: string = '320 kbps';
+  private _isDolbySupported: boolean = checkDolbyAtmosSupport();
   private callbacks: Set<AudioPlayerCallback> = new Set();
 
   // Endless Seed Radio & Automix state
@@ -465,13 +468,97 @@ class AudioPlayer {
   }
 
   /**
+   * Resolves genuine active quality and handles fallback logic for FLAC and Dolby Atmos.
+   */
+  public resolveTrackQuality(
+    targetSong: Song,
+    selectedQuality: AudioQuality
+  ): { streamUrl: string; activeQuality: AudioQuality; activeQualityLabel: string } {
+    const hasFlac = !!(
+      targetSong.previewUrl?.endsWith('.flac') ||
+      targetSong.previewUrl?.includes('_flac') ||
+      targetSong.provider === 'local'
+    );
+
+    let effectiveQuality = selectedQuality;
+    let activeLabel = '320 kbps';
+
+    if (selectedQuality === 'auto') {
+      if (hasFlac) {
+        effectiveQuality = 'flac_16_44';
+        activeLabel = 'Auto • FLAC 16/44.1';
+      } else {
+        effectiveQuality = 'high';
+        activeLabel = 'Auto • 320 kbps';
+      }
+    } else if (selectedQuality === 'low') {
+      effectiveQuality = 'low';
+      activeLabel = '96 kbps';
+    } else if (selectedQuality === 'medium') {
+      effectiveQuality = 'medium';
+      activeLabel = '192 kbps';
+    } else if (selectedQuality === 'high') {
+      effectiveQuality = 'high';
+      activeLabel = '320 kbps';
+    } else if (selectedQuality.startsWith('flac_')) {
+      if (hasFlac) {
+        effectiveQuality = selectedQuality;
+        if (selectedQuality === 'flac_24_192') activeLabel = 'FLAC • 24-bit / 192 kHz';
+        else if (selectedQuality === 'flac_24_96') activeLabel = 'FLAC • 24-bit / 96 kHz';
+        else if (selectedQuality === 'flac_24_48') activeLabel = 'FLAC • 24-bit / 48 kHz';
+        else activeLabel = 'FLAC • 16-bit / 44.1 kHz';
+      } else {
+        effectiveQuality = 'high';
+        activeLabel = '320 kbps (High)';
+        const tierShort = selectedQuality === 'flac_24_192' ? '24/192' : selectedQuality === 'flac_24_96' ? '24/96' : selectedQuality === 'flac_24_48' ? '24/48' : 'FLAC';
+        showToast(`${tierShort} unavailable for this song — playing highest available quality (320 kbps).`, 'info', 2800);
+      }
+    } else if (selectedQuality === 'dolby_atmos') {
+      if (this._isDolbySupported) {
+        effectiveQuality = 'dolby_atmos';
+        activeLabel = 'Dolby Atmos';
+      } else {
+        effectiveQuality = 'high';
+        activeLabel = '320 kbps (Stereo)';
+        showToast('Dolby Atmos requires supported hardware — playing in 320 kbps Studio HD.', 'info', 2800);
+      }
+    }
+
+    const streamUrl = formatMediaUrlWithQuality(targetSong.previewUrl, effectiveQuality);
+    return { streamUrl, activeQuality: effectiveQuality, activeQualityLabel: activeLabel };
+  }
+
+  /**
    * Updates audio quality in real-time and refreshes active stream if needed.
    */
   async setAudioQuality(quality: AudioQuality) {
     this._audioQuality = quality;
-    studioAudioEngine.setQuality(quality);
-    this.emit({ type: 'qualitychange', quality });
-    this.emit({ type: 'streaminfochange', info: this.getActiveAudioInfo() });
+    const current = this.currentSong;
+
+    if (current) {
+      const res = this.resolveTrackQuality(current, quality);
+      this._activeQuality = res.activeQuality;
+      this._activeQualityLabel = res.activeQualityLabel;
+      studioAudioEngine.setQuality(res.activeQuality);
+      this.emit({ type: 'qualitychange', quality, activeQualityLabel: res.activeQualityLabel });
+
+      if (current.provider === 'saavn' && current.previewUrl && !current.previewUrl.startsWith('blob:')) {
+        const currentTime = this.audio.currentTime;
+        const wasPlaying = !this.audio.paused;
+
+        if (res.streamUrl !== current.previewUrl) {
+          current.previewUrl = res.streamUrl;
+          this.audio.src = res.streamUrl;
+          this.audio.currentTime = currentTime;
+          if (wasPlaying) {
+            this.audio.play().catch(() => {});
+          }
+        }
+      }
+    } else {
+      studioAudioEngine.setQuality(quality);
+      this.emit({ type: 'qualitychange', quality, activeQualityLabel: this._activeQualityLabel });
+    }
 
     // Save preference
     try {
@@ -479,30 +566,6 @@ class AudioPlayer {
       cfg.audioQuality = quality;
       localStorage.setItem('sw_config', JSON.stringify(cfg));
     } catch {}
-
-    // If currently playing a track with dynamic streaming, refresh audio source without losing position
-    const current = this.currentSong;
-    if (current && current.previewUrl && !current.previewUrl.startsWith('blob:')) {
-      const currentTime = this.audio.currentTime;
-      const wasPlaying = !this.audio.paused;
-
-      const formattedUrl = formatMediaUrlWithQuality(current.previewUrl, quality);
-      if (formattedUrl && formattedUrl !== this.audio.src) {
-        current.previewUrl = formattedUrl;
-        this.audio.src = formattedUrl;
-        this.audio.currentTime = currentTime;
-        if (wasPlaying) {
-          this.audio.play().catch(() => {});
-        }
-      }
-    }
-  }
-
-  /**
-   * Returns verified real-time stream quality and codec specifications.
-   */
-  public getActiveAudioInfo(): ActiveAudioStreamInfo {
-    return detectAudioStreamQuality(this.currentSong, this.audio.src, this._audioQuality);
   }
 
   // ─── Getters / Setters ──────────────────────────────────────────────────────
@@ -598,6 +661,18 @@ class AudioPlayer {
 
   get audioQuality(): AudioQuality {
     return this._audioQuality;
+  }
+
+  get activeQuality(): AudioQuality {
+    return this._activeQuality;
+  }
+
+  get activeQualityLabel(): string {
+    return this._activeQualityLabel;
+  }
+
+  get isDolbySupported(): boolean {
+    return this._isDolbySupported;
   }
 
   get automixQueue(): Song[] {
@@ -906,9 +981,14 @@ class AudioPlayer {
       return;
     }
 
-    // ── Resolve stream URL ──
-    // Strategy: check cache first for instant play, then fall back to native streaming.
-    let resolvedUrl = formatMediaUrlWithQuality(targetSong.previewUrl, this._audioQuality);
+    // ── Resolve genuine stream URL & active quality ──
+    const qualityResult = this.resolveTrackQuality(targetSong, this._audioQuality);
+    this._activeQuality = qualityResult.activeQuality;
+    this._activeQualityLabel = qualityResult.activeQualityLabel;
+    studioAudioEngine.setQuality(qualityResult.activeQuality);
+    this.emit({ type: 'qualitychange', quality: this._audioQuality, activeQualityLabel: qualityResult.activeQualityLabel });
+
+    let resolvedUrl = qualityResult.streamUrl;
 
     if (!targetSong.previewUrl.startsWith('blob:') && navigator.onLine) {
       try {

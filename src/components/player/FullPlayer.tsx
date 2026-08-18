@@ -43,7 +43,7 @@ const icons = {
 export function FullPlayer() {
   const { state, playSong, togglePlay, next, previous, seek, seekToTime, toggleShuffle, toggleRepeat, closeFullPlayer, openQueue } = usePlayer();
   const { isFavorite, toggleFavorite, state: appState } = useApp();
-  const { currentSong, isPlaying, progress, currentTime, duration, isLoading, shuffle, repeat, queue, queueIndex, error, activeAudioInfo } = state;
+  const { currentSong, isPlaying, progress, currentTime, duration, isLoading, shuffle, repeat, queue, queueIndex, error } = state;
   const isDark = appState.theme === 'dark';
 
   const [artworkTheme, setArtworkTheme] = useState<ExtractedArtworkTheme>(DEFAULT_DARK_ARTWORK_THEME);
@@ -696,7 +696,7 @@ export function FullPlayer() {
             }}>
               {currentSong.title}
             </h2>
-            <div style={{ display: 'flex', alignItems: 'center', gap: 7, marginTop: 3 }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 7, marginTop: 2, overflow: 'hidden' }}>
               <p style={{
                 margin: 0,
                 fontSize: 'var(--text-base)',
@@ -705,35 +705,27 @@ export function FullPlayer() {
               }}>
                 {currentSong.artist}
               </p>
-              {activeAudioInfo && (
+              {state.activeQualityLabel && (
                 <span
-                  title={activeAudioInfo.details}
+                  id="full-player-quality-badge"
                   style={{
                     fontSize: '9.5px',
                     fontWeight: 700,
-                    letterSpacing: '0.04em',
-                    padding: '1.5px 6px',
-                    borderRadius: '4px',
-                    background: activeAudioInfo.isDolbyAtmos
-                      ? 'linear-gradient(135deg, rgba(99, 102, 241, 0.25) 0%, rgba(168, 85, 247, 0.25) 100%)'
-                      : activeAudioInfo.isHiRes
-                      ? 'rgba(245, 158, 11, 0.18)'
-                      : 'rgba(255, 255, 255, 0.08)',
-                    color: activeAudioInfo.isDolbyAtmos
-                      ? '#A855F7'
-                      : activeAudioInfo.isHiRes
-                      ? 'var(--color-accent)'
-                      : 'var(--color-text-muted)',
-                    border: '1px solid ' + (activeAudioInfo.isDolbyAtmos
-                      ? 'rgba(168, 85, 247, 0.4)'
-                      : activeAudioInfo.isHiRes
-                      ? 'rgba(245, 158, 11, 0.35)'
-                      : 'rgba(255, 255, 255, 0.12)'),
-                    flexShrink: 0,
+                    letterSpacing: '0.03em',
                     textTransform: 'uppercase',
+                    padding: '1px 6px',
+                    borderRadius: '4px',
+                    background: state.activeQualityLabel.includes('FLAC') || state.activeQualityLabel.includes('Dolby')
+                      ? 'var(--color-accent)'
+                      : 'var(--color-surface-2)',
+                    color: state.activeQualityLabel.includes('FLAC') || state.activeQualityLabel.includes('Dolby')
+                      ? 'var(--color-accent-on)'
+                      : 'var(--color-text-muted)',
+                    border: '1px solid var(--color-border)',
+                    flexShrink: 0,
                   }}
                 >
-                  {activeAudioInfo.badge}
+                  {state.activeQualityLabel}
                 </span>
               )}
             </div>
