@@ -10,10 +10,11 @@ import { SkeletonList } from '../components/shared/SkeletonCard';
 import { ErrorState } from '../components/shared/ErrorState';
 import { formatNumber } from '../core/utils';
 
+import { resizeImageUrl } from '../core/utils/imageUtils';
+
 export function ArtistScreen() {
   const { nav: { nav, goBack }, isFavoriteArtist, toggleFavoriteArtist } = useApp();
   const { playSong: _playSong } = usePlayer();
-
   const artistName = String(nav.params?.artistName || '');
   const initialArtist = nav.params?.artist as Artist | undefined;
 
@@ -24,7 +25,6 @@ export function ArtistScreen() {
   const [error, setError] = useState(false);
 
   useEffect(() => {
-    if (!artistName) return;
     setLoading(true);
     setError(false);
     getArtistDetails(artistName)
@@ -38,7 +38,8 @@ export function ArtistScreen() {
   }, [artistName]);
 
   const isFollowed = artist ? isFavoriteArtist(artist.id) : false;
-  const heroPhoto = artist?.profileImage || artist?.image || getArtistProfileImageSync(artistName);
+  const rawHeroPhoto = artist?.profileImage || artist?.image || getArtistProfileImageSync(artistName);
+  const heroPhoto = resizeImageUrl(rawHeroPhoto, 1200, 1200);
 
   return (
     <div style={{ display: 'flex', flexDirection: 'column', height: '100%' }}>

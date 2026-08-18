@@ -1,6 +1,7 @@
 import React from 'react';
 import type { Playlist } from '../../data/models';
 import { CONFIG } from '../../config';
+import { resizeImageUrl } from '../../core/utils/imageUtils';
 
 interface PlaylistShelfCardProps {
   playlist: Playlist;
@@ -13,7 +14,8 @@ export const PlaylistShelfCard: React.FC<PlaylistShelfCardProps> = ({
   onClick,
   size = 148,
 }) => {
-  const artworkSrc = playlist.artwork || (playlist.tracks[0]?.artwork) || CONFIG.ARTWORK_PLACEHOLDER;
+  const rawArtwork = playlist.artwork || (playlist.tracks[0]?.artwork) || CONFIG.ARTWORK_PLACEHOLDER;
+  const artworkSrc = resizeImageUrl(rawArtwork, 544, 544);
 
   return (
     <div

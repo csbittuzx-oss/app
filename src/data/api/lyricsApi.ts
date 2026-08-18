@@ -11,7 +11,7 @@ const BASE_SAAVN_URL = 'https://www.jiosaavn.com/api.php';
 const lyricsCache = new Map<string, Lyrics>();
 
 /**
- * Parses raw .lrc format text into sorted LyricsLine array with exact timestamps in seconds & milliseconds.
+ * Parses raw .lrc format text into sorted LyricsLine array with exact timestamps in seconds.
  */
 export function parseLrc(lrcContent: string): LyricsLine[] {
   const lines = lrcContent.split('\n');
@@ -33,12 +33,10 @@ export function parseLrc(lrcContent: string): LyricsLine[] {
       const seconds = parseFloat(match[2]);
       const text = match[3].trim();
       const timeInSeconds = minutes * 60 + seconds;
-      const timestamp_ms = Math.round(timeInSeconds * 1000);
 
       // Even if text is empty (musical pause), include it so highlight clears properly
       result.push({
         time: Math.max(0, timeInSeconds),
-        timestamp_ms: Math.max(0, timestamp_ms),
         text: decodeHtmlEntities(text),
       });
     } else {
@@ -245,89 +243,7 @@ async function fetchFromJioSaavn(title: string, artist: string): Promise<Lyrics 
 }
 
 /**
- * Tier 3: Paxsenix Synced & Plain Lyrics API
- */
-async function fetchFromPaxsenix(title: string, artist: string): Promise<Lyrics | null> {
-  const { cleanTitle, primaryArtist } = cleanLyricsQuery(title, artist);
-  const queries = [
-    `${cleanTitle} ${primaryArtist}`,
-    cleanTitle,
-  ];
-
-  for (const q of queries) {
-    try {
-      const url = `https://api.paxsenix.biz.id/lyrics/search?q=${encodeURIComponent(q)}`;
-      const data = await universalGet(url);
-      if (data?.ok && data?.lyrics) {
-        const raw = data.lyrics;
-        const isLrc = /\[\d{2}:\d{2}/.test(raw);
-        if (isLrc) {
-          const lines = parseLrc(raw);
-          if (lines.length > 0) {
-            return {
-              songId: `${artist}_${title}`,
-              lines,
-              synced: true,
-              source: 'paxsenix (synced)',
-            };
-          }
-        } else {
-          const lines = raw
-            .split('\n')
-            .map((l: string) => l.trim())
-            .filter((l: string) => l.length > 0)
-            .map((text: string) => ({ text: decodeHtmlEntities(text) }));
-          if (lines.length > 0) {
-            return {
-              songId: `${artist}_${title}`,
-              lines,
-              synced: false,
-              source: 'paxsenix (plain)',
-            };
-          }
-        }
-      }
-    } catch {}
-  }
-  return null;
-}
-
-/**
- * Tier 4: KuGou Synced Lyrics API
- */
-async function fetchFromKuGou(title: string, artist: string, duration?: number): Promise<Lyrics | null> {
-  const { cleanTitle, primaryArtist } = cleanLyricsQuery(title, artist);
-  try {
-    const durMs = duration && duration > 0 ? Math.round(duration * 1000) : 0;
-    const searchUrl = `http://krcs.kugou.com/search?ver=1&man=yes&client=mobi&keyword=${encodeURIComponent(`${cleanTitle} ${primaryArtist}`)}&duration=${durMs}&hash=`;
-    const searchData = await universalGet(searchUrl);
-    const candidates = searchData?.candidates || [];
-    if (Array.isArray(candidates) && candidates.length > 0) {
-      const top = candidates[0];
-      if (top.id && top.accesskey) {
-        const downloadUrl = `http://krcs.kugou.com/download?ver=1&client=mobi&id=${top.id}&accesskey=${top.accesskey}&fmt=lrc&charset=utf8`;
-        const downloadData = await universalGet(downloadUrl);
-        if (downloadData?.content) {
-          // Decode Base64 LRC content
-          const decoded = atob(downloadData.content);
-          const lines = parseLrc(decoded);
-          if (lines.length > 0) {
-            return {
-              songId: `${artist}_${title}`,
-              lines,
-              synced: true,
-              source: 'kugou (synced)',
-            };
-          }
-        }
-      }
-    }
-  } catch {}
-  return null;
-}
-
-/**
- * Tier 5: Lyrics.ovh Plain Text API (via universalGet)
+ * Tier 3: Lyrics.ovh Plain Text API (via universalGet)
  */
 async function fetchFromLyricsOvh(title: string, artist: string): Promise<Lyrics | null> {
   const { cleanTitle, primaryArtist } = cleanLyricsQuery(title, artist);
@@ -357,7 +273,6 @@ async function fetchFromLyricsOvh(title: string, artist: string): Promise<Lyrics
 
 /**
  * Primary lyrics getter with multi-tiered resolution, caching & synced time tagging.
- * Tiers: LRCLIB -> Paxsenix -> KuGou -> JioSaavn -> Lyrics.ovh
  */
 export async function getLyrics(
   artist: string,
@@ -380,25 +295,7 @@ export async function getLyrics(
     }
   } catch {}
 
-  // 2. Try Paxsenix Synced API
-  try {
-    const pax = await fetchFromPaxsenix(title, artist);
-    if (pax && pax.lines.length > 0) {
-      lyricsCache.set(cacheKey, pax);
-      return pax;
-    }
-  } catch {}
-
-  // 3. Try KuGou Synced LRC Engine
-  try {
-    const kugou = await fetchFromKuGou(title, artist, duration);
-    if (kugou && kugou.lines.length > 0) {
-      lyricsCache.set(cacheKey, kugou);
-      return kugou;
-    }
-  } catch {}
-
-  // 4. Try JioSaavn Official Lyrics
+  // 2. Try JioSaavn Official Lyrics
   try {
     const saavn = await fetchFromJioSaavn(title, artist);
     if (saavn && saavn.lines.length > 0) {
@@ -407,7 +304,7 @@ export async function getLyrics(
     }
   } catch {}
 
-  // 5. Try Lyrics.ovh Plain Text API
+  // 3. Try Lyrics.ovh Plain Text API
   try {
     const ovh = await fetchFromLyricsOvh(title, artist);
     if (ovh && ovh.lines.length > 0) {

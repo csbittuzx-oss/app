@@ -1,6 +1,7 @@
 import type { Album } from '../../data/models';
 import { useApp } from '../../state/AppContext';
 import { CONFIG } from '../../config';
+import { resizeImageUrl } from '../../core/utils/imageUtils';
 
 interface AlbumCardProps {
   album: Album;
@@ -28,7 +29,7 @@ export function AlbumCard({ album, size = 144, onClick }: AlbumCardProps) {
     >
       <div style={{ position: 'relative' }}>
         <img
-          src={album.artwork}
+          src={resizeImageUrl(album.artwork, 544, 544)}
           alt={`${album.title} album cover`}
           width={size}
           height={size}

@@ -11,11 +11,8 @@
 //  Falls back automatically to high-precision keyword search.
 // ═══════════════════════════════════════════
 
-import type { SearchResult, Song } from '../../data/models';
-import { searchJioSaavn } from '../../data/api/saavnApi';
-import { searchYouTubeMusic } from '../../data/api/youtubeMusicApi';
-import { aiTasteProfileEngine } from './AITasteProfileEngine';
-import { deduplicateSongs } from '../../data/repository/musicRepository';
+import type { SearchResult } from '../../data/models';
+import { onlineSearchViewModel } from '../../services/OnlineSearchViewModel';
 
 export interface AISmartSearchIntent {
   isNaturalLanguage: boolean;
@@ -163,58 +160,32 @@ export function parseSearchIntent(rawQuery: string): AISmartSearchIntent {
 
 class AISmartSearchEngineService {
   /**
-   * Executes AI-Powered natural language or keyword music search.
+   * Executes AI-Powered natural language or keyword music search with Spotify-grade exact matching.
    */
   async executeSearch(query: string, limit = 25): Promise<{ result: SearchResult; intent: AISmartSearchIntent }> {
-    const intent = parseSearchIntent(query);
-    const searchQuery = intent.isNaturalLanguage ? intent.expandedQuery : query;
+    const cleanQuery = query.trim();
+    const intent = parseSearchIntent(cleanQuery);
+    const searchQuery = intent.isNaturalLanguage ? intent.expandedQuery : cleanQuery;
 
     try {
-      // 1. Query JioSaavn
-      const saavnResult = await searchJioSaavn(searchQuery, limit);
-
-      // 2. Query YouTube Music for additional richness if natural language
-      let ytSongs: Song[] = [];
-      if (intent.isNaturalLanguage) {
-        try {
-          const ytResult = await searchYouTubeMusic(searchQuery, 10);
-          ytSongs = ytResult.songs || [];
-        } catch {}
-      }
-
-      // 3. Merge and deduplicate
-      const combinedSongs = deduplicateSongs([...saavnResult.songs, ...ytSongs]);
-
-      // 4. Rank with AI Taste profile
-      const tasteProfile = aiTasteProfileEngine.getProfile();
-      const rankedSongs = combinedSongs.sort((a, b) => {
-        const artistA = (a.artist || '').toLowerCase();
-        const artistB = (b.artist || '').toLowerCase();
-        const affinityA = Object.entries(tasteProfile.topArtists).find(([k]) => artistA.includes(k))?.[1]?.score || 0;
-        const affinityB = Object.entries(tasteProfile.topArtists).find(([k]) => artistB.includes(k))?.[1]?.score || 0;
-        return affinityB - affinityA;
-      });
-
+      const searchResult = await onlineSearchViewModel.search(searchQuery, limit);
       return {
         result: {
-          query: searchQuery,
-          songs: rankedSongs.slice(0, limit),
-          artists: saavnResult.artists || [],
-          albums: saavnResult.albums || [],
-          total: rankedSongs.length,
+          ...searchResult,
+          query: cleanQuery,
         },
         intent,
       };
     } catch {
-      // Fallback: direct keyword search
-      const fallbackResult = await searchJioSaavn(query, limit);
       return {
-        result: fallbackResult,
-        intent: {
-          isNaturalLanguage: false,
-          intentType: 'direct',
-          expandedQuery: query,
+        result: {
+          songs: [],
+          artists: [],
+          albums: [],
+          query: cleanQuery,
+          total: 0,
         },
+        intent,
       };
     }
   }

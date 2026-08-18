@@ -5,6 +5,7 @@ import { sleepTimerService, type SleepTimerState } from '../../services/SleepTim
 import { formatDuration } from '../../core/utils';
 import { showToast } from '../../core/utils/toast';
 import { CONFIG } from '../../config';
+import { resizeImageUrl } from '../../core/utils/imageUtils';
 
 interface NowPlayingMenuSheetProps {
   onClose: () => void;
@@ -125,7 +126,7 @@ export function NowPlayingMenuSheet({ onClose }: NowPlayingMenuSheetProps) {
           borderBottom: '1px solid var(--color-border)',
         }}>
           <img
-            src={currentSong.artwork}
+            src={resizeImageUrl(currentSong.artworkLg || currentSong.artwork, 544, 544)}
             alt={`${currentSong.title} artwork`}
             style={{
               width: 52,

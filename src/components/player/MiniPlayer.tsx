@@ -1,5 +1,6 @@
 import { usePlayer } from '../../state/PlayerContext';
 import { CONFIG } from '../../config';
+import { resizeImageUrl } from '../../core/utils/imageUtils';
 
 export function MiniPlayer() {
   const { state, togglePlay, next, openFullPlayer } = usePlayer();
@@ -45,7 +46,7 @@ export function MiniPlayer() {
 
       {/* Artwork */}
       <img
-        src={currentSong.artwork}
+        src={resizeImageUrl(currentSong.artworkLg || currentSong.artwork, 544, 544)}
         alt={`${currentSong.album} artwork`}
         width={44}
         height={44}

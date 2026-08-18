@@ -1,6 +1,7 @@
 import type { Artist } from '../../data/models';
 import { useApp } from '../../state/AppContext';
 import { getArtistProfileImageSync, getArtistAvatarPlaceholder } from '../../services/ArtistProfileService';
+import { resizeImageUrl } from '../../core/utils/imageUtils';
 
 interface ArtistCardProps {
   artist: Artist;
@@ -17,7 +18,8 @@ export function ArtistCard({ artist, size = 80, onClick }: ArtistCardProps) {
   };
 
   const isFollowed = isFavoriteArtist(artist.id);
-  const photoUrl = artist.profileImage || artist.image || getArtistProfileImageSync(artist.name);
+  const rawPhotoUrl = artist.profileImage || artist.image || getArtistProfileImageSync(artist.name);
+  const photoUrl = resizeImageUrl(rawPhotoUrl, 544, 544);
 
   return (
     <div

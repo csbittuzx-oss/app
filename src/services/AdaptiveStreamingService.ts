@@ -232,10 +232,10 @@ class AdaptiveStreamingService {
    * Used internally; AudioPlayer still controls quality overrides.
    */
   adaptiveQuality(preferredQuality: AudioQuality): AudioQuality {
+    if (preferredQuality === 'high') return 'high';
     const { tier } = this._networkCondition;
     if (preferredQuality === 'low') return 'low';
     if (tier === '2g') return 'low';
-    if (tier === '3g' && preferredQuality === 'high') return 'medium';
     return preferredQuality;
   }
 

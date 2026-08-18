@@ -8,6 +8,7 @@ import { SkeletonList } from '../components/shared/SkeletonCard';
 import { ErrorState } from '../components/shared/ErrorState';
 import { formatDuration } from '../core/utils';
 import { CONFIG } from '../config';
+import { resizeImageUrl } from '../core/utils/imageUtils';
 
 export function AlbumScreen() {
   const { nav: { nav, goBack } } = useApp();
@@ -21,7 +22,8 @@ export function AlbumScreen() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(false);
 
-  const artwork = tracks[0]?.artwork || CONFIG.ARTWORK_PLACEHOLDER;
+  const rawArtwork = tracks[0]?.artworkLg || tracks[0]?.artwork;
+  const artwork = resizeImageUrl(rawArtwork, 1200, 1200) || CONFIG.ARTWORK_PLACEHOLDER;
   const totalDuration = tracks.reduce((sum, s) => sum + s.duration, 0);
   const year = tracks[0]?.year;
 

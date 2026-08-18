@@ -6,6 +6,7 @@ import { formatDuration } from '../../core/utils';
 import { CONFIG } from '../../config';
 import { showToast } from '../../core/utils/toast';
 import { SongOptionsBottomSheet } from '../shared/SongOptionsBottomSheet';
+import { resizeImageUrl } from '../../core/utils/imageUtils';
 
 interface SongCardProps {
   song: Song;
@@ -337,7 +338,7 @@ export function SongCard({
         {/* Artwork */}
         <div style={{ position: 'relative', flexShrink: 0 }}>
           <img
-            src={song.artwork}
+            src={resizeImageUrl(song.artworkLg || song.artwork, 544, 544)}
             alt={`${song.album} artwork`}
             width={compact ? 44 : 52}
             height={compact ? 44 : 52}
@@ -465,7 +466,7 @@ export function SongSquareCard({ song, queue, index = 0, size = 144 }: AlbumStyl
     >
       <div style={{ position: 'relative' }}>
         <img
-          src={song.artwork}
+          src={resizeImageUrl(song.artworkLg || song.artwork, 544, 544)}
           alt={`${song.album} artwork`}
           width={size}
           height={size}

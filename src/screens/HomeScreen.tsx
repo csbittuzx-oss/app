@@ -7,8 +7,10 @@ import {
   getPersonalizedNewReleases,
   getPersonalizedTracksByLanguage,
   getPersonalizedArtists,
+  deduplicateSongs,
   LANGUAGE_METADATA,
 } from '../data/repository/musicRepository';
+import { formatMediaUrlWithQuality } from '../data/api/saavnApi';
 import {
   generateSpotifyStyleShelves,
   getCachedShelves,
@@ -25,6 +27,7 @@ import { ErrorState } from '../components/shared/ErrorState';
 import { getGreeting } from '../core/utils';
 import { filterSpotifyAvailableTracksSync } from '../services/SpotifyAvailabilityService';
 import { CONFIG } from '../config';
+import { resizeImageUrl } from '../core/utils/imageUtils';
 
 interface Section {
   id: string;
@@ -37,7 +40,21 @@ interface Section {
 }
 
 const HOME_CACHE_KEY = 'sw_home_sections_cache';
+const HOME_CACHE_DATE_KEY = 'sw_home_cache_date';
 const ARTISTS_CACHE_KEY = 'sw_home_artists_cache';
+
+export function getTodayDateKey(): string {
+  return new Date().toISOString().slice(0, 10); // 'YYYY-MM-DD'
+}
+
+export function isDailyCacheFresh(): boolean {
+  try {
+    const savedDate = localStorage.getItem(HOME_CACHE_DATE_KEY);
+    return savedDate === getTodayDateKey();
+  } catch {
+    return false;
+  }
+}
 
 // Persistent memory of Home Screen scroll position across component re-mounts and screen switches
 let persistentHomeScrollTop = 0;
@@ -152,8 +169,28 @@ export function HomeScreen({ isVisible = true }: { isVisible?: boolean }) {
 
   const loadFeed = useCallback((forceRefresh = false) => {
     const isOffline = !navigator.onLine;
+    const isFreshToday = isDailyCacheFresh();
 
-    // If offline, maintain the exact existing cached content without reloading skeletons
+    // 1. If daily cache is fresh and not a forced refresh, keep existing content without reloading skeletons
+    if (!forceRefresh && isFreshToday) {
+      const cached = getCachedSections(languages);
+      if (cached && cached.length > 0) {
+        setSections(cached);
+      }
+      const cachedShelves = getCachedShelves(languages);
+      if (cachedShelves && cachedShelves.length > 0) {
+        setShelves(cachedShelves);
+        setShelvesLoading(false);
+      }
+      const cachedArts = getCachedArtists();
+      if (cachedArts) {
+        setTopArtists(cachedArts);
+        setArtistsLoading(false);
+      }
+      return;
+    }
+
+    // 2. If offline, maintain the exact existing cached content without reloading skeletons
     if (isOffline && !forceRefresh) {
       const cached = getCachedSections(languages);
       if (cached && cached.length > 0) {
@@ -203,9 +240,15 @@ export function HomeScreen({ isVisible = true }: { isVisible?: boolean }) {
     function loadSection(id: string, fetcher: () => Promise<Song[]>) {
       fetcher()
         .then((songs) => {
+          // Strictly deduplicate by track ID & ensure true 320kbps High Quality stream
+          const sanitizedSongs = deduplicateSongs(songs).map((s) => ({
+            ...s,
+            previewUrl: formatMediaUrlWithQuality(s.previewUrl, 'high'),
+          }));
+
           setSections((prev) => {
-            const next = prev.map((s) => (s.id === id ? { ...s, songs, loading: false } : s));
-            // Cache populated sections for offline resilience
+            const next = prev.map((s) => (s.id === id ? { ...s, songs: sanitizedSongs, loading: false } : s));
+            // Cache populated sections for 24-hour daily cache
             try {
               const allowedIds = new Set([
                 'made_for_you',
@@ -218,6 +261,7 @@ export function HomeScreen({ isVisible = true }: { isVisible?: boolean }) {
               const withData = next.filter((s) => allowedIds.has(s.id) && s.songs && s.songs.length > 0);
               if (withData.length > 0) {
                 localStorage.setItem(HOME_CACHE_KEY, JSON.stringify(withData));
+                localStorage.setItem(HOME_CACHE_DATE_KEY, getTodayDateKey());
               }
             } catch {}
             return next;
@@ -234,7 +278,7 @@ export function HomeScreen({ isVisible = true }: { isVisible?: boolean }) {
       favorites: appState.favorites,
     }));
 
-    // 2. Trending Now
+    // 2. Trending Now (Strict Daily AI Ranking of verified chart trends)
     loadSection('trending', () => getPersonalizedTrending(languages, 16));
 
     // 3. Recommend for You (Personalized from listening history)
@@ -268,7 +312,10 @@ export function HomeScreen({ isVisible = true }: { isVisible?: boolean }) {
                 title: d.title,
                 subtitle: d.subtitle,
                 badge: d.badge,
-                songs: d.songs,
+                songs: deduplicateSongs(d.songs).map((s) => ({
+                  ...s,
+                  previewUrl: formatMediaUrlWithQuality(s.previewUrl, 'high'),
+                })),
                 loading: false,
                 error: false,
               }));
@@ -276,6 +323,7 @@ export function HomeScreen({ isVisible = true }: { isVisible?: boolean }) {
               const updated = [...prev, ...newEntries];
               try {
                 localStorage.setItem(HOME_CACHE_KEY, JSON.stringify(updated));
+                localStorage.setItem(HOME_CACHE_DATE_KEY, getTodayDateKey());
               } catch {}
               return updated;
             }
@@ -285,7 +333,7 @@ export function HomeScreen({ isVisible = true }: { isVisible?: boolean }) {
       }).catch(() => {});
     }
 
-    // 4. Spotify-Style Curated Playlist Shelves (Personalized)
+    // 8. Spotify-Style Curated Playlist Shelves (Personalized)
     setShelvesLoading(true);
     generateSpotifyStyleShelves({
       languages,
@@ -306,7 +354,7 @@ export function HomeScreen({ isVisible = true }: { isVisible?: boolean }) {
         setShelvesLoading(false);
       });
 
-    // 5. Personalized Artists
+    // 9. Personalized Artists
     if (!isOffline || forceRefresh) {
       setArtistsLoading(true);
       getPersonalizedArtists(languages, 12)
@@ -319,7 +367,7 @@ export function HomeScreen({ isVisible = true }: { isVisible?: boolean }) {
         .catch(() => {})
         .finally(() => setArtistsLoading(false));
     }
-  }, [languages.join(','), userTopArtists.join(','), appState.favorites.length, appState.recentlyPlayed.length]);
+  }, [languages.join(','), userTopArtists.join(',')]);
 
   useEffect(() => {
     loadFeed();
@@ -456,7 +504,7 @@ export function HomeScreen({ isVisible = true }: { isVisible?: boolean }) {
                 aria-label={`Play ${song.title}`}
               >
                 <img
-                  src={song.artwork}
+                  src={resizeImageUrl(song.artworkLg || song.artwork, 544, 544)}
                   alt="" width={36} height={36}
                   loading="lazy"
                   onError={(e) => { (e.target as HTMLImageElement).src = CONFIG.ARTWORK_PLACEHOLDER; }}

@@ -7,6 +7,7 @@ import type { Lyrics } from '../../data/models';
 import { formatDuration } from '../../core/utils';
 import { CONFIG } from '../../config';
 import { extractArtworkTheme, DEFAULT_DARK_ARTWORK_THEME, type ExtractedArtworkTheme } from '../../core/utils/colorExtractor';
+import { resizeImageUrl } from '../../core/utils/imageUtils';
 
 // ─── SVG Icons ────────────────────────────────────────────────────────────────
 
@@ -434,7 +435,7 @@ export function FullPlayer() {
               >
                 <img
                   key={currentSong.id}
-                  src={currentSong.artworkLg || currentSong.artwork}
+                  src={resizeImageUrl(currentSong.artworkLg || currentSong.artwork, 1200, 1200)}
                   alt={`${currentSong.album} artwork`}
                   loading="eager"
                   onError={(e) => { (e.target as HTMLImageElement).src = CONFIG.ARTWORK_PLACEHOLDER; }}

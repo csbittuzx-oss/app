@@ -25,7 +25,7 @@ export function SpotifyImportModal({ isOpen, onClose }: SpotifyImportModalProps)
   const handleImport = async (targetUrl?: string) => {
     const link = targetUrl || urlInput;
     if (!link.trim()) {
-      setErrorMessage('Please enter a Spotify or YouTube playlist link.');
+      setErrorMessage('Please enter a Spotify playlist URL or ID.');
       return;
     }
 
@@ -33,41 +33,15 @@ export function SpotifyImportModal({ isOpen, onClose }: SpotifyImportModalProps)
     setErrorMessage(null);
 
     try {
-      const trimmed = link.trim();
-      // Check if YouTube playlist link
-      if (trimmed.includes('youtube.com') || trimmed.includes('youtu.be') || trimmed.includes('list=')) {
-        const { importYouTubePlaylist } = await import('../../data/api/youtubeMusicApi');
-        const ytPlaylist = await importYouTubePlaylist(trimmed);
-        if (ytPlaylist && ytPlaylist.tracks.length > 0) {
-          const newPlaylist = {
-            id: `yt_pl_${Date.now()}`,
-            title: ytPlaylist.title,
-            artwork: ytPlaylist.artwork,
-            creator: 'YouTube Import',
-            tracks: ytPlaylist.tracks,
-            isUserCreated: true,
-            totalDuration: ytPlaylist.tracks.reduce((s, t) => s + t.duration, 0),
-          };
-          dispatch({ type: 'IMPORT_PLAYLIST', payload: newPlaylist });
-          setUrlInput('');
-          onClose();
-          navigate('playlist', { playlistId: newPlaylist.id });
-          return;
-        } else {
-          throw new Error('Could not load YouTube playlist. Make sure the playlist is public.');
-        }
-      }
-
-      // Default to Spotify import
-      const imported = await importSpotifyPlaylist(trimmed);
+      const imported = await importSpotifyPlaylist(link.trim());
       dispatch({ type: 'IMPORT_PLAYLIST', payload: imported });
       setUrlInput('');
       onClose();
       // Directly navigate to the newly imported playlist
       navigate('playlist', { playlistId: imported.id });
     } catch (err: any) {
-      console.error('Playlist import failed:', err);
-      setErrorMessage(err?.message || 'Failed to import playlist. Make sure the playlist is public.');
+      console.error('Spotify import failed:', err);
+      setErrorMessage(err?.message || 'Failed to import Spotify playlist. Make sure the playlist is public.');
     } finally {
       setIsLoading(false);
     }

@@ -5,9 +5,9 @@
 
 import type { Song, Artist, Album, SearchResult } from '../models';
 import { searchYouTubeMusic, getYouTubeMusicTrending } from '../api/youtubeMusicApi';
-import { searchJioSaavn, getJioSaavnTrending } from '../api/saavnApi';
+import { searchJioSaavn, getJioSaavnTrending, formatMediaUrlWithQuality } from '../api/saavnApi';
 import { searchItunes, getItunesAlbumTracks, getItunesTopCharts, searchItunesArtist } from '../api/itunesApi';
-import { searchJamendo, getJamendoFeatured, getJamendoNewReleases, getJamendoByGenre, getJamendoAlbumTracks } from '../api/jamendoApi';
+import { getJamendoFeatured, getJamendoNewReleases, getJamendoByGenre, getJamendoAlbumTracks } from '../api/jamendoApi';
 import { getLastfmArtist, getSimilarArtists, getLastfmTopArtists } from '../api/lastfmApi';
 import { filterSpotifyAvailableTracks } from '../../services/SpotifyAvailabilityService';
 import { getArtistProfileImage } from '../../services/ArtistProfileService';
@@ -29,43 +29,283 @@ function setCache<T>(key: string, data: T): void {
   cache.set(key, { data, ts: Date.now() });
 }
 
-// ─── Search ──────────────────────────────────────────────────────────────────
+/**
+ * Normalizes string for precision text matching (strips diacritics, punctuation, extra spaces).
+ */
+export function normalizeSearchString(str: string): string {
+  if (!str) return '';
+  return str
+    .toLowerCase()
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '')
+    .replace(/[^\p{L}\p{N}\s]/gu, ' ')
+    .replace(/\s+/g, ' ')
+    .trim();
+}
+
+/**
+ * Extracts clean core title without movie/soundtrack tags like (From "Movie"), [Official Audio], etc.
+ */
+export function extractCoreTitle(title: string): string {
+  if (!title) return '';
+  return title
+    .replace(/\(.*?\)|\[.*?\]/g, '')
+    .replace(/[-–—]\s*(from|official|theme|soundtrack|audio|video|lyric|remix|lofi|slowed).*/i, '')
+    .trim();
+}
+
+/**
+ * Detects whether a track is a remix, cover, lofi, slowed, reverb, mashup, AI-generated, fan upload, etc.
+ */
+const ALTERNATE_VERSION_REGEX = /\b(remix|re-?mix|lofi|lo-?fi|slowed|reverb|slowed\s*\+\s*reverb|cover|mashup|rendition|parody|acoustic\s+version|instrumental|karaoke|tribute|tribute\s+to|dialogue|speech|bgm|ringtone|sped\s+up|speed\s+up|nightcore|bass\s+boost(?:ed)?|dj\s+mix|live\s+(?:at|version)|fan\s+made|fan\s+cover|ai\s+(?:version|cover|remake)|unofficial|recreation|reprise|regeneration|remake|hindi\s+version|dubbed|translated)\b/i;
+
+export function isAlternateVersion(str: string): boolean {
+  return ALTERNATE_VERSION_REGEX.test(str || '');
+}
+
+/**
+ * Returns a TIER for the song's match type against the query.
+ * Tier 1 (highest) = exact canonical title match. Tier 2 = close match. Etc.
+ * The tier ensures exact title matches ALWAYS rank above everything else,
+ * regardless of popularity, play count, or any other signal.
+ */
+export function getSearchMatchTier(song: Song, rawQuery: string): number {
+  const query = normalizeSearchString(rawQuery);
+  if (!query) return 5;
+
+  const fullTitle = normalizeSearchString(song.title || '');
+  const coreTitle = normalizeSearchString(extractCoreTitle(song.title || ''));
+  const userAskedForAlternate = ALTERNATE_VERSION_REGEX.test(query);
+  const songIsAlternate = !userAskedForAlternate &&
+    (isAlternateVersion(song.title || '') || isAlternateVersion(song.album || ''));
+
+  // Tier 1: Exact canonical match (e.g. full title = query AND not an alternate version)
+  if ((fullTitle === query || coreTitle === query) && !songIsAlternate) return 1;
+
+  // Tier 2: Exact canonical match that happens to be an alternate (user searched exact alternate name)
+  if (fullTitle === query || coreTitle === query) return 2;
+
+  // Tier 3: Title starts with query and is original (e.g. query = "Kaly" → "Kalyani")
+  if ((fullTitle.startsWith(query) || coreTitle.startsWith(query)) && !songIsAlternate) return 3;
+
+  // Tier 4: Title contains query (partial match, still original)
+  if ((fullTitle.includes(query) || coreTitle.includes(query)) && !songIsAlternate) return 4;
+
+  // Tier 5: Title contains query but is an alternate version (remix/cover/slowed etc.)
+  if (fullTitle.includes(query) || coreTitle.includes(query)) return 5;
+
+  // Tier 6: No title match (artist/album only)
+  return 6;
+}
+
+/**
+ * Returns an audio quality score for source selection.
+ * Higher tier = better quality audio stream.
+ */
+export function getAudioSourceQualityTier(song: Song): number {
+  if (!song || !song.previewUrl) return 0;
+  // Tier 1: JioSaavn full 320kbps master audio
+  if (song.provider === 'saavn' && !song.previewUrl.includes('preview')) return 100;
+  // Tier 2: YouTube Music full track stream
+  if (song.provider === 'youtube') return 85;
+  // Tier 3: Verified official audio with full duration (> 60s)
+  if (song.duration && song.duration > 60) return 70;
+  // Tier 4: Promotional 30s preview
+  return 30;
+}
+
+/**
+ * Computes a composite search score for a song against a user query.
+ *
+ * ARCHITECTURE: Two-level comparator.
+ * Level 1 — MATCH TIER (absolute priority, always decides first):
+ *   Tier 1: exact canonical title, not an alternate version  → always beats everything
+ *   Tier 2: exact title that is an alternate version
+ *   Tier 3: title starts-with query, original track
+ *   Tier 4: title contains query, original track
+ *   Tier 5: title contains query, alternate version
+ *   Tier 6: no title match (artist/album only)
+ *
+ * Level 2 — SUB-SCORE (tiebreaker within the same tier):
+ *   Popularity/play count, audio quality, artist match, word coverage.
+ *   Sub-score is capped at 999 so it CANNOT promote a song across tiers.
+ *
+ * This guarantees: "KALYANI" original always ranks above
+ *   any remix/cover/slowed regardless of its popularity or play count.
+ */
+export function calculateSearchRelevance(song: Song, rawQuery: string): number {
+  if (!song || !rawQuery) return 0;
+
+  const query = normalizeSearchString(rawQuery);
+  if (!query) return 0;
+
+  // --- Level 1: Tier (multiplied by 10000 to dominate sub-score) ---
+  const tier = getSearchMatchTier(song, rawQuery);
+  // tier 1 → base 60000, tier 2 → 50000, …, tier 6 → 10000
+  const tierBase = (7 - tier) * 10000;
+
+  // --- Level 2: Sub-score (tiebreaker, max 999) ---
+  const fullTitle = normalizeSearchString(song.title || '');
+  const coreTitle = normalizeSearchString(extractCoreTitle(song.title || ''));
+  const artist = normalizeSearchString(song.artist || '');
+  const album = normalizeSearchString(song.album || '');
+  const queryWords = query.split(' ').filter(Boolean);
+  const userAskedForAlternate = ALTERNATE_VERSION_REGEX.test(query);
+  const songIsAlternate = isAlternateVersion(song.title || '') || isAlternateVersion(song.album || '');
+
+  let sub = 0;
+
+  // A. Title precision within tier
+  if (fullTitle === query || coreTitle === query) sub += 200;
+  else if (fullTitle.startsWith(query) || coreTitle.startsWith(query)) sub += 150;
+  else if (fullTitle.includes(query) || coreTitle.includes(query)) sub += 80;
+
+  // B. Artist match
+  if (artist === query) sub += 120;
+  else if (artist.startsWith(query)) sub += 80;
+  else if (artist.includes(query)) sub += 40;
+
+  // C. Word coverage
+  let matchedWords = 0;
+  for (const word of queryWords) {
+    if (word.length < 2) continue;
+    if (coreTitle.includes(word) || fullTitle.includes(word)) { sub += 15; matchedWords++; }
+    else if (artist.includes(word)) { sub += 8; matchedWords++; }
+    else if (album.includes(word)) { sub += 4; matchedWords++; }
+  }
+  if (queryWords.length > 1 && matchedWords === queryWords.length) sub += 30;
+
+  // D. Audio quality bonus (capped at 45 pts)
+  sub += Math.min(45, Math.round(getAudioSourceQualityTier(song) * 0.45));
+
+  // E. Play count / popularity (tiebreaker within same tier, capped at 180 pts)
+  if (song.playCount && song.playCount > 0) {
+    if (song.playCount >= 100_000_000) sub += 180;
+    else if (song.playCount >= 25_000_000) sub += 140;
+    else if (song.playCount >= 5_000_000) sub += 110;
+    else if (song.playCount >= 1_000_000) sub += 80;
+    else if (song.playCount >= 200_000) sub += 50;
+    else if (song.playCount >= 20_000) sub += 25;
+    else sub += 10;
+  } else if (song.popularity) {
+    sub += Math.min(120, Math.round(song.popularity * 1.2));
+  }
+
+  // F. Original track bonus within tier
+  if (!userAskedForAlternate) {
+    if (!songIsAlternate) sub += 60;  // original gets a small boost
+    // (alternate already demoted to higher tier number, penalty not needed here)
+  }
+
+  // G. Junk content penalty
+  if (/\b(dialogue|speech|audio\s+teaser|trailer|ringtone|sound\s+effects)\b/i.test(song.title || '')) {
+    sub = Math.max(0, sub - 300);
+  }
+
+  // Clamp sub-score to [0, 999] so it never crosses tier boundaries
+  const clampedSub = Math.min(999, Math.max(0, sub));
+
+  return tierBase + clampedSub;
+}
+
+/**
+ * Multi-source deduplication that merges identical recordings into a single high-definition entry.
+ * Strictly applies Audio Quality Ranking BEFORE popularity when choosing between duplicate sources.
+ */
+export function mergeAndDeduplicateSearchResults(songs: Song[]): Song[] {
+  if (!Array.isArray(songs) || songs.length === 0) return [];
+
+  const map = new Map<string, Song>();
+
+  for (const s of songs) {
+    if (!s) continue;
+
+    const coreTitle = normalizeSearchString(extractCoreTitle(s.title || ''));
+    const primaryArtist = normalizeSearchString((s.artist || '').split(/[,&/|+]|\bfeat\b|\bft\b/i)[0] || '');
+    const isAlt = isAlternateVersion(s.title || '');
+
+    // Canonical key pairs core title and primary artist
+    const canonicalKey = `${primaryArtist}::${coreTitle}::${isAlt ? s.title.toLowerCase() : 'original'}`;
+
+    const existing = map.get(canonicalKey);
+    if (!existing) {
+      map.set(canonicalKey, {
+        ...s,
+        previewUrl: formatMediaUrlWithQuality(s.previewUrl, 'high'),
+      });
+    } else {
+      const existingTier = getAudioSourceQualityTier(existing);
+      const currentTier = getAudioSourceQualityTier(s);
+
+      // Quality ranking is applied before popularity: prefer highest legitimate audio quality source
+      const chosenSource = currentTier > existingTier ? s : existing;
+      const otherSource = currentTier > existingTier ? existing : s;
+
+      const betterPreviewUrl = chosenSource.previewUrl || otherSource.previewUrl;
+      const betterArtwork = (chosenSource.artworkLg && !chosenSource.artworkLg.includes('placeholder'))
+        ? chosenSource.artworkLg
+        : (otherSource.artworkLg || chosenSource.artwork);
+      const betterDuration = Math.max(chosenSource.duration || 0, otherSource.duration || 0);
+      const higherPlayCount = Math.max(chosenSource.playCount || 0, otherSource.playCount || 0) || undefined;
+      const higherPopularity = Math.max(chosenSource.popularity || 0, otherSource.popularity || 0) || undefined;
+
+      map.set(canonicalKey, {
+        ...chosenSource,
+        previewUrl: formatMediaUrlWithQuality(betterPreviewUrl, 'high'),
+        artworkLg: betterArtwork,
+        duration: betterDuration,
+        playCount: higherPlayCount,
+        popularity: higherPopularity,
+      });
+    }
+  }
+
+  return Array.from(map.values());
+}
 
 export async function searchMusic(query: string, limit = 20): Promise<SearchResult> {
-  const cacheKey = `search_${query}_${limit}`;
+  const cleanQuery = query.trim();
+  const cacheKey = `search_${cleanQuery}_${limit}`;
   const cached = fromCache<SearchResult>(cacheKey);
   if (cached) return cached;
 
-  const hasJamendo = Boolean(CONFIG.JAMENDO_CLIENT_ID);
-  
-  // Run JioSaavn (320kbps official label releases), iTunes (official), and YouTube Music in parallel
-  const [saavnResult, itunesResult, ytResult, jamendoResult] = await Promise.allSettled([
-    searchJioSaavn(query, limit + 10),
-    searchItunes(query, limit + 5),
-    searchYouTubeMusic(query, limit + 5),
-    hasJamendo ? searchJamendo(query, limit) : Promise.resolve({ songs: [], artists: [], albums: [] }),
+  // Run YouTube Music (InnerTube ML ranker + view counts), JioSaavn (320kbps master), and iTunes (official) in parallel
+  const [ytResult, saavnResult, itunesResult] = await Promise.allSettled([
+    searchYouTubeMusic(cleanQuery, limit + 10),
+    searchJioSaavn(cleanQuery, limit + 10),
+    searchItunes(cleanQuery, limit + 8),
   ]);
 
+  const yt = ytResult.status === 'fulfilled' ? ytResult.value : { songs: [], artists: [], albums: [] };
   const saavn = saavnResult.status === 'fulfilled' ? saavnResult.value : { songs: [], artists: [], albums: [] };
   const itunes = itunesResult.status === 'fulfilled' ? itunesResult.value : { songs: [], artists: [], albums: [] };
-  const yt = ytResult.status === 'fulfilled' ? ytResult.value : { songs: [], artists: [], albums: [] };
-  const jamendo = jamendoResult.status === 'fulfilled' ? jamendoResult.value : { songs: [], artists: [], albums: [] };
 
-  // Prioritize verified official label releases: JioSaavn -> iTunes -> Verified YouTube Music -> Jamendo
-  const candidateSongs = deduplicateSongs([...saavn.songs, ...itunes.songs, ...yt.songs, ...jamendo.songs]);
+  // 1. Merge and deduplicate identical recordings across official sources
+  const mergedSongs = mergeAndDeduplicateSearchResults([
+    ...yt.songs,
+    ...saavn.songs,
+    ...itunes.songs,
+  ]);
   
-  // Strictly filter for Spotify & official catalog availability (discards bootlegs/unverified uploads)
-  const verifiedSongs = await filterSpotifyAvailableTracks(candidateSongs);
-  const allSongs = verifiedSongs.slice(0, limit * 2);
+  // 2. Filter for catalog availability
+  const verifiedSongs = await filterSpotifyAvailableTracks(mergedSongs);
 
-  const allArtists = deduplicateArtists([...saavn.artists, ...itunes.artists, ...yt.artists, ...jamendo.artists]).slice(0, 12);
-  const allAlbums = deduplicateAlbums([...saavn.albums, ...itunes.albums, ...yt.albums, ...jamendo.albums]).slice(0, 12);
+  // 3. Rank results strictly with Spotify & YouTube ML relevance and view-count scoring
+  const rankedSongs = [...verifiedSongs].sort((a, b) => {
+    const scoreA = calculateSearchRelevance(a, cleanQuery);
+    const scoreB = calculateSearchRelevance(b, cleanQuery);
+    return scoreB - scoreA;
+  });
+
+  const allSongs = rankedSongs.slice(0, limit * 2);
+  const allArtists = deduplicateArtists([...yt.artists, ...saavn.artists, ...itunes.artists]).slice(0, 12);
+  const allAlbums = deduplicateAlbums([...yt.albums, ...saavn.albums, ...itunes.albums]).slice(0, 12);
 
   const result: SearchResult = {
     songs: allSongs,
     artists: allArtists,
     albums: allAlbums,
-    query,
+    query: cleanQuery,
     total: allSongs.length + allArtists.length + allAlbums.length,
   };
   setCache(cacheKey, result);
@@ -290,18 +530,19 @@ export const LANGUAGE_METADATA: Record<string, { query: string; title: string; a
 };
 
 export async function getPersonalizedTrending(languages: string[], limit = 20): Promise<Song[]> {
-  const cacheKey = `personalized_trending_${languages.join('_')}_${limit}`;
+  const todayKey = new Date().toISOString().slice(0, 10);
+  const cacheKey = `daily_trending_${todayKey}_${languages.join('_')}_${limit}`;
   const cached = fromCache<Song[]>(cacheKey);
-  if (cached) return cached;
+  if (cached && cached.length > 0) return cached;
 
   const validLangs = languages.length > 0 ? languages : ['Hindi', 'International'];
-  const queries = validLangs.map((lang) => `${lang} trending hits 2025 2026`);
+  const queries = validLangs.map((lang) => `${lang} top charts trending 2025 2026`);
   
-  // Search JioSaavn trending + YouTube Music for each language
+  // Search JioSaavn trending + YouTube Music for each language chart
   const searchPromises = queries.map(async (q) => {
     const [sRes, ytRes] = await Promise.allSettled([
-      searchJioSaavn(q, Math.ceil(limit / queries.length) + 4),
-      searchYouTubeMusic(q, Math.ceil(limit / queries.length) + 4),
+      searchJioSaavn(q, Math.ceil(limit / queries.length) + 6),
+      searchYouTubeMusic(q, Math.ceil(limit / queries.length) + 6),
     ]);
     const sSongs = sRes.status === 'fulfilled' ? sRes.value.songs : [];
     const ytSongs = ytRes.status === 'fulfilled' ? ytRes.value.songs : [];
@@ -309,24 +550,30 @@ export async function getPersonalizedTrending(languages: string[], limit = 20): 
   });
 
   const [generalTrending, ...langResults] = await Promise.all([
-    getJioSaavnTrending(10).catch(() => []),
+    getJioSaavnTrending(16).catch(() => []),
     ...searchPromises,
   ]);
 
-  // Interleave results from user's languages first, then general trending
+  // Interleave results from user's languages first, then general trending charts
   const combined: Song[] = [];
   const maxLen = Math.max(...langResults.map(r => r.length), generalTrending.length);
   for (let i = 0; i < maxLen; i++) {
+    if (generalTrending[i]) combined.push(generalTrending[i]);
     for (const group of langResults) {
       if (group[i]) combined.push(group[i]);
     }
-    if (generalTrending[i]) combined.push(generalTrending[i]);
   }
 
   const rawSongs = deduplicateSongs(combined);
   const verified = await filterSpotifyAvailableTracks(rawSongs);
   const ranked = sortByPopularityAndTrending(verified);
-  const songs = diversifySongArtworks(ranked).slice(0, limit);
+  const songs = diversifySongArtworks(ranked)
+    .slice(0, limit)
+    .map((s) => ({
+      ...s,
+      previewUrl: formatMediaUrlWithQuality(s.previewUrl, 'high'),
+    }));
+
   setCache(cacheKey, songs);
   return songs;
 }
@@ -1082,55 +1329,4 @@ function deduplicateAlbums(albums: Album[]): Album[] {
     seen.add(key);
     return true;
   });
-}
-
-/**
- * Generates an automix radio queue based on current track using YouTube Music + JioSaavn fallback.
- */
-export async function getAutomixRadio(song: Song, limit = 15): Promise<Song[]> {
-  try {
-    const { getYouTubeMusicRadio } = await import('../api/youtubeMusicApi');
-    const ytRadio = await getYouTubeMusicRadio(song.id.startsWith('yt_') ? song.id : `${song.title} ${song.artist}`, limit);
-    if (ytRadio && ytRadio.length > 0) {
-      return deduplicateSongs(ytRadio.filter(s => s.id !== song.id));
-    }
-  } catch {}
-
-  // Fallback to JioSaavn artist / genre recommendation
-  try {
-    const fallbackRes = await searchJioSaavn(`${song.artist} radio`, limit);
-    if (fallbackRes.songs && fallbackRes.songs.length > 0) {
-      return deduplicateSongs(fallbackRes.songs.filter(s => s.id !== song.id));
-    }
-  } catch {}
-
-  return [];
-}
-
-/**
- * Universal playlist importer: automatically parses Spotify or YouTube links and imports tracks.
- */
-export async function importUniversalPlaylist(
-  urlOrId: string
-): Promise<{ title: string; artwork: string; tracks: Song[]; source: 'spotify' | 'youtube' } | null> {
-  const trimmed = urlOrId.trim();
-
-  // 1. Check if YouTube link
-  if (trimmed.includes('youtube.com') || trimmed.includes('youtu.be') || trimmed.startsWith('PL') || trimmed.startsWith('RD')) {
-    const { importYouTubePlaylist } = await import('../api/youtubeMusicApi');
-    const res = await importYouTubePlaylist(trimmed);
-    if (res && res.tracks.length > 0) {
-      return { ...res, source: 'youtube' };
-    }
-  }
-
-  // 2. Check if Spotify link
-  const { extractSpotifyPlaylistId } = await import('../api/spotifyApi');
-  const spotifyId = extractSpotifyPlaylistId(trimmed);
-  if (spotifyId) {
-    // Spotify playlist importer is handled via existing Spotify import pipeline
-    return null;
-  }
-
-  return null;
 }

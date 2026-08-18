@@ -6,6 +6,7 @@ import { formatDuration } from '../core/utils';
 import { CONFIG } from '../config';
 import { smartRecommendationEngine } from '../domain/recommendation/SmartRecommendationEngine';
 import { SongOptionsBottomSheet } from '../components/shared/SongOptionsBottomSheet';
+import { resizeImageUrl } from '../core/utils/imageUtils';
 import type { Song } from '../data/models';
 
 export function QueueScreen() {
@@ -190,7 +191,7 @@ export function QueueScreen() {
                 }}
               >
                 <img
-                  src={song.artwork}
+                  src={resizeImageUrl(song.artworkLg || song.artwork, 544, 544)}
                   alt={song.title}
                   width={44} height={44}
                   loading="lazy"
@@ -263,7 +264,7 @@ function QueueTrackRow({ song, isCurrent, onRemove, onPlay }: {
     }}>
       {/* Artwork */}
       <img
-        src={song.artwork}
+        src={resizeImageUrl(song.artworkLg || song.artwork, 544, 544)}
         alt={`${song.album} artwork`}
         width={48} height={48}
         loading="lazy"

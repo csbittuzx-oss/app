@@ -82,34 +82,8 @@ export interface Lyrics {
 }
 
 export interface LyricsLine {
-  time?: number;          // seconds, for synced lyrics
-  timestamp_ms?: number;  // milliseconds, for high-precision karaoke sync
+  time?: number;  // seconds, for synced lyrics
   text: string;
-}
-
-export interface TrackCanvas {
-  songId: string;
-  canvasUrl: string;      // Looping MP4 video URL
-  type: 'video' | 'animated_image';
-  source: 'spotify_canvas' | 'apple_motion' | 'echo_canvas';
-}
-
-export interface RecognitionResult {
-  title: string;
-  artist: string;
-  album?: string;
-  artwork?: string;
-  releaseDate?: string;
-  genres?: string[];
-  song?: Song;
-}
-
-export interface ScrobbleConfig {
-  listenbrainzEnabled: boolean;
-  listenbrainzToken: string;
-  lastfmEnabled: boolean;
-  lastfmApiKey: string;
-  lastfmSessionKey: string;
 }
 
 export interface SearchResult {
@@ -143,7 +117,6 @@ export interface PlayerState {
   showLyrics: boolean;
   autoPlay: boolean;
   ridingMode?: boolean;
-  canvasEnabled?: boolean;
 }
 
 export type AudioQuality = 'high' | 'medium' | 'low';
@@ -161,15 +134,10 @@ export interface AppState {
 
 export interface AppConfig {
   lastfmApiKey: string;
-  lastfmSessionKey?: string;
-  listenbrainzToken?: string;
   jamendoClientId: string;
   audioQuality?: AudioQuality;
   autoPlay?: boolean;
   autoUpdate?: boolean;
-  canvasBackdropEnabled?: boolean;
-  listenbrainzEnabled?: boolean;
-  lastfmEnabled?: boolean;
 }
 
 export type Screen =

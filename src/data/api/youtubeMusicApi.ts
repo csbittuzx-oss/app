@@ -1,6 +1,7 @@
 import type { Song, Album, Artist, SearchResult } from '../models';
 import { resolveFullTrack } from './saavnApi';
 import { universalGet, universalPost } from '../../core/utils/http';
+import { resizeImageUrl } from '../../core/utils/imageUtils';
 
 const YTM_SEARCH_ENDPOINT = 'https://music.youtube.com/youtubei/v1/search?prettyPrint=false';
 const PIPED_API_ENDPOINT = 'https://api.piped.private.coffee';
@@ -65,8 +66,9 @@ export async function searchYouTubeMusic(query: string, limit = 20): Promise<Sea
           const cardType = cardSubtitleRuns[0]?.text || 'Song';
           const cardArtist = cardSubtitleRuns[2]?.text || cardSubtitleRuns[0]?.text || 'YouTube Music';
           const cardAlbum = cardSubtitleRuns[4]?.text || cardTitle;
-          const cardThumb = card.thumbnail?.musicThumbnailRenderer?.thumbnail?.thumbnails?.slice(-1)[0]?.url
+          const rawCardThumb = card.thumbnail?.musicThumbnailRenderer?.thumbnail?.thumbnails?.slice(-1)[0]?.url
             || card.thumbnail?.croppedSquareThumbnailRenderer?.thumbnail?.thumbnails?.slice(-1)[0]?.url || '';
+          const cardThumb = resizeImageUrl(rawCardThumb, 1200, 1200);
           
           const cardVideoId = card.onTap?.watchEndpoint?.videoId
             || card.buttons?.[0]?.buttonRenderer?.command?.watchEndpoint?.videoId
@@ -81,7 +83,7 @@ export async function searchYouTubeMusic(query: string, limit = 20): Promise<Sea
               artists.unshift({
                 id: `yt_artist_${cardBrowseId || cardTitle}`,
                 name: cardTitle,
-                image: cardThumb || '',
+                image: resizeImageUrl(rawCardThumb, 544, 544),
                 provider: 'youtube',
               });
             }
@@ -104,8 +106,8 @@ export async function searchYouTubeMusic(query: string, limit = 20): Promise<Sea
                 title: cardTitle,
                 artist: cardArtist,
                 album: cardAlbum,
-                artwork: cardThumb || (cardVideoId ? `https://i.ytimg.com/vi/${cardVideoId}/hqdefault.jpg` : ''),
-                artworkLg: cardVideoId ? `https://i.ytimg.com/vi/${cardVideoId}/maxresdefault.jpg` : cardThumb,
+                artwork: resizeImageUrl(cardThumb, 544, 544) || (cardVideoId ? `https://i.ytimg.com/vi/${cardVideoId}/hqdefault.jpg` : ''),
+                artworkLg: cardVideoId ? `https://i.ytimg.com/vi/${cardVideoId}/maxresdefault.jpg` : resizeImageUrl(cardThumb, 1200, 1200),
                 duration: 210,
                 previewUrl: null,
                 provider: 'youtube',
@@ -141,7 +143,7 @@ export async function searchYouTubeMusic(query: string, limit = 20): Promise<Sea
               artists.push({
                 id: `yt_artist_${artistName}`,
                 name: artistName,
-                image: thumb || '',
+                image: resizeImageUrl(thumb, 544, 544) || '',
                 provider: 'youtube',
               });
             }
@@ -157,7 +159,7 @@ export async function searchYouTubeMusic(query: string, limit = 20): Promise<Sea
                 id: `yt_album_${albumTitle}`,
                 title: albumTitle,
                 artist: albumArtist || 'YouTube Music',
-                artwork: thumb || '',
+                artwork: resizeImageUrl(thumb, 544, 544) || '',
                 provider: 'youtube',
               });
             }
@@ -174,7 +176,7 @@ export async function searchYouTubeMusic(query: string, limit = 20): Promise<Sea
             || flex[0]?.musicResponsiveListItemFlexColumnRenderer?.text?.runs?.[0]?.navigationEndpoint?.watchEndpoint?.videoId
             || '';
           
-          const thumb = r.thumbnail?.musicThumbnailRenderer?.thumbnail?.thumbnails?.slice(-1)[0]?.url
+          const rawThumb = r.thumbnail?.musicThumbnailRenderer?.thumbnail?.thumbnails?.slice(-1)[0]?.url
             || (videoId ? `https://i.ytimg.com/vi/${videoId}/hqdefault.jpg` : '');
 
           if (title && !songs.some(s => s.title.toLowerCase() === title.toLowerCase() && s.artist.toLowerCase() === artist.toLowerCase())) {
@@ -183,8 +185,8 @@ export async function searchYouTubeMusic(query: string, limit = 20): Promise<Sea
               title,
               artist,
               album: album || title,
-              artwork: thumb,
-              artworkLg: videoId ? `https://i.ytimg.com/vi/${videoId}/hqdefault.jpg` : thumb,
+              artwork: resizeImageUrl(rawThumb, 544, 544),
+              artworkLg: videoId ? `https://i.ytimg.com/vi/${videoId}/maxresdefault.jpg` : resizeImageUrl(rawThumb, 1200, 1200),
               duration: parseDurationString(durStr),
               previewUrl: null,
               provider: 'youtube',

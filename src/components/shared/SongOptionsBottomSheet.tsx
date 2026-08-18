@@ -4,6 +4,7 @@ import { useApp } from '../../state/AppContext';
 import { usePlayer } from '../../state/PlayerContext';
 import { CONFIG } from '../../config';
 import { showToast } from '../../core/utils/toast';
+import { resizeImageUrl } from '../../core/utils/imageUtils';
 
 interface SongOptionsBottomSheetProps {
   song: Song | null;
@@ -160,7 +161,7 @@ export function SongOptionsBottomSheet({
             border: '1px solid var(--color-border)',
           }}>
             <img
-              src={song.artwork || CONFIG.ARTWORK_PLACEHOLDER}
+              src={resizeImageUrl(song.artworkLg || song.artwork, 544, 544) || CONFIG.ARTWORK_PLACEHOLDER}
               alt=""
               width={54}
               height={54}
