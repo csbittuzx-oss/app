@@ -211,13 +211,12 @@ export async function deleteOfflineSong(songId: string): Promise<void> {
 
 /**
  * Retrieves the genuine verified Offline Backup Playlist from IndexedDB.
- * Automatically deletes any corrupted or incomplete entries.
  */
 export async function getOfflineBackupPlaylist(): Promise<Playlist | null> {
   try {
     const db = await openDatabase();
     return new Promise((resolve) => {
-      const tx = db.transaction(STORE_NAME, 'readwrite');
+      const tx = db.transaction(STORE_NAME, 'readonly');
       const store = tx.objectStore(STORE_NAME);
       const index = store.index('cachedAt');
       const request = index.openCursor(null, 'prev'); // Most recently cached first
@@ -228,20 +227,20 @@ export async function getOfflineBackupPlaylist(): Promise<Playlist | null> {
         if (cursor) {
           const record = cursor.value as CachedRecord;
 
-          // Verify blob is valid
-          if (record && record.audioBlob && record.audioBlob.size >= MIN_VALID_AUDIO_BYTES) {
-            const blobUrl = URL.createObjectURL(record.audioBlob);
+          if (record && record.song) {
+            let blobUrl = '';
+            if (record.audioBlob) {
+              try {
+                blobUrl = URL.createObjectURL(record.audioBlob);
+              } catch {}
+            }
+
             songs.push({
               ...record.song,
-              previewUrl: blobUrl,
+              previewUrl: blobUrl || record.song.previewUrl || '',
               isDownloaded: true,
               provider: 'offline',
             });
-          } else {
-            // Delete corrupt entry immediately
-            try {
-              cursor.delete();
-            } catch {}
           }
 
           cursor.continue();
@@ -290,30 +289,27 @@ export async function getOfflineTrackCount(): Promise<number> {
 
 /**
  * Checks if a specific song is cached for offline playback and returns its local playable Blob URL.
+ * NEVER deletes the cached song.
  */
 export async function getOfflineSongStream(songId: string): Promise<string | null> {
   if (!songId) return null;
   try {
     const db = await openDatabase();
     return new Promise((resolve) => {
-      const tx = db.transaction(STORE_NAME, 'readwrite');
+      const tx = db.transaction(STORE_NAME, 'readonly');
       const store = tx.objectStore(STORE_NAME);
       const request = store.get(songId);
 
       request.onsuccess = () => {
         const record = request.result as CachedRecord | undefined;
-        if (record && record.audioBlob && record.audioBlob.size >= MIN_VALID_AUDIO_BYTES) {
-          const blobUrl = URL.createObjectURL(record.audioBlob);
-          resolve(blobUrl);
-        } else {
-          // If record exists but is corrupt, purge it
-          if (record) {
-            try {
-              store.delete(songId);
-            } catch {}
-          }
-          resolve(null);
+        if (record && record.audioBlob) {
+          try {
+            const blobUrl = URL.createObjectURL(record.audioBlob);
+            resolve(blobUrl);
+            return;
+          } catch {}
         }
+        resolve(null);
       };
 
       request.onerror = () => resolve(null);

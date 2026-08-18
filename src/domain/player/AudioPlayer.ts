@@ -329,25 +329,13 @@ class AudioPlayer {
         const current = this.currentSong;
         const failedSrc = el.src;
 
-        // Auto-recovery 1: Corrupted or expired offline blob
-        if (failedSrc.startsWith('blob:') || current.provider === 'offline' || current.isDownloaded) {
-          console.warn('Offline blob playback failed, purging corrupt entry:', current.id);
-          try {
-            const { deleteOfflineSong } = await import('../../services/OfflineBackupService');
-            await deleteOfflineSong(current.id);
-          } catch {}
-          try {
-            adaptiveStreaming.evictCachedSong(current.id);
-          } catch {}
-
-          if (navigator.onLine) {
-            console.log('Auto-recovering via live online stream for:', current.title);
-            current.previewUrl = '';
-            current.provider = 'saavn';
-            current.isDownloaded = false;
-            this.play(current, this._queue, this._queueIndex);
-            return;
-          }
+        // Auto-recovery 1: Offline song playback error -> Silently recover with live stream if online (NEVER delete song)
+        if (navigator.onLine && (failedSrc.startsWith('blob:') || current.provider === 'offline' || current.isDownloaded)) {
+          console.log('Seamlessly playing live stream for offline track:', current.title);
+          current.previewUrl = '';
+          current.provider = 'saavn';
+          this.play(current, this._queue, this._queueIndex);
+          return;
         }
 
         // Auto-recovery 2: Live stream error -> fallback to YouTube stream resolver
