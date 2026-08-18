@@ -8,7 +8,7 @@
 
 import type { Song, RepeatMode, AudioQuality } from '../../data/models';
 import { shuffle } from '../../core/utils';
-import { resolveFullTrack, formatMediaUrlWithQuality } from '../../data/api/saavnApi';
+import { resolveFullTrack, formatMediaUrlWithQuality, isPreviewAudioUrl } from '../../data/api/saavnApi';
 import { cacheSongForOfflineBackup, getOfflineSongStream } from '../../services/OfflineBackupService';
 import { showToast } from '../../core/utils/toast';
 import { MediaNotificationService } from '../../services/MediaNotificationService';
@@ -565,17 +565,11 @@ class AudioPlayer {
       }
     }
 
-    // ── Full-track URL resolution (Spotify preview → JioSaavn) ──
+    // ── Full-track URL resolution (Spotify / iTunes / Previews → JioSaavn) ──
     const isShortPreview = (!targetSong.previewUrl && navigator.onLine)
       || targetSong.provider === 'itunes'
       || targetSong.id.startsWith('spotify_')
-      || (targetSong.previewUrl && (
-          targetSong.previewUrl.includes('p.scdn.co')
-          || targetSong.previewUrl.includes('spotify.com')
-          || targetSong.previewUrl.includes('apple.com')
-          || targetSong.previewUrl.includes('mzstatic.com')
-          || (!targetSong.previewUrl.includes('saavncdn.com') && !targetSong.previewUrl.startsWith('blob:'))
-        ));
+      || isPreviewAudioUrl(targetSong.previewUrl);
 
     if (isShortPreview && navigator.onLine) {
       try {
@@ -588,7 +582,7 @@ class AudioPlayer {
           isSpotifyImport
         );
         if (myGen !== this._playGeneration) return;   // newer song selected, bail
-        if (fullTrack?.streamUrl) {
+        if (fullTrack?.streamUrl && !isPreviewAudioUrl(fullTrack.streamUrl)) {
           targetSong.previewUrl = fullTrack.streamUrl;
           if (fullTrack.duration > 0) targetSong.duration = fullTrack.duration;
           if (fullTrack.artwork && (targetSong.id.startsWith('spotify_') || !targetSong.artwork)) {
@@ -603,20 +597,13 @@ class AudioPlayer {
       }
     }
 
-    // ── Additional Full-Stream Guarantee: if previewUrl is STILL missing or a short preview (p.scdn.co / apple.com)
-    if (
-      (!targetSong.previewUrl ||
-       targetSong.previewUrl.includes('p.scdn.co') ||
-       targetSong.previewUrl.includes('spotify.com') ||
-       targetSong.previewUrl.includes('apple.com') ||
-       targetSong.previewUrl.includes('mzstatic.com')) &&
-      navigator.onLine
-    ) {
+    // ── Additional Full-Stream Guarantee: if previewUrl is STILL missing or a short preview clip
+    if ((!targetSong.previewUrl || isPreviewAudioUrl(targetSong.previewUrl)) && navigator.onLine) {
       try {
         const { resolveYouTubeFullAudioStream } = await import('../../data/api/youtubeMusicApi');
         const ytStream = await resolveYouTubeFullAudioStream(targetSong.title, targetSong.artist, targetSong.duration);
         if (myGen !== this._playGeneration) return;
-        if (ytStream?.streamUrl) {
+        if (ytStream?.streamUrl && !isPreviewAudioUrl(ytStream.streamUrl)) {
           targetSong.previewUrl = ytStream.streamUrl;
           if (ytStream.duration > 0) targetSong.duration = ytStream.duration;
           if (ytStream.artwork && (!targetSong.artwork || targetSong.id.startsWith('spotify_'))) {
@@ -633,7 +620,7 @@ class AudioPlayer {
 
     if (myGen !== this._playGeneration) return;   // newer song selected, bail
 
-    if (!targetSong.previewUrl || targetSong.previewUrl.includes('p.scdn.co') || targetSong.previewUrl.includes('apple.com')) {
+    if (!targetSong.previewUrl || isPreviewAudioUrl(targetSong.previewUrl)) {
       this.emit({ type: 'loading', isLoading: false });
       this.emit({ type: 'error', error: `Audio source unavailable for "${targetSong.title}".` });
       showToast(`Audio unavailable for "${targetSong.title}". Skipping...`, 'info', 2000);
@@ -785,21 +772,18 @@ class AudioPlayer {
       const isShortPreview = !streamUrl
         || targetSong.provider === 'itunes'
         || targetSong.id.startsWith('spotify_')
-        || (streamUrl && (
-            streamUrl.includes('p.scdn.co') ||
-            streamUrl.includes('spotify.com') ||
-            streamUrl.includes('apple.com') ||
-            streamUrl.includes('mzstatic.com')
-          ));
+        || isPreviewAudioUrl(streamUrl);
 
       if (isShortPreview && navigator.onLine) {
+        const isSpotifyImport = targetSong.id.startsWith('spotify_');
         const fullTrack = await resolveFullTrack(
           targetSong.title,
           targetSong.artist,
           this._audioQuality,
-          targetSong.duration
+          targetSong.duration,
+          isSpotifyImport
         );
-        if (fullTrack?.streamUrl) {
+        if (fullTrack?.streamUrl && !isPreviewAudioUrl(fullTrack.streamUrl)) {
           streamUrl = fullTrack.streamUrl;
           targetSong.previewUrl = fullTrack.streamUrl;
           if (fullTrack.duration > 0) targetSong.duration = fullTrack.duration;
@@ -807,10 +791,10 @@ class AudioPlayer {
         }
       }
 
-      if (!streamUrl && navigator.onLine) {
+      if ((!streamUrl || isPreviewAudioUrl(streamUrl)) && navigator.onLine) {
         const { resolveYouTubeFullAudioStream } = await import('../../data/api/youtubeMusicApi');
         const ytStream = await resolveYouTubeFullAudioStream(targetSong.title, targetSong.artist, targetSong.duration);
-        if (ytStream?.streamUrl) {
+        if (ytStream?.streamUrl && !isPreviewAudioUrl(ytStream.streamUrl)) {
           streamUrl = ytStream.streamUrl;
           targetSong.previewUrl = ytStream.streamUrl;
           if (ytStream.duration > 0) targetSong.duration = ytStream.duration;
@@ -820,7 +804,7 @@ class AudioPlayer {
 
       this.isResolvingCrossfade = false;
 
-      if (!this._ridingMode || this.audio.paused || !streamUrl) {
+      if (!this._ridingMode || this.audio.paused || !streamUrl || isPreviewAudioUrl(streamUrl)) {
         return;
       }
 

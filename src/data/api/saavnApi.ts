@@ -62,6 +62,26 @@ export function decryptMediaUrl(encryptedUrl?: string, quality: AudioQuality = '
   }
 }
 
+/**
+ * Detects if a URL is a 30s preview clip rather than a full-length playable audio stream.
+ */
+export function isPreviewAudioUrl(url?: string | null): boolean {
+  if (!url || typeof url !== 'string' || !url.startsWith('http')) return true;
+  const lower = url.toLowerCase();
+  return (
+    lower.includes('p.scdn.co') ||
+    lower.includes('audio-preview') ||
+    lower.includes('_preview') ||
+    lower.includes('preview.mp4') ||
+    lower.includes('preview.mp3') ||
+    lower.includes('preview_') ||
+    lower.includes('/preview/') ||
+    lower.includes('apple.com') ||
+    lower.includes('mzstatic.com') ||
+    lower.includes('spotify.com')
+  );
+}
+
 function decodeHtmlEntities(str: string): string {
   if (!str) return '';
   return str
@@ -535,11 +555,31 @@ export async function resolveFullTrack(
 
         if (scoredCandidates.length > 0) {
           const best = scoredCandidates[0].song;
-          return {
-            streamUrl: formatMediaUrlWithQuality(best.previewUrl, quality),
-            duration: best.duration,
-            artwork: best.artwork || best.artworkLg,
-          };
+          let fullUrl = best.previewUrl;
+
+          // If stream URL is a preview or missing, fetch full track details to get decrypted media URL
+          if (isPreviewAudioUrl(fullUrl) || !fullUrl) {
+            const cleanId = best.id.replace('saavn_', '');
+            try {
+              const detailsUrl = `${BASE_URL}?__call=song.getDetails&pids=${cleanId}&_format=json&_marker=0&ctx=web6dot0`;
+              const detailsData = await universalGet(detailsUrl);
+              const songItem = Array.isArray(detailsData?.songs) ? detailsData.songs[0] : (detailsData?.[cleanId] || null);
+              if (songItem?.encrypted_media_url) {
+                const dec = decryptMediaUrl(songItem.encrypted_media_url, quality);
+                if (dec && !isPreviewAudioUrl(dec)) {
+                  fullUrl = dec;
+                }
+              }
+            } catch {}
+          }
+
+          if (fullUrl && !isPreviewAudioUrl(fullUrl)) {
+            return {
+              streamUrl: formatMediaUrlWithQuality(fullUrl, quality),
+              duration: best.duration,
+              artwork: best.artwork || best.artworkLg,
+            };
+          }
         }
       }
     } catch {
@@ -563,8 +603,9 @@ export async function resolveFullTrack(
         const detailedList = Array.isArray(detailsData?.songs) ? detailsData.songs : [];
 
         for (const item of detailedList) {
-          const fullAudioUrl = decryptMediaUrl(item.encrypted_media_url) || item.media_preview_url || item.vlink || null;
-          if (fullAudioUrl && fullAudioUrl.startsWith('http')) {
+          const dec = decryptMediaUrl(item.encrypted_media_url, quality);
+          const fullAudioUrl = dec || (item.vlink && !isPreviewAudioUrl(item.vlink) ? item.vlink : null);
+          if (fullAudioUrl && fullAudioUrl.startsWith('http') && !isPreviewAudioUrl(fullAudioUrl)) {
             const cand = {
               title: decodeHtmlEntities(item.song || item.title || ''),
               artist: decodeHtmlEntities(item.primary_artists || item.singers || 'Unknown Artist'),
@@ -588,11 +629,11 @@ export async function resolveFullTrack(
     // try next tier
   }
 
-  // 3. Tier 3: Search YouTube Music Full-Length Audio Stream with strict match verification
+  // 3. Tier 3: Search YouTube Music Full-Length Audio Stream with verification
   try {
     const { resolveYouTubeFullAudioStream } = await import('./youtubeMusicApi');
     const ytStream = await resolveYouTubeFullAudioStream(title, artist, targetDuration);
-    if (ytStream && ytStream.streamUrl) {
+    if (ytStream && ytStream.streamUrl && !isPreviewAudioUrl(ytStream.streamUrl)) {
       return ytStream;
     }
   } catch {
