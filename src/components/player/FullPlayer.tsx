@@ -253,17 +253,29 @@ export function FullPlayer() {
   // Fetch lyrics with multi-tiered LRCLIB & JioSaavn engine
   useEffect(() => {
     if (!currentSong || !showLyrics) return;
+    const targetSongId = currentSong.id;
     setLyrics(null);
     setLyricsError(false);
     setLyricsLoading(true);
-    getLyrics(currentSong.artist, currentSong.title, currentSong.duration)
+
+    getLyrics(currentSong.artist, currentSong.title, currentSong.duration, currentSong.id)
       .then((l) => {
-        setLyrics(l);
-        setLyricsError(!l || l.lines.length === 0);
+        if (targetSongId === currentSong.id) {
+          setLyrics(l);
+          setLyricsError(!l || l.lines.length === 0);
+        }
       })
-      .catch(() => setLyricsError(true))
-      .finally(() => setLyricsLoading(false));
-  }, [currentSong, showLyrics]);
+      .catch(() => {
+        if (targetSongId === currentSong.id) {
+          setLyricsError(true);
+        }
+      })
+      .finally(() => {
+        if (targetSongId === currentSong.id) {
+          setLyricsLoading(false);
+        }
+      });
+  }, [currentSong?.id, showLyrics]);
 
   // Compute active lyric line index based on playback timestamp
   const activeLineIndex = React.useMemo(() => {

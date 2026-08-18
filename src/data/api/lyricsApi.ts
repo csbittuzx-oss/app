@@ -275,15 +275,17 @@ async function fetchFromLyricsOvh(title: string, artist: string): Promise<Lyrics
 /**
  * Primary lyrics getter with multi-tiered resolution, caching & synced time tagging.
  * Automatically transliterates Devanagari/Indic scripts to Romanized Hinglish/Latin.
+ * Strictly binds lyrics to the unique songId so different tracks never collide.
  */
 export async function getLyrics(
   artist: string,
   title: string,
-  duration?: number
+  duration?: number,
+  songId?: string
 ): Promise<Lyrics | null> {
   if (!artist || !title) return null;
 
-  const cacheKey = `${artist.toLowerCase().trim()}_${title.toLowerCase().trim()}`;
+  const cacheKey = songId ? `id_${songId}` : `${artist.toLowerCase().trim()}_${title.toLowerCase().trim()}`;
   if (lyricsCache.has(cacheKey)) {
     return lyricsCache.get(cacheKey)!;
   }
@@ -292,7 +294,10 @@ export async function getLyrics(
   try {
     const lrc = await fetchFromLrcLib(title, artist, duration);
     if (lrc && lrc.lines.length > 0) {
-      const transliterated = transliterateLyrics(lrc)!;
+      const transliterated = transliterateLyrics({
+        ...lrc,
+        songId: songId || lrc.songId,
+      })!;
       lyricsCache.set(cacheKey, transliterated);
       return transliterated;
     }
@@ -302,7 +307,10 @@ export async function getLyrics(
   try {
     const saavn = await fetchFromJioSaavn(title, artist);
     if (saavn && saavn.lines.length > 0) {
-      const transliterated = transliterateLyrics(saavn)!;
+      const transliterated = transliterateLyrics({
+        ...saavn,
+        songId: songId || saavn.songId,
+      })!;
       lyricsCache.set(cacheKey, transliterated);
       return transliterated;
     }
@@ -312,7 +320,10 @@ export async function getLyrics(
   try {
     const ovh = await fetchFromLyricsOvh(title, artist);
     if (ovh && ovh.lines.length > 0) {
-      const transliterated = transliterateLyrics(ovh)!;
+      const transliterated = transliterateLyrics({
+        ...ovh,
+        songId: songId || ovh.songId,
+      })!;
       lyricsCache.set(cacheKey, transliterated);
       return transliterated;
     }

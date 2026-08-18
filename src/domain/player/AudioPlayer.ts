@@ -784,7 +784,8 @@ class AudioPlayer {
         if (fullTrack?.streamUrl && !isPreviewAudioUrl(fullTrack.streamUrl)) {
           targetSong.previewUrl = fullTrack.streamUrl;
           if (fullTrack.duration > 0) targetSong.duration = fullTrack.duration;
-          if (fullTrack.artwork && (targetSong.id.startsWith('spotify_') || !targetSong.artwork)) {
+          // Strictly preserve the selected track's original artwork; only fallback if artwork is completely missing
+          if (!targetSong.artwork && fullTrack.artwork) {
             targetSong.artwork = fullTrack.artwork;
             targetSong.artworkLg = fullTrack.artwork;
           }
@@ -805,7 +806,8 @@ class AudioPlayer {
         if (ytStream?.streamUrl && !isPreviewAudioUrl(ytStream.streamUrl)) {
           targetSong.previewUrl = ytStream.streamUrl;
           if (ytStream.duration > 0) targetSong.duration = ytStream.duration;
-          if (ytStream.artwork && (!targetSong.artwork || targetSong.id.startsWith('spotify_'))) {
+          // Strictly preserve the selected track's original artwork; only fallback if artwork is completely missing
+          if (!targetSong.artwork && ytStream.artwork) {
             targetSong.artwork = ytStream.artwork;
             targetSong.artworkLg = ytStream.artwork;
           }

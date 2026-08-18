@@ -46,11 +46,12 @@ export function MiniPlayer() {
 
       {/* Artwork */}
       <img
+        key={currentSong.id}
         src={resizeImageUrl(currentSong.artworkLg || currentSong.artwork, 544, 544)}
         alt={`${currentSong.album} artwork`}
         width={44}
         height={44}
-        loading="lazy"
+        loading="eager"
         onError={(e) => { (e.target as HTMLImageElement).src = CONFIG.ARTWORK_PLACEHOLDER; }}
         style={{
           borderRadius: 'var(--radius-md)',
