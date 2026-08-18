@@ -16,6 +16,7 @@ import { smartRecommendationEngine } from '../recommendation/SmartRecommendation
 import { userProfileTracker } from '../recommendation/UserProfileTracker';
 import { aiTasteProfileEngine } from '../ai/AITasteProfileEngine';
 import { adaptiveStreaming } from '../../services/AdaptiveStreamingService';
+import { studioAudioEngine } from './StudioAudioEngine';
 
 export interface PlaybackSession {
   song: Song;
@@ -117,6 +118,11 @@ class AudioPlayer {
 
     this.restoreSavedSession();
     this.bindEvents();
+
+    // Attach high-definition DSP audio engine
+    studioAudioEngine.attachAudioElement(this.audio);
+    studioAudioEngine.attachAudioElement(this.crossfadeAudio);
+    studioAudioEngine.setQuality(this._audioQuality);
   }
 
   /**
@@ -366,6 +372,7 @@ class AudioPlayer {
    */
   async setAudioQuality(quality: AudioQuality) {
     this._audioQuality = quality;
+    studioAudioEngine.setQuality(quality);
     this.emit({ type: 'qualitychange', quality });
 
     // Save preference
@@ -572,11 +579,13 @@ class AudioPlayer {
 
     if (isShortPreview && navigator.onLine) {
       try {
+        const isSpotifyImport = targetSong.id.startsWith('spotify_');
         const fullTrack = await resolveFullTrack(
           targetSong.title,
           targetSong.artist,
           this._audioQuality,
-          targetSong.duration
+          targetSong.duration,
+          isSpotifyImport
         );
         if (myGen !== this._playGeneration) return;   // newer song selected, bail
         if (fullTrack?.streamUrl) {
@@ -982,6 +991,7 @@ class AudioPlayer {
   }
 
   resume() {
+    studioAudioEngine.resume();
     if (this.isCrossfading && this.isCrossfadePaused) {
       this.isCrossfadePaused = false;
       this.audio.play().catch(() => {});

@@ -196,10 +196,19 @@ export async function importSpotifyPlaylist(urlOrId: string): Promise<Playlist> 
     const rawTrackId = t.uri ? t.uri.replace('spotify:track:', '') : `track_${index}`;
     const durationSeconds = Math.round((t.duration || 0) / 1000);
 
+    // Clean artist from Spotify subtitle.
+    // Spotify embed returns subtitle as "Artist1, Artist2" or "Artist · Album Name".
+    // Strip everything after "·" (middle dot / bullet separator used by Spotify to separate artist from album).
+    const rawSubtitle: string = t.subtitle || 'Unknown Artist';
+    const cleanedArtist = rawSubtitle
+      .split(/\s*[·•]\s*/)[0]   // strip "· Album Name" suffix
+      .replace(/\s*,\s*$/, '')   // strip trailing comma
+      .trim() || 'Unknown Artist';
+
     return {
       id: `spotify_${rawTrackId}`,
       title: t.title || 'Untitled Track',
-      artist: t.subtitle || 'Unknown Artist',
+      artist: cleanedArtist,
       album: title,
       artwork: '', // will be populated with track's real distinct artwork below
       artworkLg: '',

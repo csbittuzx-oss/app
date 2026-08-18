@@ -7,16 +7,35 @@ const DES_KEY = '38346591';
 
 /**
  * Replaces stream URL with the requested bitrate:
- * high -> _320.mp4 (320kbps Lossless/HD)
- * medium -> _160.mp4 (160/192kbps Balanced)
- * low -> _96.mp4 (96kbps Data Saver)
+ * high -> _320.mp4 / _320_m4a.mp4 (320kbps Extreme HD Studio Master Audio)
+ * medium -> _160.mp4 / _160_m4a.mp4 (160/192kbps High Quality)
+ * low -> _96.mp4 / _96_m4a.mp4 (96kbps Data Saver)
  */
 export function formatMediaUrlWithQuality(url?: string | null, quality: AudioQuality = 'high'): string {
   if (!url || typeof url !== 'string') return '';
-  const targetBitrate = quality === 'low' ? '_96.mp4' : quality === 'medium' ? '_160.mp4' : '_320.mp4';
-  return url
-    .replace(/_(96|160|320)\.mp4/g, targetBitrate)
-    .replace('http://', 'https://');
+  const targetSuffix = quality === 'low' ? '_96' : quality === 'medium' ? '_160' : '_320';
+  let formatted = url.replace('http://', 'https://');
+
+  if (formatted.includes('saavncdn.com') || formatted.includes('saavn.com')) {
+    // 1. URLs with pattern _48_m4a.mp4, _96_m4a.mp4, _160_m4a.mp4, _320_m4a.mp4
+    if (/_(12|48|64|96|160|320)_m4a\.(mp4|m4a|mp3)/i.test(formatted)) {
+      formatted = formatted.replace(/_(12|48|64|96|160|320)_m4a\.(mp4|m4a|mp3)/gi, `${targetSuffix}_m4a.$2`);
+    }
+    // 2. URLs with pattern _12.mp4, _48.mp4, _64.mp4, _96.mp4, _160.mp4, _320.mp4, _96.m4a, etc.
+    else if (/_(12|48|64|96|160|320)\.(mp4|m4a|mp3)/i.test(formatted)) {
+      formatted = formatted.replace(/_(12|48|64|96|160|320)\.(mp4|m4a|mp3)/gi, `${targetSuffix}.$2`);
+    }
+    // 3. URLs with _12, _48, _64, _96, _160 without standard extension
+    else if (/_(12|48|64|96|160|320)/i.test(formatted)) {
+      formatted = formatted.replace(/_(12|48|64|96|160|320)/gi, targetSuffix);
+    }
+    // 4. Clean .mp4 / .m4a ending with no bitrate tag
+    else if (/\.(mp4|m4a|mp3)$/i.test(formatted) && !/_(96|160|320)/.test(formatted)) {
+      formatted = formatted.replace(/\.(mp4|m4a|mp3)$/i, `${targetSuffix}.mp4`);
+    }
+  }
+
+  return formatted;
 }
 
 /**
@@ -380,7 +399,8 @@ export function isExactOrStrictTrackMatch(
   candidate: { title: string; artist: string; album?: string; duration?: number },
   targetTitle: string,
   targetArtist: string,
-  targetDuration?: number
+  targetDuration?: number,
+  relaxedArtist = false
 ): { isMatch: boolean; score: number } {
   const cleanTarget = cleanTitleForMatching(targetTitle);
   const cleanCand = cleanTitleForMatching(candidate.title);
@@ -452,41 +472,53 @@ export function isExactOrStrictTrackMatch(
       artistScore = 50;
     } else if (isOfficialLabelOrTopic && titleScore >= 85) {
       artistScore = 30; // Official label publishing the exact same title
+    } else if (relaxedArtist && titleScore >= 90) {
+      // Relaxed mode for Spotify cross-catalog: trust title + duration strongly
+      artistScore = 0; // Neutral — don't penalize unknown artist from cross-catalog
     } else {
-      artistScore = -60; // Completely different artist -> Strict reject to prevent playing wrong song
+      artistScore = -40; // Different artist → lower penalty (was -60, too aggressive for cross-catalog)
     }
   } else {
     artistScore = 20;
   }
 
-  // 4. Duration verification
+  // 4. Duration verification (more weight in relaxed mode)
   let durationScore = 0;
   if (targetDuration && targetDuration > 0 && candidate.duration && candidate.duration > 0) {
     const diff = Math.abs(candidate.duration - targetDuration);
-    if (diff <= 15) {
-      durationScore = 30; // exact studio cut
+    if (diff <= 10) {
+      durationScore = relaxedArtist ? 40 : 30; // Strong duration match is very reliable
+    } else if (diff <= 20) {
+      durationScore = relaxedArtist ? 25 : 15;
     } else if (diff <= 35) {
-      durationScore = 15;
+      durationScore = 10;
     } else if (diff > 85) {
       durationScore = -30;
     }
   }
 
   const total = titleScore + artistScore + durationScore;
-  return { isMatch: total >= 65, score: total };
+  // In relaxed mode (Spotify imports), lower threshold: 55 instead of 65
+  const threshold = relaxedArtist ? 55 : 65;
+  return { isMatch: total >= threshold, score: total };
 }
 
 /**
  * Resolves the authentic, official full audio stream with specified quality.
  * Guaranteed to only play the exact same song in full length.
+ * @param isSpotifyImport — set true for Spotify-imported tracks to use cross-catalog relaxed matching
  */
 export async function resolveFullTrack(
   title: string,
   artist: string,
   quality: AudioQuality = 'high',
-  targetDuration?: number
+  targetDuration?: number,
+  isSpotifyImport = false
 ): Promise<{ streamUrl: string; duration: number; artwork?: string } | null> {
   const queryVariants = generateSearchVariants(title, artist);
+  // relaxedArtist = true for Spotify imports: title + duration are more reliable
+  // than the cross-catalog artist name alignment between Spotify and JioSaavn
+  const relaxed = isSpotifyImport;
 
   // 1. Tier 1: Search JioSaavn through prioritized query variants with strict score matching
   for (const q of queryVariants) {
@@ -495,7 +527,7 @@ export async function resolveFullTrack(
       if (res.songs && res.songs.length > 0) {
         const scoredCandidates = res.songs
           .map((song) => {
-            const { isMatch, score } = isExactOrStrictTrackMatch(song, title, artist, targetDuration);
+            const { isMatch, score } = isExactOrStrictTrackMatch(song, title, artist, targetDuration, relaxed);
             return { song, isMatch, score };
           })
           .filter((item) => item.isMatch && item.song.previewUrl && item.song.previewUrl.startsWith('http'))
@@ -539,7 +571,7 @@ export async function resolveFullTrack(
               album: decodeHtmlEntities(item.album || ''),
               duration: parseInt(item.duration, 10) || 0,
             };
-            const { isMatch } = isExactOrStrictTrackMatch(cand, title, artist, targetDuration);
+            const { isMatch } = isExactOrStrictTrackMatch(cand, title, artist, targetDuration, relaxed);
             if (isMatch) {
               const dur = cand.duration || targetDuration || 180;
               return {
