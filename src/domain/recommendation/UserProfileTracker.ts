@@ -248,6 +248,61 @@ class UserProfileTrackerService {
   }
 
   /**
+   * Collects all song IDs that the user has played, liked, downloaded, or saved in playlists.
+   */
+  getAllKnownPlayedSongIds(): Set<string> {
+    const ids = new Set<string>();
+
+    // 1. Profile recent songs & affinity tracks with plays
+    this.profile.recentSongIds.forEach((id) => ids.add(id));
+    Object.entries(this.profile.trackAffinities).forEach(([id, aff]) => {
+      if (aff.playCount > 0) ids.add(id);
+    });
+
+    // 2. LocalStorage library collections
+    try {
+      const rec = JSON.parse(localStorage.getItem('sw_recently_played') || '[]');
+      if (Array.isArray(rec)) rec.forEach((s: any) => s?.id && ids.add(s.id));
+
+      const sRec = JSON.parse(localStorage.getItem('sw_search_recently_played') || '[]');
+      if (Array.isArray(sRec)) sRec.forEach((s: any) => s?.id && ids.add(s.id));
+
+      const fav = JSON.parse(localStorage.getItem('sw_favorites') || '[]');
+      if (Array.isArray(fav)) fav.forEach((s: any) => s?.id && ids.add(s.id));
+
+      const pl = JSON.parse(localStorage.getItem('sw_playlists') || '[]');
+      if (Array.isArray(pl)) {
+        pl.forEach((p: any) => {
+          if (Array.isArray(p?.songs)) {
+            p.songs.forEach((s: any) => s?.id && ids.add(s.id));
+          }
+        });
+      }
+
+      const dl = JSON.parse(localStorage.getItem('sw_downloads') || '[]');
+      if (Array.isArray(dl)) dl.forEach((s: any) => s?.id && ids.add(s.id));
+    } catch {}
+
+    return ids;
+  }
+
+  /**
+   * Returns user taste score for an artist (0 to 50) based on listening patterns.
+   */
+  getArtistTasteScore(artist: string): number {
+    const artistKey = normalizeArtist(artist);
+    if (!artistKey) return 0;
+    const aff = this.profile.artistAffinities[artistKey];
+    if (!aff) return 0;
+
+    let score = 0;
+    score += Math.min(aff.completionCount * 8, 30);
+    score += Math.min(aff.playCount * 3, 15);
+    score -= aff.skipCount * 12;
+    return Math.max(0, Math.min(50, score));
+  }
+
+  /**
    * Returns user affinity score for a track/artist (-100 to +100).
    */
   calculateAffinityScore(song: Song): number {

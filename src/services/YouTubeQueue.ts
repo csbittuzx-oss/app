@@ -2,8 +2,9 @@
 //  YouTubeQueue.ts
 //  Endless Seed Radio & Smart AutoMix Queue Generator
 //  • InnerTube WatchEndpoint & Seed Radio (RDAMVM${videoId})
-//  • Spotify-like Content, Language, Genre & Artist Context Recommendations
-//  • Strict Title & ID Deduplication (Never duplicate title or re-uploads)
+//  • AI User Taste Profile Alignment & Behavioral Scoring
+//  • Strict Freshness-First Prioritization (Unplayed songs over library/history)
+//  • Strict Title & ID Deduplication (Never duplicate title, version or clone)
 //  • Artist Diversity Enforcement & Multi-tier Fallback Pipeline
 // ═══════════════════════════════════════════════════════════════════════════════
 
@@ -19,6 +20,8 @@ import {
   smartRecommendationEngine,
 } from '../domain/recommendation/SmartRecommendationEngine';
 import { isSongMatchingLanguage } from '../data/repository/musicRepository';
+import { userProfileTracker } from '../domain/recommendation/UserProfileTracker';
+import { aiTasteProfileEngine, inferSongMood } from '../domain/ai/AITasteProfileEngine';
 
 const YTM_NEXT_ENDPOINT = 'https://music.youtube.com/youtubei/v1/next?prettyPrint=false';
 
@@ -46,11 +49,7 @@ export class YouTubeQueueService {
 
   /**
    * Generates an Endless Seed Radio queue matching the seed song's genre, vibe, artist, and tempo.
-   * Uses Spotify-like recommendation logic:
-   *  - Never selects a song just because it shares the same title.
-   *  - Rejects remakes, covers, re-uploads, and clones of the seed title.
-   *  - Respects language & genre continuity (Bhojpuri stays Bhojpuri, Phonk stays Phonk).
-   *  - Enforces artist diversity.
+   * Prioritizes FRESH unplayed songs tailored to the user's AI taste profile.
    */
   public static async generateSeedRadio(
     seedSong: Song | null,
@@ -61,14 +60,21 @@ export class YouTubeQueueService {
     if (!seedSong) return [];
 
     const musicCtx = classifySongContext(seedSong);
-    const blacklistedCoreTitles = new Set<string>();
+    const playedSongIds = userProfileTracker.getAllKnownPlayedSongIds();
 
+    const blacklistedCoreTitles = new Set<string>();
     const seedCore = getCoreTitle(seedSong.title);
     if (seedCore) blacklistedCoreTitles.add(seedCore);
 
     existingQueue.forEach((s) => {
       const core = getCoreTitle(s.title);
       if (core) blacklistedCoreTitles.add(core);
+    });
+
+    const knownCoreTitles = new Set<string>();
+    existingQueue.forEach((s) => {
+      const core = getCoreTitle(s.title);
+      if (core) knownCoreTitles.add(core);
     });
 
     let videoId = this.extractVideoId(seedSong);
@@ -102,58 +108,105 @@ export class YouTubeQueueService {
           existingQueueIds,
           blacklistedCoreTitles
         );
-        if (tier1Tracks.length >= 6) {
-          return this.applyArtistDiversity(tier1Tracks, seedSong);
-        }
         candidates.push(...tier1Tracks);
       } catch (e) {
         console.warn('YouTubeQueue Tier 1 fallback:', e);
       }
 
       // ── Tier 2: YouTube Music Song Radio (Direct Video Radio) ──
+      if (candidates.length < 8) {
+        try {
+          const tier2Tracks = await this.callInnerTubeNext(
+            videoId,
+            undefined,
+            seedSong,
+            musicCtx,
+            existingQueueIds,
+            blacklistedCoreTitles
+          );
+          for (const t of tier2Tracks) {
+            if (!candidates.some((c) => c.id === t.id)) {
+              candidates.push(t);
+            }
+          }
+        } catch (e) {
+          console.warn('YouTubeQueue Tier 2 fallback:', e);
+        }
+      }
+    }
+
+    // ── Tier 3: Multi-Source Context, Language & AI Taste Recommendation Fallback ──
+    if (candidates.length < 12) {
       try {
-        const tier2Tracks = await this.callInnerTubeNext(
-          videoId,
-          undefined,
-          seedSong,
-          musicCtx,
-          existingQueueIds,
-          blacklistedCoreTitles
-        );
-        for (const t of tier2Tracks) {
-          if (!candidates.some((c) => c.id === t.id)) {
+        const tier3Tracks = await smartRecommendationEngine.getSmartNextTracks(seedSong, 20, {
+          queue: existingQueue,
+        });
+        for (const t of tier3Tracks) {
+          const core = getCoreTitle(t.title);
+          if (
+            !existingQueueIds.has(t.id) &&
+            !candidates.some((c) => c.id === t.id) &&
+            !isSameOrSimilarTitle(t.title, seedSong.title) &&
+            (!core || !blacklistedCoreTitles.has(core))
+          ) {
             candidates.push(t);
           }
         }
-        if (candidates.length >= 8) {
-          return this.applyArtistDiversity(candidates, seedSong);
-        }
       } catch (e) {
-        console.warn('YouTubeQueue Tier 2 fallback:', e);
+        console.warn('YouTubeQueue Tier 3 fallback error:', e);
       }
     }
 
-    // ── Tier 3: Multi-Source Context, Language & Taste Recommendation Fallback ──
-    try {
-      const tier3Tracks = await smartRecommendationEngine.getSmartNextTracks(seedSong, 20, {
-        queue: existingQueue,
-      });
-      for (const t of tier3Tracks) {
-        const core = getCoreTitle(t.title);
-        if (
-          !existingQueueIds.has(t.id) &&
-          !candidates.some((c) => c.id === t.id) &&
-          !isSameOrSimilarTitle(t.title, seedSong.title) &&
-          (!core || !blacklistedCoreTitles.has(core))
-        ) {
-          candidates.push(t);
-        }
-      }
-    } catch (e) {
-      console.warn('YouTubeQueue Tier 3 fallback error:', e);
-    }
+    // ── Score & Rank Candidates with Freshness First + AI Taste Alignment ──
+    const currentArtistNorm = normalizeArtist(seedSong.artist);
+    const currentMood = aiTasteProfileEngine.getCurrentContextualMood();
+    const aiTopArtists = aiTasteProfileEngine.getProfile().topArtists;
 
-    return this.applyArtistDiversity(candidates, seedSong);
+    const scored = candidates.map((song) => {
+      let score = 50;
+      const songArtistNorm = normalizeArtist(song.artist);
+      const songCore = getCoreTitle(song.title);
+
+      // Freshness: Check if unplayed / not in user library
+      const isFresh = !playedSongIds.has(song.id) && (!songCore || !knownCoreTitles.has(songCore));
+
+      if (isFresh) {
+        score += 80; // Heavy Freshness Priority!
+      } else {
+        score -= 50; // Known song penalty
+      }
+
+      // User Taste: Artist Affinity
+      score += userProfileTracker.getArtistTasteScore(song.artist);
+
+      // AI Taste Profile Top Artist Match
+      if (aiTopArtists[songArtistNorm]) {
+        score += Math.min(30, aiTopArtists[songArtistNorm].score * 3);
+      }
+
+      // Mood / Vibe Match
+      const songMood = inferSongMood(song);
+      if (songMood === currentMood && songMood !== 'neutral') {
+        score += 15;
+      }
+
+      // Complementary Artist / Current Song Boost
+      if (currentArtistNorm && songArtistNorm === currentArtistNorm) {
+        score += 20;
+      }
+
+      return { song, score, isFresh };
+    });
+
+    const freshList = scored.filter((i) => i.isFresh).sort((a, b) => b.score - a.score);
+    const knownList = scored.filter((i) => !i.isFresh).sort((a, b) => b.score - a.score);
+
+    const orderedPool: Song[] = [
+      ...freshList.map((i) => i.song),
+      ...knownList.map((i) => i.song),
+    ];
+
+    return this.applyArtistDiversity(orderedPool, seedSong);
   }
 
   /**

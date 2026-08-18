@@ -18,6 +18,7 @@ import { searchYouTubeMusic } from '../../data/api/youtubeMusicApi';
 import { userProfileTracker } from './UserProfileTracker';
 import { isSongMatchingLanguage, deduplicateSongs } from '../../data/repository/musicRepository';
 import { filterSpotifyAvailableTracks } from '../../services/SpotifyAvailabilityService';
+import { aiTasteProfileEngine, inferSongMood } from '../ai/AITasteProfileEngine';
 
 export interface RecommendationContext {
   languages?: string[];
@@ -201,7 +202,23 @@ class SmartRecommendationEngineService {
     const recentSongs = context.recentlyPlayed || [];
     const favorites = context.favorites || [];
 
-    // Core titles & IDs that must NEVER be repeated
+    // ── 0. Collect Known / Played Songs & Blacklists ─────────────────────────
+    const playedSongIds = userProfileTracker.getAllKnownPlayedSongIds();
+    const knownCoreTitles = new Set<string>();
+
+    recentSongs.forEach((s) => {
+      if (s?.id) playedSongIds.add(s.id);
+      const c = getCoreTitle(s.title);
+      if (c) knownCoreTitles.add(c);
+    });
+
+    favorites.forEach((s) => {
+      if (s?.id) playedSongIds.add(s.id);
+      const c = getCoreTitle(s.title);
+      if (c) knownCoreTitles.add(c);
+    });
+
+    // Core titles & IDs currently in queue or currently playing (NEVER repeat)
     const blacklistedCoreTitles = new Set<string>();
     const blacklistedIds = new Set<string>();
 
@@ -217,37 +234,19 @@ class SmartRecommendationEngineService {
       if (core) blacklistedCoreTitles.add(core);
     });
 
-    recentSongs.slice(0, 15).forEach((s) => {
-      blacklistedIds.add(s.id);
-      const core = getCoreTitle(s.title);
-      if (core) blacklistedCoreTitles.add(core);
-    });
-
     const candidatePool: Song[] = [];
 
-    // ── 1. Same Language / Genre Liked Songs (Priority 3) ────────────────────
-    const matchingFavorites = favorites.filter((s) => {
-      if (isPhonk) return isPhonkSong(s);
-      return isSongMatchingLanguage(s, targetLanguage);
-    });
-    candidatePool.push(...matchingFavorites.slice(0, 8));
+    // ── 1. Dynamic Query Generation with User Taste Integration ─────────────
+    const topTasteArtists = userProfileTracker.getTopArtists(5);
 
-    // ── 2. Same Language / Genre Recently Played (Priority 4) ────────────────
-    const matchingRecent = recentSongs.filter((s) => {
-      if (isPhonk) return isPhonkSong(s);
-      return isSongMatchingLanguage(s, targetLanguage);
-    });
-    candidatePool.push(...matchingRecent.slice(0, 8));
-
-    // ── 3. Targeted Query Generation Based on Exact Context (Priority 2 & 5) ─
     if (isPhonk) {
       // Strictly Phonk queries
       const phonkQueries = [
         `${musicCtx.artist} phonk`,
-        'Drift Phonk viral hits 2025',
-        'Brazilian Phonk drift',
-        'Aggressive Phonk playlist',
-        'Phonk dark club music',
+        'Drift Phonk viral hits 2025 2026',
+        'Brazilian Phonk drift bass',
+        'Aggressive Phonk playlist club',
+        'Phonk dark night music',
       ];
       const searchPromises = phonkQueries.map(async (q) => {
         const [ytRes, sRes] = await Promise.allSettled([
@@ -261,12 +260,15 @@ class SmartRecommendationEngineService {
       const results = await Promise.all(searchPromises);
       candidatePool.push(...results.flat().filter(isPhonkSong));
     } else if (targetLanguage.toLowerCase() === 'bhojpuri') {
-      // Strictly Bhojpuri queries
+      // Strictly Bhojpuri queries tailored to user taste & current song
       const primaryArtist = normalizeArtist(currentSong?.artist || 'Pawan Singh');
+      const bhojpuriTasteArtist = topTasteArtists.find((a) => a && a !== primaryArtist) || 'Khesari Lal Yadav';
+
       const bhojpuriQueries = [
-        `${primaryArtist} bhojpuri songs`,
-        'Top Bhojpuri hits 2025 2026',
-        'Bhojpuri superhit dance songs',
+        `${primaryArtist} new bhojpuri song`,
+        `${bhojpuriTasteArtist} top bhojpuri hits 2025 2026`,
+        'Top Bhojpuri chartbusters 2025 2026',
+        'Bhojpuri superhit dance songs viral',
         'Bhojpuri romantic melody hits',
       ];
       const searchPromises = bhojpuriQueries.map(async (q) => {
@@ -281,13 +283,16 @@ class SmartRecommendationEngineService {
       const results = await Promise.all(searchPromises);
       candidatePool.push(...results.flat().filter((s) => isSongMatchingLanguage(s, 'Bhojpuri')));
     } else if (targetLanguage.toLowerCase() === 'hindi') {
-      // Strictly Hindi queries
+      // Strictly Hindi queries tailored to user taste & current song
       const primaryArtist = normalizeArtist(currentSong?.artist || 'Arijit Singh');
+      const hindiTasteArtist = topTasteArtists.find((a) => a && a !== primaryArtist) || 'Arijit Singh';
+
       const hindiQueries = [
-        `${primaryArtist} hit songs`,
-        'Bollywood Hindi romantic hits 2025',
-        'Latest Hindi superhit songs 2025',
-        'Top Bollywood melodies',
+        `${primaryArtist} latest songs`,
+        `${hindiTasteArtist} superhit Bollywood songs`,
+        'Bollywood Hindi romantic hits 2025 2026',
+        'Latest Hindi chartbusters trending 2025',
+        'Top Bollywood melodies trending',
       ];
       const searchPromises = hindiQueries.map(async (q) => {
         const [sRes, ytRes] = await Promise.allSettled([
@@ -301,12 +306,15 @@ class SmartRecommendationEngineService {
       const results = await Promise.all(searchPromises);
       candidatePool.push(...results.flat().filter((s) => isSongMatchingLanguage(s, 'Hindi')));
     } else if (targetLanguage.toLowerCase() === 'punjabi') {
-      // Strictly Punjabi queries
+      // Strictly Punjabi queries tailored to user taste & current song
       const primaryArtist = normalizeArtist(currentSong?.artist || 'Diljit Dosanjh');
+      const punjabiTasteArtist = topTasteArtists.find((a) => a && a !== primaryArtist) || 'Karan Aujla';
+
       const punjabiQueries = [
-        `${primaryArtist} punjabi songs`,
-        'Latest Punjabi chartbusters 2025',
-        'Trending Punjabi hits',
+        `${primaryArtist} latest punjabi song`,
+        `${punjabiTasteArtist} punjabi hits 2025`,
+        'Latest Punjabi chartbusters 2025 2026',
+        'Trending Punjabi hits viral',
       ];
       const searchPromises = punjabiQueries.map(async (q) => {
         const [sRes, ytRes] = await Promise.allSettled([
@@ -322,7 +330,7 @@ class SmartRecommendationEngineService {
     } else {
       // Strict other language queries (Tamil, Telugu, International)
       const primaryArtist = normalizeArtist(currentSong?.artist || '');
-      const query = primaryArtist ? `${primaryArtist} ${targetLanguage} songs` : `${targetLanguage} top hits 2025`;
+      const query = primaryArtist ? `${primaryArtist} ${targetLanguage} songs` : `${targetLanguage} top hits 2025 2026`;
       const [sRes, ytRes] = await Promise.allSettled([
         searchJioSaavn(query, 16),
         searchYouTubeMusic(query, 12),
@@ -332,7 +340,20 @@ class SmartRecommendationEngineService {
       candidatePool.push(...[...sSongs, ...ytSongs].filter((s) => isSongMatchingLanguage(s, targetLanguage)));
     }
 
-    // ── 4. Strict Candidate Filtering & Isolation ───────────────────────────
+    // ── 2. Add Library/Favorites as Low-Priority Fallbacks ONLY ──────────────
+    const matchingFavorites = favorites.filter((s) => {
+      if (isPhonk) return isPhonkSong(s);
+      return isSongMatchingLanguage(s, targetLanguage);
+    });
+    candidatePool.push(...matchingFavorites.slice(0, 4));
+
+    const matchingRecent = recentSongs.filter((s) => {
+      if (isPhonk) return isPhonkSong(s);
+      return isSongMatchingLanguage(s, targetLanguage);
+    });
+    candidatePool.push(...matchingRecent.slice(0, 4));
+
+    // ── 3. Strict Candidate Filtering & Duplicate Removal ───────────────────
     const validCandidates = deduplicateSongs(candidatePool).filter((song) => {
       if (!song || !song.title) return false;
       if (blacklistedIds.has(song.id)) return false;
@@ -345,7 +366,7 @@ class SmartRecommendationEngineService {
         return false;
       }
 
-      // 2. Blacklist check (queue & recent tracks)
+      // 2. Blacklist check (queue & current tracks)
       if (blacklistedCoreTitles.has(candidateCore)) {
         return false;
       }
@@ -357,7 +378,7 @@ class SmartRecommendationEngineService {
         if (!isSongMatchingLanguage(song, targetLanguage)) return false;
       }
 
-      // 4. Skip check (songs user repeatedly skips)
+      // 4. Disqualify tracks user repeatedly skips
       if (userProfileTracker.isFrequentlySkipped(song)) {
         return false;
       }
@@ -367,45 +388,70 @@ class SmartRecommendationEngineService {
 
     const spotifyVerifiedCandidates = await filterSpotifyAvailableTracks(validCandidates);
 
-    // ── 5. Scoring & Ranking Algorithm ──────────────────────────────────────
+    // ── 4. AI Taste & Freshness Scoring Algorithm ───────────────────────────
     const currentArtistNorm = currentSong ? normalizeArtist(currentSong.artist) : '';
+    const currentMood = aiTasteProfileEngine.getCurrentContextualMood();
+    const aiTopArtists = aiTasteProfileEngine.getProfile().topArtists;
 
     const scored = spotifyVerifiedCandidates.map((song) => {
       let score = 50; // base score
       const songArtistNorm = normalizeArtist(song.artist);
+      const songCore = getCoreTitle(song.title);
 
-      // Same artist boost
-      if (currentArtistNorm && songArtistNorm === currentArtistNorm) {
-        score += 30;
+      // Freshness check: Is this song unplayed / not in library history?
+      const isFresh = !playedSongIds.has(song.id) && (!songCore || !knownCoreTitles.has(songCore));
+
+      if (isFresh) {
+        score += 80; // Massive Freshness Priority Boost!
+      } else {
+        score -= 50; // Previously known / played song penalty
       }
 
-      // User affinity score from profile tracker
+      // User Taste Alignment: Artist Affinity from UserProfileTracker
+      const artistTasteScore = userProfileTracker.getArtistTasteScore(song.artist);
+      score += artistTasteScore; // 0 to 50 points
+
+      // User Taste Alignment: AI Taste Profile Engine Top Artists
+      if (aiTopArtists[songArtistNorm]) {
+        score += Math.min(30, aiTopArtists[songArtistNorm].score * 3);
+      }
+
+      // Mood / Vibe Alignment with current listening context
+      const songMood = inferSongMood(song);
+      if (songMood === currentMood && songMood !== 'neutral') {
+        score += 15;
+      }
+
+      // Same Artist Boost (different track)
+      if (currentArtistNorm && songArtistNorm === currentArtistNorm) {
+        score += 20;
+      }
+
+      // User Affinity Score from Tracker
       const affinityScore = userProfileTracker.calculateAffinityScore(song);
       score += affinityScore;
 
-      // Liked Song boost
-      const isLiked = favorites.some((f) => f.id === song.id || normalizeKey(f.title) === normalizeKey(song.title));
-      if (isLiked) score += 25;
+      // Popularity signal
+      score += Math.min(20, (song.popularity || 70) * 0.2);
 
-      return { song, score };
+      return { song, score, isFresh };
     });
 
-    scored.sort((a, b) => b.score - a.score);
+    // ── 5. Partition Selection: Fresh Songs First, Fallback to Known ────────
+    const freshScored = scored.filter((item) => item.isFresh).sort((a, b) => b.score - a.score);
+    const knownScored = scored.filter((item) => !item.isFresh).sort((a, b) => b.score - a.score);
 
-    // ── 6. Enforce Artist Diversity in Output Sequence ──────────────────────
     const selected: Song[] = [];
     const selectedCoreTitles = new Set<string>();
     let lastSelectedArtist = currentArtistNorm;
 
-    for (const item of scored) {
+    // First pass: Pick fresh unplayed songs with artist diversity
+    for (const item of freshScored) {
       const art = normalizeArtist(item.song.artist);
       const core = getCoreTitle(item.song.title);
 
       if (selectedCoreTitles.has(core)) continue;
-
-      if (art && art === lastSelectedArtist && selected.length > 0) {
-        continue;
-      }
+      if (art && art === lastSelectedArtist && selected.length > 0) continue;
 
       selected.push(item.song);
       selectedCoreTitles.add(core);
@@ -414,8 +460,22 @@ class SmartRecommendationEngineService {
       if (selected.length >= count) break;
     }
 
+    // Second pass on fresh songs if diversity filter was too strict
     if (selected.length < count) {
-      for (const item of scored) {
+      for (const item of freshScored) {
+        const core = getCoreTitle(item.song.title);
+        if (selectedCoreTitles.has(core)) continue;
+
+        selected.push(item.song);
+        selectedCoreTitles.add(core);
+
+        if (selected.length >= count) break;
+      }
+    }
+
+    // Third pass: ONLY if fresh songs are not available, fall back to best known tracks
+    if (selected.length < count) {
+      for (const item of knownScored) {
         const core = getCoreTitle(item.song.title);
         if (selectedCoreTitles.has(core)) continue;
 
