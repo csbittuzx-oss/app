@@ -6,6 +6,7 @@
 import type { Lyrics, LyricsLine } from '../models';
 import { decodeHtmlEntities } from '../../core/utils';
 import { universalGet } from '../../core/utils/http';
+import { transliterateLyrics } from '../../core/utils/lyricsTransliteration';
 
 const BASE_SAAVN_URL = 'https://www.jiosaavn.com/api.php';
 const lyricsCache = new Map<string, Lyrics>();
@@ -273,6 +274,7 @@ async function fetchFromLyricsOvh(title: string, artist: string): Promise<Lyrics
 
 /**
  * Primary lyrics getter with multi-tiered resolution, caching & synced time tagging.
+ * Automatically transliterates Devanagari/Indic scripts to Romanized Hinglish/Latin.
  */
 export async function getLyrics(
   artist: string,
@@ -290,8 +292,9 @@ export async function getLyrics(
   try {
     const lrc = await fetchFromLrcLib(title, artist, duration);
     if (lrc && lrc.lines.length > 0) {
-      lyricsCache.set(cacheKey, lrc);
-      return lrc;
+      const transliterated = transliterateLyrics(lrc)!;
+      lyricsCache.set(cacheKey, transliterated);
+      return transliterated;
     }
   } catch {}
 
@@ -299,8 +302,9 @@ export async function getLyrics(
   try {
     const saavn = await fetchFromJioSaavn(title, artist);
     if (saavn && saavn.lines.length > 0) {
-      lyricsCache.set(cacheKey, saavn);
-      return saavn;
+      const transliterated = transliterateLyrics(saavn)!;
+      lyricsCache.set(cacheKey, transliterated);
+      return transliterated;
     }
   } catch {}
 
@@ -308,8 +312,9 @@ export async function getLyrics(
   try {
     const ovh = await fetchFromLyricsOvh(title, artist);
     if (ovh && ovh.lines.length > 0) {
-      lyricsCache.set(cacheKey, ovh);
-      return ovh;
+      const transliterated = transliterateLyrics(ovh)!;
+      lyricsCache.set(cacheKey, transliterated);
+      return transliterated;
     }
   } catch {}
 
