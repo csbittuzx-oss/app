@@ -57,8 +57,18 @@ export type AudioPlayerEvent =
   | { type: 'ridingmodechange'; ridingMode: boolean };
 
 class AudioPlayer {
-  private audio: HTMLAudioElement;
-  private crossfadeAudio: HTMLAudioElement;
+  private channelA: HTMLAudioElement;
+  private channelB: HTMLAudioElement;
+  private activeChannel: 'A' | 'B' = 'A';
+
+  get audio(): HTMLAudioElement {
+    return this.activeChannel === 'A' ? this.channelA : this.channelB;
+  }
+
+  get crossfadeAudio(): HTMLAudioElement {
+    return this.activeChannel === 'A' ? this.channelB : this.channelA;
+  }
+
   private _queue: Song[] = [];
   private _originalQueue: Song[] = [];
   private _queueIndex = 0;
@@ -112,10 +122,10 @@ class AudioPlayer {
   private currentPlayingStreamUrl: string | null = null;
 
   constructor() {
-    this.audio = new Audio();
-    this.crossfadeAudio = new Audio();
-    adaptiveStreaming.configureAudioElement(this.audio);
-    adaptiveStreaming.configureAudioElement(this.crossfadeAudio);
+    this.channelA = new Audio();
+    this.channelB = new Audio();
+    adaptiveStreaming.configureAudioElement(this.channelA);
+    adaptiveStreaming.configureAudioElement(this.channelB);
     // Initialise network monitoring immediately
     adaptiveStreaming.initNetworkMonitor();
 
@@ -144,8 +154,8 @@ class AudioPlayer {
     this.bindEvents();
 
     // Attach high-definition DSP audio engine
-    studioAudioEngine.attachAudioElement(this.audio);
-    studioAudioEngine.attachAudioElement(this.crossfadeAudio);
+    studioAudioEngine.attachAudioElement(this.channelA);
+    studioAudioEngine.attachAudioElement(this.channelB);
     studioAudioEngine.setQuality(this._audioQuality);
   }
 
@@ -250,161 +260,78 @@ class AudioPlayer {
       onSeekTo: (seconds) => this.seekToTime(seconds),
     });
 
-    this.audio.addEventListener('play', () => {
-      this.emit({ type: 'play' });
-      this.emit({ type: 'error', error: null });
-      if (this.currentSong) {
-        MediaNotificationService.update(
-          this.currentSong,
-          true,
-          this.audio.duration,
-          this.audio.currentTime
-        );
-      }
-    });
+    const setupChannel = (el: HTMLAudioElement, getIsActive: () => boolean) => {
+      el.addEventListener('play', () => {
+        if (!getIsActive() && !this.isCrossfading) return;
+        this.emit({ type: 'play' });
+        this.emit({ type: 'error', error: null });
+        if (this.currentSong) {
+          MediaNotificationService.update(
+            this.currentSong,
+            true,
+            this.audio.duration,
+            this.audio.currentTime
+          );
+        }
+      });
 
-    this.audio.addEventListener('playing', () => {
-      this.emit({ type: 'loading', isLoading: false });
-      this.emit({ type: 'error', error: null });
-    });
+      el.addEventListener('playing', () => {
+        if (!getIsActive()) return;
+        this.emit({ type: 'loading', isLoading: false });
+        this.emit({ type: 'error', error: null });
+      });
 
-    this.audio.addEventListener('pause', () => {
-      this.emit({ type: 'pause' });
-      this.saveCurrentSession();
-      if (this.currentSong) {
-        MediaNotificationService.update(
-          this.currentSong,
-          false,
-          this.audio.duration,
-          this.audio.currentTime
-        );
-      }
-    });
-
-    this.audio.addEventListener('ended', () => {
-      this.saveCurrentSession();
-      this.handleEnded();
-    });
-
-    this.audio.addEventListener('timeupdate', () => {
-      const duration = this.audio.duration || 0;
-      const currentTime = this.audio.currentTime;
-      const progress = duration > 0 ? currentTime / duration : 0;
-      this.emit({ type: 'timeupdate', currentTime, duration, progress });
-      this.updateMediaSessionPosition();
-
-      // Periodically persist playback position every 4 seconds
-      const now = Date.now();
-      if (now - this.lastSavedPositionTime > 4000) {
-        this.lastSavedPositionTime = now;
+      el.addEventListener('pause', () => {
+        if (!getIsActive()) return;
+        if (this.isCrossfading && !this.isCrossfadePaused) return;
+        this.emit({ type: 'pause' });
         this.saveCurrentSession();
-      }
-
-      // Track actual playback elapsed duration
-      if (this.lastPlaybackTimestamp > 0 && !this.audio.paused) {
-        const deltaSec = (now - this.lastPlaybackTimestamp) / 1000;
-        if (deltaSec > 0 && deltaSec < 3) {
-          this.currentSongAccumulatedPlaybackSec += deltaSec;
+        if (this.currentSong) {
+          MediaNotificationService.update(
+            this.currentSong,
+            false,
+            this.audio.duration,
+            this.audio.currentTime
+          );
         }
-      }
-      this.lastPlaybackTimestamp = now;
+      });
 
-      // Offline Backup: Strict Completion Rule (~95%+ duration + >= 85% actual playback time)
-      if (
-        !this.currentSongCachedForOffline &&
-        this.currentSong &&
-        duration > 25 &&
-        progress >= 0.95 &&
-        this.currentSongAccumulatedPlaybackSec >= duration * 0.85 &&
-        this.currentPlayingStreamUrl &&
-        !this.currentPlayingStreamUrl.startsWith('blob:') &&
-        navigator.onLine
-      ) {
-        this.currentSongCachedForOffline = true;
-        cacheCompletedSongForOfflineBackup(this.currentSong, this.currentPlayingStreamUrl).catch(() => {});
-      }
+      el.addEventListener('ended', () => {
+        if (!getIsActive()) return;
+        if (this.isCrossfading) return; // Suppress ended during active DJ crossfade
+        this.saveCurrentSession();
+        this.handleEnded();
+      });
 
-      // Track listening duration in intelligence profile
-      const currentSec = Math.floor(currentTime);
-      if (currentSec > this.lastTimeUpdateSecond) {
-        userProfileTracker.recordListeningDuration(currentSec - this.lastTimeUpdateSecond);
-        this.lastTimeUpdateSecond = currentSec;
-      }
+      el.addEventListener('timeupdate', () => {
+        if (!getIsActive()) return;
+        this.handleTimeUpdate();
+      });
 
-      // When Riding Mode is ON, continuously check remaining duration and trigger DJ crossfade 8-9s before track end
-      if (
-        this._ridingMode &&
-        !this.isCrossfading &&
-        !this.isResolvingCrossfade &&
-        !this.audio.paused &&
-        this.currentSong &&
-        this.crossfadeSongId !== this.currentSong.id &&
-        duration > 15 &&
-        currentTime > 0
-      ) {
-        const remaining = duration - currentTime;
-        if (remaining > 0 && remaining <= 9 && this._repeat !== 'one') {
-          const nextIndex = this._queueIndex + 1;
-          const hasNext = nextIndex < this._queue.length || (this._repeat === 'all' && this._queue.length > 0) || (this._autoPlay && (this._queue.length > 0 || this._automixQueue.length > 0));
-          if (hasNext) {
-            this.crossfadeSongId = this.currentSong.id;
-            this.startCrossfade();
-          }
+      el.addEventListener('loadstart', () => {
+        if (getIsActive()) this.emit({ type: 'loading', isLoading: true });
+      });
+
+      el.addEventListener('canplay', () => {
+        if (getIsActive()) {
+          this.emit({ type: 'loading', isLoading: false });
+          this.emit({ type: 'error', error: null });
         }
-      }
+      });
 
-      // ── Non-Stop Playback AutoMix Auto-Injection ──
-      // When user is near the final track in queue (<= 16s remaining), pop next automix song and append
-      const remainingSec = duration - currentTime;
-      if (
-        this._autoPlay &&
-        duration > 20 &&
-        remainingSec > 0 &&
-        remainingSec <= 16 &&
-        this._queueIndex >= this._queue.length - 1 &&
-        this._automixQueue.length > 0
-      ) {
-        this.injectNextAutomixTrack();
-      }
+      el.addEventListener('error', () => {
+        if (!getIsActive()) return;
+        const err = el.error;
+        if (!el.src || !this.currentSong || err?.code === MediaError.MEDIA_ERR_ABORTED) {
+          return;
+        }
+        this.emit({ type: 'loading', isLoading: false });
+        this.emit({ type: 'error', error: 'Playback failed. Tap to retry.' });
+      });
+    };
 
-      // Proactively replenish automix buffer if it drops below 5 items
-      if (
-        this._autoPlay &&
-        this.currentSong &&
-        this._automixQueue.length < 5 &&
-        !this.isAutomixReplenishing
-      ) {
-        this.replenishAutomixQueue(this.currentSong);
-      }
-
-      // Proactively pre-fetch context-pure recommendations when 50% through the song and near queue end
-      if (
-        this._autoPlay &&
-        progress > 0.50 &&
-        this.currentSong &&
-        this.lastPrefetchedSongId !== this.currentSong.id &&
-        this._queueIndex >= this._queue.length - 2
-      ) {
-        this.lastPrefetchedSongId = this.currentSong.id;
-        this.triggerSmartPreload(this.currentSong);
-      }
-    });
-
-    this.audio.addEventListener('loadstart', () => this.emit({ type: 'loading', isLoading: true }));
-    this.audio.addEventListener('canplay', () => {
-      this.emit({ type: 'loading', isLoading: false });
-      this.emit({ type: 'error', error: null });
-    });
-    this.audio.addEventListener('error', () => {
-      const err = this.audio.error;
-      // Filter out abort errors, empty src resets during song switching, or unmounted states
-      if (!this.audio.src || !this.currentSong || err?.code === MediaError.MEDIA_ERR_ABORTED) {
-        return;
-      }
-
-      this.emit({ type: 'loading', isLoading: false });
-      this.emit({ type: 'error', error: 'Playback failed. Tap to retry.' });
-    });
+    setupChannel(this.channelA, () => this.activeChannel === 'A');
+    setupChannel(this.channelB, () => this.activeChannel === 'B');
 
     // Install adaptive stall watcher for graceful buffering recovery
     this.installAdaptiveStallWatcher();
@@ -418,6 +345,162 @@ class AudioPlayer {
           this.saveCurrentSession();
         }
       });
+    }
+  }
+
+  private handleTimeUpdate() {
+    const duration = this.audio.duration || 0;
+    const currentTime = this.audio.currentTime;
+    const progress = duration > 0 ? currentTime / duration : 0;
+    this.emit({ type: 'timeupdate', currentTime, duration, progress });
+    this.updateMediaSessionPosition();
+
+    // Periodically persist playback position every 4 seconds
+    const now = Date.now();
+    if (now - this.lastSavedPositionTime > 4000) {
+      this.lastSavedPositionTime = now;
+      this.saveCurrentSession();
+    }
+
+    // Track actual playback elapsed duration
+    if (this.lastPlaybackTimestamp > 0 && !this.audio.paused) {
+      const deltaSec = (now - this.lastPlaybackTimestamp) / 1000;
+      if (deltaSec > 0 && deltaSec < 3) {
+        this.currentSongAccumulatedPlaybackSec += deltaSec;
+      }
+    }
+    this.lastPlaybackTimestamp = now;
+
+    // Offline Backup: Strict Completion Rule (~95%+ duration + >= 85% actual playback time)
+    if (
+      !this.currentSongCachedForOffline &&
+      this.currentSong &&
+      duration > 25 &&
+      progress >= 0.95 &&
+      this.currentSongAccumulatedPlaybackSec >= duration * 0.85 &&
+      this.currentPlayingStreamUrl &&
+      !this.currentPlayingStreamUrl.startsWith('blob:') &&
+      navigator.onLine
+    ) {
+      this.currentSongCachedForOffline = true;
+      cacheCompletedSongForOfflineBackup(this.currentSong, this.currentPlayingStreamUrl).catch(() => {});
+    }
+
+    // Track listening duration in intelligence profile
+    const currentSec = Math.floor(currentTime);
+    if (currentSec > this.lastTimeUpdateSecond) {
+      userProfileTracker.recordListeningDuration(currentSec - this.lastTimeUpdateSecond);
+      this.lastTimeUpdateSecond = currentSec;
+    }
+
+    // ── Early Next Track Pre-Resolution (12-25s before end) ──
+    const remaining = duration - currentTime;
+    if (duration > 20 && remaining > 7 && remaining <= 25) {
+      this.preloadUpcomingTrack();
+    }
+
+    // ── Riding Mode DJ Crossfade Trigger (6-7s before track end) ──
+    if (
+      this._ridingMode &&
+      !this.isCrossfading &&
+      !this.isResolvingCrossfade &&
+      !this.audio.paused &&
+      this.currentSong &&
+      this.crossfadeSongId !== this.currentSong.id &&
+      duration > 15 &&
+      currentTime > 0
+    ) {
+      if (remaining > 0 && remaining <= 7 && this._repeat !== 'one') {
+        const nextIndex = this._queueIndex + 1;
+        const hasNext = nextIndex < this._queue.length || (this._repeat === 'all' && this._queue.length > 0) || (this._autoPlay && (this._queue.length > 0 || this._automixQueue.length > 0));
+        if (hasNext) {
+          this.crossfadeSongId = this.currentSong.id;
+          this.startCrossfade();
+        }
+      }
+    }
+
+    // ── Non-Stop Playback AutoMix Auto-Injection ──
+    if (
+      this._autoPlay &&
+      duration > 20 &&
+      remaining > 0 &&
+      remaining <= 16 &&
+      this._queueIndex >= this._queue.length - 1 &&
+      this._automixQueue.length > 0
+    ) {
+      this.injectNextAutomixTrack();
+    }
+
+    // Proactively replenish automix buffer if it drops below 5 items
+    if (
+      this._autoPlay &&
+      this.currentSong &&
+      this._automixQueue.length < 5 &&
+      !this.isAutomixReplenishing
+    ) {
+      this.replenishAutomixQueue(this.currentSong);
+    }
+
+    // Proactively pre-fetch context-pure recommendations when 50% through the song and near queue end
+    if (
+      this._autoPlay &&
+      progress > 0.50 &&
+      this.currentSong &&
+      this.lastPrefetchedSongId !== this.currentSong.id &&
+      this._queueIndex >= this._queue.length - 2
+    ) {
+      this.lastPrefetchedSongId = this.currentSong.id;
+      this.triggerSmartPreload(this.currentSong);
+    }
+  }
+
+  /**
+   * Pre-resolves full stream for upcoming track in background so Riding Mode DJ crossfade is instantaneous.
+   */
+  private async preloadUpcomingTrack(): Promise<void> {
+    let nextIndex = this._queueIndex + 1;
+    let nextSong = this._queue[nextIndex];
+    if (!nextSong && this._repeat === 'all' && this._queue.length > 0) {
+      nextSong = this._queue[0];
+    }
+    if (!nextSong && this._autoPlay && this._automixQueue.length > 0) {
+      nextSong = this._automixQueue[0];
+    }
+    if (!nextSong) return;
+
+    if (!nextSong.previewUrl || isPreviewAudioUrl(nextSong.previewUrl)) {
+      if (navigator.onLine) {
+        try {
+          const isSpotifyImport = nextSong.id.startsWith('spotify_');
+          const fullTrack = await resolveFullTrack(
+            nextSong.title,
+            nextSong.artist,
+            this._audioQuality,
+            nextSong.duration,
+            isSpotifyImport
+          );
+          if (fullTrack?.streamUrl && !isPreviewAudioUrl(fullTrack.streamUrl)) {
+            nextSong.previewUrl = fullTrack.streamUrl;
+            if (fullTrack.duration > 0) nextSong.duration = fullTrack.duration;
+            nextSong.provider = 'saavn';
+          } else {
+            const { resolveYouTubeFullAudioStream } = await import('../../data/api/youtubeMusicApi');
+            const ytStream = await resolveYouTubeFullAudioStream(nextSong.title, nextSong.artist, nextSong.duration);
+            if (ytStream?.streamUrl && !isPreviewAudioUrl(ytStream.streamUrl)) {
+              nextSong.previewUrl = ytStream.streamUrl;
+              if (ytStream.duration > 0) nextSong.duration = ytStream.duration;
+              nextSong.provider = 'youtube';
+            }
+          }
+        } catch {
+          // non-blocking
+        }
+      }
+    }
+
+    if (nextSong.previewUrl && !nextSong.previewUrl.startsWith('blob:') && navigator.onLine) {
+      adaptiveStreaming.preBufferSong(nextSong.id, nextSong.previewUrl, this._audioQuality);
     }
   }
 
@@ -1099,6 +1182,9 @@ class AudioPlayer {
     } else if (this._repeat === 'all' && this._queue.length > 0) {
       nextIndex = 0;
       nextSong = this._queue[0];
+    } else if (this._autoPlay && this._automixQueue.length > 0) {
+      this.injectNextAutomixTrack();
+      nextSong = this._queue[nextIndex];
     } else if (this._autoPlay && this._queue.length > 0) {
       try {
         const current = this.currentSong;
@@ -1144,17 +1230,15 @@ class AudioPlayer {
           targetSong.previewUrl = fullTrack.streamUrl;
           if (fullTrack.duration > 0) targetSong.duration = fullTrack.duration;
           targetSong.provider = 'saavn';
-        }
-      }
-
-      if ((!streamUrl || isPreviewAudioUrl(streamUrl)) && navigator.onLine) {
-        const { resolveYouTubeFullAudioStream } = await import('../../data/api/youtubeMusicApi');
-        const ytStream = await resolveYouTubeFullAudioStream(targetSong.title, targetSong.artist, targetSong.duration);
-        if (ytStream?.streamUrl && !isPreviewAudioUrl(ytStream.streamUrl)) {
-          streamUrl = ytStream.streamUrl;
-          targetSong.previewUrl = ytStream.streamUrl;
-          if (ytStream.duration > 0) targetSong.duration = ytStream.duration;
-          targetSong.provider = 'youtube';
+        } else {
+          const { resolveYouTubeFullAudioStream } = await import('../../data/api/youtubeMusicApi');
+          const ytStream = await resolveYouTubeFullAudioStream(targetSong.title, targetSong.artist, targetSong.duration);
+          if (ytStream?.streamUrl && !isPreviewAudioUrl(ytStream.streamUrl)) {
+            streamUrl = ytStream.streamUrl;
+            targetSong.previewUrl = ytStream.streamUrl;
+            if (ytStream.duration > 0) targetSong.duration = ytStream.duration;
+            targetSong.provider = 'youtube';
+          }
         }
       }
 
@@ -1182,18 +1266,19 @@ class AudioPlayer {
       this.crossfadeTargetSong = targetSong;
       this.crossfadeTargetIndex = targetIndex;
 
-      this.crossfadeAudio.src = streamUrl;
-      this.crossfadeAudio.currentTime = 0;
-      this.crossfadeAudio.volume = 0;
+      const incomingAudio = this.crossfadeAudio;
+      incomingAudio.src = streamUrl;
+      incomingAudio.currentTime = 0;
+      incomingAudio.volume = 0;
 
-      // Start playing next song at 0% volume while current song continues playing
-      const playPromise = this.crossfadeAudio.play();
+      // Start playing incoming next song at 0% volume while current song continues playing
+      const playPromise = incomingAudio.play();
       if (playPromise !== undefined) {
         await playPromise;
       }
 
       if (!this.isCrossfading || !this._ridingMode) {
-        this.crossfadeAudio.pause();
+        incomingAudio.pause();
         return;
       }
 
@@ -1214,8 +1299,8 @@ class AudioPlayer {
     const currentSong = this.currentSong;
     const targetSong = this.crossfadeTargetSong;
     const crossfadeDurationMs = (currentSong && targetSong)
-      ? BeatAnalyzer.calculateOptimalCrossfadeDuration(currentSong, targetSong, 8000)
-      : 8000;
+      ? BeatAnalyzer.calculateOptimalCrossfadeDuration(currentSong, targetSong, 6500)
+      : 6500;
     const stepInterval = 40; // 25 fps buttery-smooth volume increments
 
     this.crossfadeTimer = setInterval(() => {
@@ -1229,8 +1314,8 @@ class AudioPlayer {
       const fadeOutVol = Math.max(0, Math.min(1, this._volume * gainOut));
       const fadeInVol = Math.max(0, Math.min(1, this._volume * gainIn));
 
-      if (this.audio) this.audio.volume = fadeOutVol;
-      if (this.crossfadeAudio) this.crossfadeAudio.volume = fadeInVol;
+      this.audio.volume = fadeOutVol;
+      this.crossfadeAudio.volume = fadeInVol;
 
       if (p >= 1) {
         if (this.crossfadeTimer) {
@@ -1252,17 +1337,14 @@ class AudioPlayer {
       this.crossfadeTimer = null;
     }
 
-    // Stop and completely clean up old audio instance
-    this.audio.pause();
-    this.audio.src = '';
-    this.audio.volume = this._volume;
+    // Stop and completely clean up outgoing audio channel
+    const outgoing = this.audio;
+    outgoing.pause();
+    outgoing.src = '';
+    outgoing.volume = 0;
 
-    // Swap audio element instances
-    const oldPrimary = this.audio;
-    this.audio = this.crossfadeAudio;
-    this.crossfadeAudio = oldPrimary;
-    this.crossfadeAudio.volume = 0;
-    this.crossfadeAudio.src = '';
+    // Switch active channel cleanly (event listeners are permanent on both channels)
+    this.activeChannel = this.activeChannel === 'A' ? 'B' : 'A';
     this.audio.volume = this._volume;
 
     this._queueIndex = newIndex;
@@ -1271,9 +1353,6 @@ class AudioPlayer {
     this.crossfadeTargetSong = null;
     this.crossfadeProgress = 0;
     this.crossfadeSongId = null;
-
-    // Reattach event listeners to new primary audio element
-    this.bindEvents();
 
     this.emit({ type: 'songchange', song: nextSong });
     this.emit({ type: 'play' });
@@ -1287,10 +1366,11 @@ class AudioPlayer {
       clearInterval(this.crossfadeTimer);
       this.crossfadeTimer = null;
     }
-    if (this.crossfadeAudio) {
-      this.crossfadeAudio.pause();
-      this.crossfadeAudio.src = '';
-      this.crossfadeAudio.volume = 0;
+    const incoming = this.crossfadeAudio;
+    if (incoming) {
+      incoming.pause();
+      incoming.src = '';
+      incoming.volume = 0;
     }
     if (this.audio) {
       this.audio.volume = this._volume;
@@ -1322,10 +1402,8 @@ class AudioPlayer {
   pause() {
     if (this.isCrossfading) {
       this.isCrossfadePaused = true;
-      this.audio.pause();
-      if (this.crossfadeAudio && !this.crossfadeAudio.paused) {
-        this.crossfadeAudio.pause();
-      }
+      this.channelA.pause();
+      this.channelB.pause();
       this.emit({ type: 'pause' });
       return;
     }
@@ -1337,10 +1415,8 @@ class AudioPlayer {
     studioAudioEngine.resume();
     if (this.isCrossfading && this.isCrossfadePaused) {
       this.isCrossfadePaused = false;
-      this.audio.play().catch(() => {});
-      if (this.crossfadeAudio && this.crossfadeAudio.src) {
-        this.crossfadeAudio.play().catch(() => {});
-      }
+      this.channelA.play().catch(() => {});
+      this.channelB.play().catch(() => {});
       this.emit({ type: 'play' });
       return;
     }
