@@ -5,7 +5,6 @@ import { getLyrics } from '../../data/api/lyricsApi';
 import { NowPlayingMenuSheet } from './NowPlayingMenuSheet';
 import type { Lyrics } from '../../data/models';
 import { formatDuration } from '../../core/utils';
-import { showToast } from '../../core/utils/toast';
 import { CONFIG } from '../../config';
 import { extractArtworkTheme, DEFAULT_DARK_ARTWORK_THEME, type ExtractedArtworkTheme } from '../../core/utils/colorExtractor';
 
@@ -82,15 +81,15 @@ export function FullPlayer() {
   const [dismissOffsetY, setDismissOffsetY] = useState(0);
   const [isDraggingDismiss, setIsDraggingDismiss] = useState(false);
   const [isClosing, setIsClosing] = useState(false);
+  const rootTouchStartPosRef = useRef({ x: 0, y: 0, time: 0 });
+  const isRootDraggingRef = useRef(false);
 
   // Artwork swipe gestures state
   const [artworkOffsetX, setArtworkOffsetX] = useState(0);
   const [isDraggingArtwork, setIsDraggingArtwork] = useState(false);
-
-  const touchStartXRef = useRef(0);
-  const touchStartYRef = useRef(0);
-  const touchStartTimeRef = useRef(0);
-  const activeGestureRef = useRef<'none' | 'dismiss' | 'artwork' | 'ignore'>('none');
+  const artworkTouchStartPosRef = useRef({ x: 0, y: 0, time: 0 });
+  const artworkGestureModeRef = useRef<'none' | 'horizontal' | 'dismiss'>('none');
+  const artworkMovedRef = useRef(false);
 
   const liked = currentSong ? isFavorite(currentSong.id) : false;
 
@@ -98,41 +97,37 @@ export function FullPlayer() {
   const handleRootTouchStart = (e: React.TouchEvent | React.MouseEvent) => {
     if (isClosing) return;
     const target = e.target as HTMLElement | null;
-    if (target?.closest('button, [role="slider"], #player-progress-bar, input, .btn-icon, .btn-ghost, #full-player-menu-sheet, #now-playing-artwork-card')) {
-      activeGestureRef.current = 'ignore';
+    if (target?.closest('button, [role="slider"], #player-progress-bar, input, .btn-icon, .btn-ghost, #full-player-menu-sheet, #now-playing-artwork-card, .artwork-touch-area')) {
+      isRootDraggingRef.current = false;
       return;
     }
 
     const clientX = 'touches' in e ? e.touches[0].clientX : e.clientX;
     const clientY = 'touches' in e ? e.touches[0].clientY : e.clientY;
-    touchStartXRef.current = clientX;
-    touchStartYRef.current = clientY;
-    touchStartTimeRef.current = Date.now();
-    activeGestureRef.current = 'none';
+    rootTouchStartPosRef.current = { x: clientX, y: clientY, time: Date.now() };
+    isRootDraggingRef.current = false;
   };
 
   const handleRootTouchMove = (e: React.TouchEvent | React.MouseEvent) => {
-    if (isClosing || activeGestureRef.current === 'ignore' || activeGestureRef.current === 'artwork') return;
+    if (isClosing || !rootTouchStartPosRef.current.time) return;
     const clientX = 'touches' in e ? e.touches[0].clientX : e.clientX;
     const clientY = 'touches' in e ? e.touches[0].clientY : e.clientY;
-    const dx = clientX - touchStartXRef.current;
-    const dy = clientY - touchStartYRef.current;
+    const dx = clientX - rootTouchStartPosRef.current.x;
+    const dy = clientY - rootTouchStartPosRef.current.y;
 
     // Check if touching inside lyrics container while scrolled down
     if (showLyrics && lyricsContainerRef.current && lyricsContainerRef.current.scrollTop > 0) {
       return;
     }
 
-    if (activeGestureRef.current === 'none') {
-      if (dy > 8 && dy > Math.abs(dx) * 1.2) {
-        activeGestureRef.current = 'dismiss';
+    if (!isRootDraggingRef.current) {
+      if (dy > 8 && dy > Math.abs(dx)) {
+        isRootDraggingRef.current = true;
         setIsDraggingDismiss(true);
-      } else if (Math.abs(dx) > 8) {
-        activeGestureRef.current = 'ignore';
       }
     }
 
-    if (activeGestureRef.current === 'dismiss') {
+    if (isRootDraggingRef.current) {
       if (dy > 0) {
         const clampedDy = dy > 200 ? 200 + (dy - 200) * 0.55 : dy;
         setDismissOffsetY(clampedDy);
@@ -143,8 +138,8 @@ export function FullPlayer() {
   };
 
   const handleRootTouchEnd = () => {
-    if (activeGestureRef.current === 'dismiss') {
-      const elapsed = Math.max(1, Date.now() - touchStartTimeRef.current);
+    if (isRootDraggingRef.current) {
+      const elapsed = Math.max(1, Date.now() - rootTouchStartPosRef.current.time);
       const velocity = dismissOffsetY / elapsed;
 
       // Threshold: >110px or quick flick downward (>0.45px/ms & >35px)
@@ -157,46 +152,52 @@ export function FullPlayer() {
         setDismissOffsetY(0);
         setIsDraggingDismiss(false);
       }
+      isRootDraggingRef.current = false;
     }
-    activeGestureRef.current = 'none';
+    rootTouchStartPosRef.current = { x: 0, y: 0, time: 0 };
   };
 
   // Swipe gesture handlers specifically for Album Artwork
   const handleArtworkTouchStart = (e: React.TouchEvent | React.MouseEvent) => {
     if (isClosing) return;
+    e.stopPropagation();
     const clientX = 'touches' in e ? e.touches[0].clientX : e.clientX;
     const clientY = 'touches' in e ? e.touches[0].clientY : e.clientY;
-    touchStartXRef.current = clientX;
-    touchStartYRef.current = clientY;
-    touchStartTimeRef.current = Date.now();
-    activeGestureRef.current = 'none';
+    artworkTouchStartPosRef.current = { x: clientX, y: clientY, time: Date.now() };
+    artworkGestureModeRef.current = 'none';
+    artworkMovedRef.current = false;
     setIsDraggingArtwork(true);
   };
 
   const handleArtworkTouchMove = (e: React.TouchEvent | React.MouseEvent) => {
     if (isClosing) return;
+    e.stopPropagation();
     const clientX = 'touches' in e ? e.touches[0].clientX : e.clientX;
     const clientY = 'touches' in e ? e.touches[0].clientY : e.clientY;
-    const dx = clientX - touchStartXRef.current;
-    const dy = clientY - touchStartYRef.current;
+    const dx = clientX - artworkTouchStartPosRef.current.x;
+    const dy = clientY - artworkTouchStartPosRef.current.y;
 
-    if (activeGestureRef.current === 'none') {
-      if (Math.abs(dx) > Math.abs(dy) && Math.abs(dx) > 8) {
-        activeGestureRef.current = 'artwork';
-      } else if (dy > 8 && dy > Math.abs(dx) * 1.2) {
-        activeGestureRef.current = 'dismiss';
+    if (Math.abs(dx) > 5 || Math.abs(dy) > 5) {
+      artworkMovedRef.current = true;
+    }
+
+    if (artworkGestureModeRef.current === 'none') {
+      if (Math.abs(dx) > Math.abs(dy) && Math.abs(dx) > 6) {
+        artworkGestureModeRef.current = 'horizontal';
+      } else if (dy > 8 && dy > Math.abs(dx)) {
+        artworkGestureModeRef.current = 'dismiss';
         setIsDraggingArtwork(false);
         setIsDraggingDismiss(true);
       }
     }
 
-    if (activeGestureRef.current === 'artwork') {
+    if (artworkGestureModeRef.current === 'horizontal') {
       // Elastic resistance
-      const clampedDx = Math.abs(dx) > 130
-        ? Math.sign(dx) * (130 + (Math.abs(dx) - 130) * 0.35)
+      const clampedDx = Math.abs(dx) > 140
+        ? Math.sign(dx) * (140 + (Math.abs(dx) - 140) * 0.35)
         : dx;
       setArtworkOffsetX(clampedDx);
-    } else if (activeGestureRef.current === 'dismiss') {
+    } else if (artworkGestureModeRef.current === 'dismiss') {
       if (dy > 0) {
         const clampedDy = dy > 200 ? 200 + (dy - 200) * 0.55 : dy;
         setDismissOffsetY(clampedDy);
@@ -206,36 +207,29 @@ export function FullPlayer() {
     }
   };
 
-  const handleArtworkTouchEnd = () => {
-    if (activeGestureRef.current === 'artwork') {
-      // Swipe left (artworkOffsetX <= -50) -> NEXT track
-      if (artworkOffsetX <= -50) {
-        const hasNext = (queue && queue.length > 1 && queueIndex < queue.length - 1) || repeat === 'all' || state.autoPlay;
-        if (hasNext) {
-          if (typeof navigator !== 'undefined' && navigator.vibrate) {
-            navigator.vibrate(30);
-          }
-          next();
-        } else {
-          showToast('No next track available', 'info');
+  const handleArtworkTouchEnd = (e?: React.TouchEvent | React.MouseEvent) => {
+    if (e) e.stopPropagation();
+
+    if (artworkGestureModeRef.current === 'horizontal') {
+      // Swipe left (artworkOffsetX <= -40) -> NEXT track
+      if (artworkOffsetX <= -40) {
+        if (typeof navigator !== 'undefined' && navigator.vibrate) {
+          navigator.vibrate(30);
         }
+        next();
       }
-      // Swipe right (artworkOffsetX >= 50) -> PREVIOUS track
-      else if (artworkOffsetX >= 50) {
-        const hasPrev = (queue && queue.length > 1 && queueIndex > 0) || repeat === 'all';
-        if (hasPrev) {
-          if (typeof navigator !== 'undefined' && navigator.vibrate) {
-            navigator.vibrate(30);
-          }
-          previous(true);
-        } else {
-          showToast('No previous track available', 'info');
+      // Swipe right (artworkOffsetX >= 40) -> PREVIOUS track
+      else if (artworkOffsetX >= 40) {
+        if (typeof navigator !== 'undefined' && navigator.vibrate) {
+          navigator.vibrate(30);
         }
+        previous(true);
       }
       setArtworkOffsetX(0);
       setIsDraggingArtwork(false);
-    } else if (activeGestureRef.current === 'dismiss') {
-      const elapsed = Math.max(1, Date.now() - touchStartTimeRef.current);
+      artworkGestureModeRef.current = 'none';
+    } else if (artworkGestureModeRef.current === 'dismiss') {
+      const elapsed = Math.max(1, Date.now() - artworkTouchStartPosRef.current.time);
       const velocity = dismissOffsetY / elapsed;
       if (dismissOffsetY >= 110 || (velocity > 0.45 && dismissOffsetY > 35)) {
         setIsClosing(true);
@@ -246,9 +240,13 @@ export function FullPlayer() {
         setDismissOffsetY(0);
         setIsDraggingDismiss(false);
       }
+      artworkGestureModeRef.current = 'none';
+      setIsDraggingArtwork(false);
+    } else {
+      setArtworkOffsetX(0);
+      setIsDraggingArtwork(false);
+      artworkGestureModeRef.current = 'none';
     }
-    setIsDraggingArtwork(false);
-    activeGestureRef.current = 'none';
   };
 
   // Fetch lyrics with multi-tiered LRCLIB & JioSaavn engine
@@ -410,7 +408,13 @@ export function FullPlayer() {
             >
               <div
                 id="now-playing-artwork-card"
-                onClick={togglePlay}
+                onClick={(e) => {
+                  if (artworkMovedRef.current) {
+                    e.stopPropagation();
+                    return;
+                  }
+                  togglePlay();
+                }}
                 style={{
                   position: 'relative',
                   width: 'min(280px, calc(100vw - 80px))',
