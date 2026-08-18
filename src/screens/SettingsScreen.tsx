@@ -56,9 +56,7 @@ export function SettingsScreen() {
         className="scroll-area"
         style={{
           flex: 1,
-          paddingBottom: playerState.currentSong
-            ? 'calc(var(--bottom-nav-height, 64px) + 76px + env(safe-area-inset-bottom, 0px))'
-            : 'calc(var(--bottom-nav-height, 64px) + 20px + env(safe-area-inset-bottom, 0px))',
+          paddingBottom: 20,
         }}
       >
         {/* Header */}
@@ -748,8 +746,6 @@ export function SettingsScreen() {
             </div>
           </section>
         </div>
-
-        <div style={{ height: 16 }} />
       </div>
 
       {/* Music Languages Modal */}
