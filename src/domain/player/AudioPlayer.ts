@@ -338,20 +338,10 @@ class AudioPlayer {
           return;
         }
 
-        // Auto-recovery 2: Live stream error -> fallback to YouTube stream resolver
+        // Auto-recovery 2: Live stream error -> Dynamic bitrate downgrade / YouTube fallback
         if (navigator.onLine && !failedSrc.startsWith('blob:')) {
-          try {
-            console.log('Attempting live stream auto-recovery via YouTube for:', current.title);
-            const { resolveYouTubeFullAudioStream } = await import('../../data/api/youtubeMusicApi');
-            const ytStream = await resolveYouTubeFullAudioStream(current.title, current.artist, current.duration);
-            if (ytStream?.streamUrl && this.currentSong?.id === current.id) {
-              current.previewUrl = ytStream.streamUrl;
-              current.provider = 'youtube';
-              el.src = ytStream.streamUrl;
-              el.play().catch(() => {});
-              return;
-            }
-          } catch {}
+          const recovered = await this.handleStreamFailureOrStall(this._audioQuality);
+          if (recovered) return;
         }
 
         this.emit({ type: 'loading', isLoading: false });
@@ -596,9 +586,16 @@ class AudioPlayer {
     let activeLabel = '320 kbps';
 
     if (selectedQuality === 'auto') {
-      if (hasFlac) {
+      const net = adaptiveStreaming.networkCondition;
+      if (hasFlac && (net.tier === 'wifi' || net.tier === '5g')) {
         effectiveQuality = 'flac_16_44';
         activeLabel = 'Auto • FLAC 16/44.1';
+      } else if (net.tier === '2g' || (net.unstable && net.kbps < 100)) {
+        effectiveQuality = 'low';
+        activeLabel = 'Auto • 96 kbps';
+      } else if (net.tier === '3g' || (net.unstable && net.kbps < 300)) {
+        effectiveQuality = 'medium';
+        activeLabel = 'Auto • 192 kbps';
       } else {
         effectiveQuality = 'high';
         activeLabel = 'Auto • 320 kbps';
@@ -638,6 +635,56 @@ class AudioPlayer {
 
     const streamUrl = formatMediaUrlWithQuality(targetSong.previewUrl, effectiveQuality);
     return { streamUrl, activeQuality: effectiveQuality, activeQualityLabel: activeLabel };
+  }
+
+  /**
+   * Automatically recovers playback during network stalls or broken bitrates without interrupting.
+   */
+  public async handleStreamFailureOrStall(failedQuality: AudioQuality): Promise<boolean> {
+    if (!navigator.onLine || !this.currentSong) return false;
+    const song = this.currentSong;
+    const currentPos = this.audio.currentTime || 0;
+
+    // Step 1: If high quality fails or stalls, step down to 192 kbps
+    if (failedQuality === 'high' || failedQuality === 'auto' || failedQuality.startsWith('flac_')) {
+      const lowerUrl = formatMediaUrlWithQuality(song.previewUrl, 'medium');
+      if (lowerUrl && lowerUrl !== this.audio.src) {
+        console.log('Stepping down stream to 192 kbps for smooth playback:', song.title);
+        this.audio.src = lowerUrl;
+        this.audio.currentTime = currentPos;
+        this.audio.play().catch(() => {});
+        return true;
+      }
+    }
+
+    // Step 2: If medium fails or stalls, step down to 96 kbps
+    if (failedQuality === 'medium' || failedQuality === 'high' || failedQuality === 'auto') {
+      const lowestUrl = formatMediaUrlWithQuality(song.previewUrl, 'low');
+      if (lowestUrl && lowestUrl !== this.audio.src) {
+        console.log('Stepping down stream to 96 kbps for smooth playback:', song.title);
+        this.audio.src = lowestUrl;
+        this.audio.currentTime = currentPos;
+        this.audio.play().catch(() => {});
+        return true;
+      }
+    }
+
+    // Step 3: Fallback to YouTube Music audio stream resolver
+    try {
+      console.log('Attempting live YouTube stream resolution fallback for:', song.title);
+      const { resolveYouTubeFullAudioStream } = await import('../../data/api/youtubeMusicApi');
+      const ytStream = await resolveYouTubeFullAudioStream(song.title, song.artist, song.duration);
+      if (ytStream?.streamUrl && this.currentSong?.id === song.id) {
+        song.previewUrl = ytStream.streamUrl;
+        song.provider = 'youtube';
+        this.audio.src = ytStream.streamUrl;
+        this.audio.currentTime = currentPos;
+        this.audio.play().catch(() => {});
+        return true;
+      }
+    } catch {}
+
+    return false;
   }
 
   /**

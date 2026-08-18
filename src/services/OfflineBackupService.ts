@@ -14,7 +14,7 @@ const DB_NAME = 'soundwave_offline_db';
 const DB_VERSION = 1;
 const STORE_NAME = 'cached_tracks';
 const MAX_OFFLINE_TRACKS = 50;
-const MIN_VALID_AUDIO_BYTES = 350_000; // 350 KB minimum for complete audio
+const MIN_VALID_AUDIO_BYTES = 200_000; // 200 KB minimum for complete playable audio
 
 export interface CachedRecord {
   id: string;
@@ -109,8 +109,12 @@ export async function cacheCompletedSongForOfflineBackup(
   if (!song || !song.id) return false;
   if (!navigator.onLine) return false;
 
+  // Check if already in offline backup
+  const alreadyCached = await isSongCachedOffline(song.id);
+  if (alreadyCached) return true;
+
   const urlToFetch = streamUrl || song.previewUrl;
-  if (!urlToFetch || !urlToFetch.startsWith('http') || urlToFetch.startsWith('blob:')) return false;
+  if (!urlToFetch || urlToFetch.startsWith('blob:')) return false;
 
   // Ignore 30s preview URLs from Spotify/Apple
   if (
@@ -125,16 +129,28 @@ export async function cacheCompletedSongForOfflineBackup(
   activeCacheDownloads.add(song.id);
 
   try {
-    // 1. Fetch complete playable audio binary in background
-    const blob = await fetchAudioBlob(urlToFetch);
+    // 1. Try to get Blob directly from AdaptiveStreaming cache if already buffered
+    let blob: Blob | null = null;
+    try {
+      const { adaptiveStreaming } = await import('./AdaptiveStreamingService');
+      const streamBlob = await adaptiveStreaming.getStreamBlob(song.id);
+      if (streamBlob && streamBlob.size >= MIN_VALID_AUDIO_BYTES) {
+        blob = streamBlob;
+      }
+    } catch {}
 
-    // 2. Strict validation: Must be complete playable audio
+    // 2. If not in stream cache, download full binary audio
+    if (!blob && urlToFetch.startsWith('http')) {
+      blob = await fetchAudioBlob(urlToFetch);
+    }
+
+    // 3. Strict validation: Must be complete playable audio
     if (!blob || blob.size < MIN_VALID_AUDIO_BYTES) {
       activeCacheDownloads.delete(song.id);
       return false;
     }
 
-    // 3. Store in IndexedDB
+    // 4. Store in IndexedDB
     const db = await openDatabase();
     await new Promise<void>((resolve, reject) => {
       const tx = db.transaction(STORE_NAME, 'readwrite');
@@ -150,9 +166,9 @@ export async function cacheCompletedSongForOfflineBackup(
       const record: CachedRecord = {
         id: song.id,
         song: cleanSong,
-        audioBlob: blob,
+        audioBlob: blob!,
         cachedAt: Date.now(),
-        fileSize: blob.size,
+        fileSize: blob!.size,
       };
 
       const req = store.put(record);
@@ -181,7 +197,7 @@ export async function cacheCompletedSongForOfflineBackup(
 
     activeCacheDownloads.delete(song.id);
 
-    // Notify UI components that Offline Backup updated
+    // Notify UI components immediately that Offline Backup updated
     try {
       window.dispatchEvent(new CustomEvent('sw_offline_backup_changed'));
     } catch {}
@@ -221,13 +237,15 @@ export async function getOfflineBackupPlaylist(): Promise<Playlist | null> {
       const index = store.index('cachedAt');
       const request = index.openCursor(null, 'prev'); // Most recently cached first
       const songs: Song[] = [];
+      const seenIds = new Set<string>();
 
       request.onsuccess = (event) => {
         const cursor = (event.target as IDBRequest<IDBCursorWithValue>).result;
         if (cursor) {
           const record = cursor.value as CachedRecord;
 
-          if (record && record.song) {
+          if (record && record.song && record.song.id && !seenIds.has(record.song.id)) {
+            seenIds.add(record.song.id);
             let blobUrl = '';
             if (record.audioBlob) {
               try {

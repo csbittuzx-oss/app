@@ -363,6 +363,24 @@ class AdaptiveStreamingService {
   }
 
   /**
+   * Returns the cached Blob if available in stream storage.
+   */
+  async getStreamBlob(songId: string): Promise<Blob | null> {
+    try {
+      const db = await openStreamDB();
+      const tx = db.transaction(STREAM_STORE, 'readonly');
+      const store = tx.objectStore(STREAM_STORE);
+      const record = await idbGet<CacheRecord>(store, songId);
+      if (record && record.blob && record.blob.size >= MIN_VALID_BLOB_BYTES) {
+        return record.blob;
+      }
+      return null;
+    } catch {
+      return null;
+    }
+  }
+
+  /**
    * Purges a song from in-memory and IndexedDB stream caches.
    */
   async evictCachedSong(songId: string): Promise<void> {

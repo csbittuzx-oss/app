@@ -383,26 +383,6 @@ export function FullPlayer() {
           <p style={{ margin: 0, fontSize: 'var(--text-xs)', fontWeight: 600, letterSpacing: '0.08em', textTransform: 'uppercase', color: 'var(--color-text-muted)' }}>
             Now Playing
           </p>
-          {state.ridingMode && (
-            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', marginTop: 2 }}>
-              <span style={{
-                display: 'inline-flex',
-                alignItems: 'center',
-                gap: 4,
-                fontSize: '9px',
-                fontWeight: 700,
-                letterSpacing: '0.05em',
-                textTransform: 'uppercase',
-                padding: '2px 7px',
-                borderRadius: 'var(--radius-full, 9999px)',
-                background: 'var(--color-accent)',
-                color: 'var(--color-accent-on, #000)',
-                boxShadow: '0 2px 8px rgba(245,158,11,0.3)',
-              }}>
-                🏍️ Riding DJ Mix
-              </span>
-            </div>
-          )}
         </div>
         <button
           id="full-player-menu-btn"

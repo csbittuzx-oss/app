@@ -78,19 +78,6 @@ export function MiniPlayer() {
           }}>
             {currentSong.artist}
           </p>
-          {state.ridingMode && (
-            <span style={{
-              fontSize: '8.5px',
-              fontWeight: 800,
-              padding: '0 4px',
-              borderRadius: '3px',
-              background: 'var(--color-accent)',
-              color: 'var(--color-accent-on, #000)',
-              flexShrink: 0,
-            }}>
-              🏍️ DJ Mix
-            </span>
-          )}
           {state.activeQualityLabel && (
             <span style={{
               fontSize: '8.5px',
