@@ -166,6 +166,9 @@ export function PlayerProvider({ children }: { children: React.ReactNode }) {
         case 'autoplaychange':
           dispatch({ type: 'SET_AUTOPLAY', payload: event.autoPlay });
           break;
+        case 'automixchange':
+          // Automix buffer updated in AudioPlayer
+          break;
         case 'ridingmodechange':
           dispatch({ type: 'SET_RIDING_MODE', payload: event.ridingMode });
           break;

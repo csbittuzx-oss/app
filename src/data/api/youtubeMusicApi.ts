@@ -335,7 +335,7 @@ export async function resolveYouTubeFullAudioStream(
   title: string,
   artist: string,
   targetDuration?: number
-): Promise<{ streamUrl: string; duration: number; artwork?: string } | null> {
+): Promise<{ streamUrl: string; duration: number; artwork?: string; videoId?: string } | null> {
   const cleanTitle = title
     .replace(/\(feat\..*?\)/gi, '')
     .replace(/\(with.*?\)/gi, '')
@@ -381,6 +381,7 @@ export async function resolveYouTubeFullAudioStream(
               streamUrl: stream.streamUrl,
               duration: stream.duration || candidate.song.duration || targetDuration || 180,
               artwork: candidate.song.artwork || candidate.song.artworkLg || `https://i.ytimg.com/vi/${candidate.videoId}/hqdefault.jpg`,
+              videoId: candidate.videoId,
             };
           }
         }
@@ -418,6 +419,7 @@ export async function resolveYouTubeFullAudioStream(
                 streamUrl: stream.streamUrl,
                 duration: stream.duration || cand.item.duration || targetDuration || 180,
                 artwork: cand.item.thumbnail || `https://i.ytimg.com/vi/${videoId}/hqdefault.jpg`,
+                videoId,
               };
             }
           }

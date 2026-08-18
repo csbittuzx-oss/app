@@ -17,6 +17,8 @@ import { userProfileTracker } from '../recommendation/UserProfileTracker';
 import { aiTasteProfileEngine } from '../ai/AITasteProfileEngine';
 import { adaptiveStreaming } from '../../services/AdaptiveStreamingService';
 import { studioAudioEngine } from './StudioAudioEngine';
+import { YouTubeQueueService } from '../../services/YouTubeQueue';
+import { BeatAnalyzer } from './BeatAnalyzer';
 
 export interface PlaybackSession {
   song: Song;
@@ -30,6 +32,7 @@ export interface PlaybackSession {
 }
 
 export const CONTINUE_LISTENING_KEY = 'sw_continue_listening_session';
+export const PERSISTENT_AUTOMIX_KEY = 'sw_persistent_automix';
 
 type AudioPlayerCallback = (event: AudioPlayerEvent) => void;
 
@@ -43,6 +46,7 @@ export type AudioPlayerEvent =
   | { type: 'queuechange' }
   | { type: 'songchange'; song: Song | null }
   | { type: 'autoplaychange'; autoPlay: boolean }
+  | { type: 'automixchange'; automixQueue: Song[] }
   | { type: 'qualitychange'; quality: AudioQuality }
   | { type: 'ridingmodechange'; ridingMode: boolean };
 
@@ -59,6 +63,10 @@ class AudioPlayer {
   private _ridingMode = false;
   private _audioQuality: AudioQuality = 'high';
   private callbacks: Set<AudioPlayerCallback> = new Set();
+
+  // Endless Seed Radio & Automix state
+  private _automixQueue: Song[] = [];
+  private isAutomixReplenishing = false;
 
   // Crossfade state
   private isCrossfading = false;
@@ -117,6 +125,7 @@ class AudioPlayer {
     }
 
     this.restoreSavedSession();
+    this.restoreAutomixQueue();
     this.bindEvents();
 
     // Attach high-definition DSP audio engine
@@ -154,9 +163,37 @@ class AudioPlayer {
   }
 
   /**
+   * Restores persistent automix recommendations from localStorage.
+   */
+  private restoreAutomixQueue(): void {
+    try {
+      const raw = localStorage.getItem(PERSISTENT_AUTOMIX_KEY);
+      if (!raw) return;
+      const parsed: Song[] = JSON.parse(raw);
+      if (Array.isArray(parsed) && parsed.length > 0) {
+        this._automixQueue = parsed;
+      }
+    } catch {
+      // ignore
+    }
+  }
+
+  /**
+   * Persists automix recommendations into localStorage.
+   */
+  public saveAutomixQueue(): void {
+    try {
+      localStorage.setItem(PERSISTENT_AUTOMIX_KEY, JSON.stringify(this._automixQueue.slice(0, 30)));
+    } catch {
+      // ignore
+    }
+  }
+
+  /**
    * Persists current song, queue, and playback position to localStorage.
    */
   public saveCurrentSession() {
+    this.saveAutomixQueue();
     const song = this.currentSong;
     if (!song) return;
 
@@ -269,12 +306,36 @@ class AudioPlayer {
         const remaining = duration - currentTime;
         if (remaining > 0 && remaining <= 9 && this._repeat !== 'one') {
           const nextIndex = this._queueIndex + 1;
-          const hasNext = nextIndex < this._queue.length || (this._repeat === 'all' && this._queue.length > 0) || (this._autoPlay && this._queue.length > 0);
+          const hasNext = nextIndex < this._queue.length || (this._repeat === 'all' && this._queue.length > 0) || (this._autoPlay && (this._queue.length > 0 || this._automixQueue.length > 0));
           if (hasNext) {
             this.crossfadeSongId = this.currentSong.id;
             this.startCrossfade();
           }
         }
+      }
+
+      // ── Non-Stop Playback AutoMix Auto-Injection ──
+      // When user is near the final track in queue (<= 16s remaining), pop next automix song and append
+      const remainingSec = duration - currentTime;
+      if (
+        this._autoPlay &&
+        duration > 20 &&
+        remainingSec > 0 &&
+        remainingSec <= 16 &&
+        this._queueIndex >= this._queue.length - 1 &&
+        this._automixQueue.length > 0
+      ) {
+        this.injectNextAutomixTrack();
+      }
+
+      // Proactively replenish automix buffer if it drops below 5 items
+      if (
+        this._autoPlay &&
+        this.currentSong &&
+        this._automixQueue.length < 5 &&
+        !this.isAutomixReplenishing
+      ) {
+        this.replenishAutomixQueue(this.currentSong);
       }
 
       // Proactively pre-fetch context-pure recommendations when 50% through the song and near queue end
@@ -495,6 +556,79 @@ class AudioPlayer {
     return this._audioQuality;
   }
 
+  get automixQueue(): Song[] {
+    return [...this._automixQueue];
+  }
+
+  getAutomixItems(): Song[] {
+    return [...this._automixQueue];
+  }
+
+  canSkipNext(): boolean {
+    return (
+      this._queueIndex < this._queue.length - 1 ||
+      this._repeat === 'all' ||
+      (this._autoPlay && (this._automixQueue.length > 0 || this._queue.length > 0))
+    );
+  }
+
+  /**
+   * Generates and replenishes the active automix queue using YouTube Seed Radio.
+   */
+  async replenishAutomixQueue(seedSong?: Song | null, force = false): Promise<void> {
+    const target = seedSong || this.currentSong;
+    if (!target || (!force && this.isAutomixReplenishing)) return;
+    if (!force && this._automixQueue.length >= 15) return;
+
+    this.isAutomixReplenishing = true;
+    try {
+      const existingIds = new Set<string>([
+        ...this._queue.map((s) => s.id),
+        ...this._automixQueue.map((s) => s.id),
+        target.id,
+      ]);
+
+      const newRadioTracks = await YouTubeQueueService.generateSeedRadio(target, undefined, existingIds);
+      if (newRadioTracks && newRadioTracks.length > 0) {
+        for (const track of newRadioTracks) {
+          if (!this._automixQueue.some((s) => s.id === track.id) && !this._queue.some((s) => s.id === track.id)) {
+            this._automixQueue.push(track);
+          }
+        }
+        if (this._automixQueue.length > 30) {
+          this._automixQueue = this._automixQueue.slice(0, 30);
+        }
+        this.saveAutomixQueue();
+        this.emit({ type: 'automixchange', automixQueue: [...this._automixQueue] });
+      }
+    } catch (e) {
+      console.warn('AutoMix replenishment error:', e);
+    } finally {
+      this.isAutomixReplenishing = false;
+    }
+  }
+
+  /**
+   * Pops the next track from the automix queue buffer and appends it to the active player queue.
+   */
+  injectNextAutomixTrack(): Song | null {
+    if (this._automixQueue.length === 0) return null;
+    const nextSong = this._automixQueue.shift()!;
+    this._queue.push(nextSong);
+    this._originalQueue.push(nextSong);
+    this.saveAutomixQueue();
+    this.saveCurrentSession();
+    this.emit({ type: 'queuechange' });
+    this.emit({ type: 'automixchange', automixQueue: [...this._automixQueue] });
+    this.scheduleNextSongPreBuffer();
+
+    // Replenish buffer if low (< 5 items)
+    if (this._automixQueue.length < 5) {
+      this.replenishAutomixQueue(nextSong);
+    }
+    return nextSong;
+  }
+
   // ─── Playback ─────────────────────────────────────────────────────────────
 
   async play(song?: Song, queue?: Song[], startIndex?: number, seekToSeconds?: number) {
@@ -507,6 +641,11 @@ class AudioPlayer {
       this._queue = this._shuffle ? shuffle(queue) : [...queue];
       const matchIndex = this._queue.findIndex((s) => s.id === targetSong.id);
       this._queueIndex = matchIndex !== -1 ? matchIndex : (startIndex !== undefined && startIndex >= 0 && startIndex < this._queue.length ? startIndex : 0);
+    }
+
+    // Trigger proactive automix seed radio buffer replenishment in background
+    if (this._autoPlay) {
+      this.replenishAutomixQueue(targetSong);
     }
 
     // ── Generation counter – every play() call gets a unique ID.
@@ -855,7 +994,11 @@ class AudioPlayer {
       this.crossfadeTimer = null;
     }
 
-    const crossfadeDurationMs = 8000; // 8.0s smooth transition window
+    const currentSong = this.currentSong;
+    const targetSong = this.crossfadeTargetSong;
+    const crossfadeDurationMs = (currentSong && targetSong)
+      ? BeatAnalyzer.calculateOptimalCrossfadeDuration(currentSong, targetSong, 8000)
+      : 8000;
     const stepInterval = 40; // 25 fps buttery-smooth volume increments
 
     this.crossfadeTimer = setInterval(() => {
@@ -864,11 +1007,10 @@ class AudioPlayer {
       this.crossfadeProgress += stepInterval / crossfadeDurationMs;
       const p = Math.min(1, Math.max(0, this.crossfadeProgress));
 
-      // Linear / ease volume crossfade curve
-      // Current song: 100% -> 0%
-      // Next song: 0% -> 100%
-      const fadeOutVol = Math.max(0, this._volume * (1 - p));
-      const fadeInVol = Math.min(this._volume, this._volume * p);
+      // DJ Equal-Power Acoustic Crossfade Law (cos/sin constant energy, 0dB center drop)
+      const { gainOut, gainIn } = BeatAnalyzer.getEqualPowerGains(p);
+      const fadeOutVol = Math.max(0, Math.min(1, this._volume * gainOut));
+      const fadeInVol = Math.max(0, Math.min(1, this._volume * gainIn));
 
       if (this.audio) this.audio.volume = fadeOutVol;
       if (this.crossfadeAudio) this.crossfadeAudio.volume = fadeInVol;
@@ -1093,18 +1235,26 @@ class AudioPlayer {
     this.isAutoPlayFetching = true;
 
     try {
-      const current = this.currentSong;
-      const context = this.getRecommendationContext();
-      const nextTracks = await smartRecommendationEngine.getSmartNextTracks(current, 5, context);
+      let nextTrack = this.injectNextAutomixTrack();
 
-      if (nextTracks && nextTracks.length > 0) {
-        // Append recommended songs to queue seamlessly
-        this._queue.push(...nextTracks);
-        this._originalQueue.push(...nextTracks);
-        this._queueIndex++;
-        this.emit({ type: 'queuechange' });
+      if (!nextTrack) {
+        // If buffer is currently empty, fetch on-the-fly via YouTubeQueue 3-tier pipeline
+        const current = this.currentSong;
+        const existingIds = new Set<string>(this._queue.map((s) => s.id));
+        const freshTracks = await YouTubeQueueService.generateSeedRadio(current, undefined, existingIds);
+        if (freshTracks && freshTracks.length > 0) {
+          nextTrack = freshTracks[0];
+          this._queue.push(...freshTracks);
+          this._originalQueue.push(...freshTracks);
+          this.emit({ type: 'queuechange' });
+          this.saveCurrentSession();
+        }
+      }
 
-        showToast(`AutoPlay · Playing "${nextTracks[0].title}"`, 'info', 2200);
+      if (nextTrack) {
+        this._queueIndex = this._queue.findIndex((s) => s.id === nextTrack!.id);
+        if (this._queueIndex === -1) this._queueIndex = this._queue.length - 1;
+        showToast(`AutoMix · Playing "${nextTrack.title}"`, 'info', 2200);
         await this.play(this._queue[this._queueIndex]);
       } else {
         // If no recommendation found, stop or notify
