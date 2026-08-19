@@ -696,39 +696,14 @@ export function FullPlayer() {
             }}>
               {currentSong.title}
             </h2>
-            <div style={{ display: 'flex', alignItems: 'center', gap: 7, marginTop: 2, overflow: 'hidden' }}>
-              <p style={{
-                margin: 0,
-                fontSize: 'var(--text-base)',
-                color: 'var(--color-text-secondary)',
-                overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap',
-              }}>
-                {currentSong.artist}
-              </p>
-              {state.activeQualityLabel && (
-                <span
-                  id="full-player-quality-badge"
-                  style={{
-                    fontSize: '9.5px',
-                    fontWeight: 700,
-                    letterSpacing: '0.03em',
-                    textTransform: 'uppercase',
-                    padding: '1px 6px',
-                    borderRadius: '4px',
-                    background: state.activeQualityLabel.includes('FLAC') || state.activeQualityLabel.includes('Dolby')
-                      ? 'var(--color-accent)'
-                      : 'var(--color-surface-2)',
-                    color: state.activeQualityLabel.includes('FLAC') || state.activeQualityLabel.includes('Dolby')
-                      ? 'var(--color-accent-on)'
-                      : 'var(--color-text-muted)',
-                    border: '1px solid var(--color-border)',
-                    flexShrink: 0,
-                  }}
-                >
-                  {state.activeQualityLabel}
-                </span>
-              )}
-            </div>
+            <p style={{
+              margin: '2px 0 0',
+              fontSize: 'var(--text-base)',
+              color: 'var(--color-text-secondary)',
+              overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap',
+            }}>
+              {currentSong.artist}
+            </p>
           </div>
           <button
             id="full-player-heart-btn"
@@ -764,10 +739,7 @@ export function FullPlayer() {
             <button
               onClick={(e) => {
                 e.stopPropagation();
-                if (currentSong) {
-                  const freshSong = { ...currentSong, previewUrl: '' };
-                  playSong(freshSong, queue, queueIndex);
-                }
+                if (currentSong) playSong(currentSong, queue, queueIndex);
               }}
               style={{
                 background: 'var(--color-error)',

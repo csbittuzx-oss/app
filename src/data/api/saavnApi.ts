@@ -6,29 +6,15 @@ const BASE_URL = 'https://www.jiosaavn.com/api.php';
 const DES_KEY = '38346591';
 
 /**
- * Replaces stream URL with the requested bitrate / quality:
- * auto / high / dolby_atmos / flac_* -> _320.mp4 (320kbps Extreme HD Studio Master Audio)
+ * Replaces stream URL with the requested bitrate:
+ * high -> _320.mp4 / _320_m4a.mp4 (320kbps Extreme HD Studio Master Audio)
  * medium -> _160.mp4 / _160_m4a.mp4 (160/192kbps High Quality)
  * low -> _96.mp4 / _96_m4a.mp4 (96kbps Data Saver)
  */
 export function formatMediaUrlWithQuality(url?: string | null, quality: AudioQuality = 'high'): string {
   if (!url || typeof url !== 'string') return '';
+  const targetSuffix = quality === 'low' ? '_96' : quality === 'medium' ? '_160' : '_320';
   let formatted = url.replace('http://', 'https://');
-
-  // If already a raw lossless / flac / blob url, preserve directly
-  if (formatted.startsWith('blob:') || formatted.endsWith('.flac') || formatted.includes('_flac')) {
-    return formatted;
-  }
-
-  let targetSuffix = '_320';
-  if (quality === 'low') {
-    targetSuffix = '_96';
-  } else if (quality === 'medium') {
-    targetSuffix = '_160';
-  } else {
-    // auto, high, flac_*, dolby_atmos all request maximum 320kbps bitrate stream from CDN
-    targetSuffix = '_320';
-  }
 
   if (formatted.includes('saavncdn.com') || formatted.includes('saavn.com')) {
     // 1. URLs with pattern _48_m4a.mp4, _96_m4a.mp4, _160_m4a.mp4, _320_m4a.mp4

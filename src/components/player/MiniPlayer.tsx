@@ -71,27 +71,12 @@ export function MiniPlayer() {
         }}>
           {currentSong.title}
         </p>
-        <div style={{ display: 'flex', alignItems: 'center', gap: 6, margin: 0, overflow: 'hidden' }}>
-          <p style={{
-            margin: 0, fontSize: 'var(--text-xs)', color: 'var(--color-text-secondary)',
-            overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap',
-          }}>
-            {currentSong.artist}
-          </p>
-          {state.activeQualityLabel && (
-            <span style={{
-              fontSize: '8.5px',
-              fontWeight: 700,
-              padding: '0 4px',
-              borderRadius: '3px',
-              background: state.activeQualityLabel.includes('FLAC') || state.activeQualityLabel.includes('Dolby') ? 'var(--color-accent)' : 'var(--color-surface-2)',
-              color: state.activeQualityLabel.includes('FLAC') || state.activeQualityLabel.includes('Dolby') ? 'var(--color-accent-on)' : 'var(--color-text-muted)',
-              flexShrink: 0,
-            }}>
-              {state.activeQualityLabel}
-            </span>
-          )}
-        </div>
+        <p style={{
+          margin: 0, fontSize: 'var(--text-xs)', color: 'var(--color-text-secondary)',
+          overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap',
+        }}>
+          {currentSong.artist}
+        </p>
       </div>
 
       {/* Controls */}

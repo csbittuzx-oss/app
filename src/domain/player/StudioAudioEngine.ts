@@ -105,46 +105,15 @@ class StudioAudioEngine {
 
   /**
    * Updates DSP acoustic filters based on the selected quality tier.
-   * For Lossless FLAC: Configures pure bit-perfect, zero-coloring transparent master pipeline.
-   * For Dolby Atmos: Configures multi-channel spatial routing when supported by hardware.
    */
   public setQuality(quality: AudioQuality) {
-    if (!this.isInitialized || !this.ctx) return;
+    if (!this.isInitialized) return;
 
     try {
-      const isFlacLossless = quality.startsWith('flac_');
-
-      if (isFlacLossless) {
-        // Bit-perfect transparent lossless audio pipeline (0 dB coloration, uncompressed dynamics)
-        if (this.bassFilter) this.bassFilter.gain.value = 0;
-        if (this.midFilter) this.midFilter.gain.value = 0;
-        if (this.trebleFilter) this.trebleFilter.gain.value = 0;
-        if (this.compressor) {
-          this.compressor.threshold.value = -0.5;
-          this.compressor.ratio.value = 1.0;
-        }
-        if (this.masterGain) this.masterGain.gain.value = 1.0;
-      } else if (quality === 'dolby_atmos') {
-        // Multi-channel Spatial Routing if hardware supports >= 6 discrete channels
-        if (this.ctx.destination && this.ctx.destination.maxChannelCount >= 6) {
-          try {
-            this.ctx.destination.channelCount = Math.min(6, this.ctx.destination.maxChannelCount);
-            this.ctx.destination.channelInterpretation = 'discrete';
-          } catch {}
-        }
-        if (this.bassFilter) this.bassFilter.gain.value = 2.4;
-        if (this.midFilter) this.midFilter.gain.value = 1.2;
-        if (this.trebleFilter) this.trebleFilter.gain.value = 2.0;
-        if (this.masterGain) this.masterGain.gain.value = 1.04;
-      } else if (quality === 'high' || quality === 'auto') {
-        // 320kbps Studio Master Enhancement Profile
+      if (quality === 'high') {
         if (this.bassFilter) this.bassFilter.gain.value = 3.6;
         if (this.midFilter) this.midFilter.gain.value = 1.6;
         if (this.trebleFilter) this.trebleFilter.gain.value = 3.2;
-        if (this.compressor) {
-          this.compressor.threshold.value = -14;
-          this.compressor.ratio.value = 3.0;
-        }
         if (this.masterGain) this.masterGain.gain.value = 1.08;
       } else if (quality === 'medium') {
         if (this.bassFilter) this.bassFilter.gain.value = 1.8;
@@ -152,7 +121,6 @@ class StudioAudioEngine {
         if (this.trebleFilter) this.trebleFilter.gain.value = 1.6;
         if (this.masterGain) this.masterGain.gain.value = 1.0;
       } else {
-        // Low Quality (96kbps)
         if (this.bassFilter) this.bassFilter.gain.value = 0;
         if (this.midFilter) this.midFilter.gain.value = 0;
         if (this.trebleFilter) this.trebleFilter.gain.value = 0;

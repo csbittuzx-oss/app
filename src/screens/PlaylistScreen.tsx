@@ -23,20 +23,14 @@ export function PlaylistScreen() {
 
   useEffect(() => {
     if (playlistId === 'offline_backup_mix') {
-      const loadOffline = () => {
-        getOfflineBackupPlaylist().then(pl => setOfflinePlaylist(pl));
-      };
-      loadOffline();
-      window.addEventListener('sw_offline_backup_changed', loadOffline);
-      return () => {
-        window.removeEventListener('sw_offline_backup_changed', loadOffline);
-      };
+      getOfflineBackupPlaylist().then(pl => setOfflinePlaylist(pl));
     }
   }, [playlistId]);
 
-  const playlist = playlistId === 'offline_backup_mix'
-    ? offlinePlaylist
-    : (playlistParam || state.userPlaylists.find(p => p.id === playlistId) || getCuratedPlaylistById(playlistId));
+  const playlist = playlistParam
+    || state.userPlaylists.find(p => p.id === playlistId)
+    || (playlistId === 'offline_backup_mix' ? offlinePlaylist : null)
+    || getCuratedPlaylistById(playlistId);
 
   // Automatically enrich songs with their distinct album artworks if they were sharing playlist cover
   useEffect(() => {
@@ -52,15 +46,10 @@ export function PlaylistScreen() {
     }
   }, [playlistId, playlist?.id, playlist?.creator]);
 
-  if (!playlist || !playlist.tracks || playlist.tracks.length === 0) {
+  if (!playlist) {
     return (
-      <div style={{ display: 'flex', flexDirection: 'column', height: '100%', alignItems: 'center', justifyContent: 'center', padding: '0 24px' }}>
-        <EmptyState
-          title={playlistId === 'offline_backup_mix' ? 'Offline Backup Empty' : 'Playlist not found'}
-          subtitle={playlistId === 'offline_backup_mix'
-            ? 'Songs you listen to completely while online will automatically be cached here for offline listening.'
-            : 'This playlist may have been deleted or has no tracks yet.'}
-        />
+      <div style={{ display: 'flex', flexDirection: 'column', height: '100%', alignItems: 'center', justifyContent: 'center' }}>
+        <EmptyState title="Playlist not found" subtitle="This playlist may have been deleted or has no cached tracks yet." />
       </div>
     );
   }

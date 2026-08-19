@@ -12,7 +12,7 @@ interface NowPlayingMenuSheetProps {
 }
 
 export function NowPlayingMenuSheet({ onClose }: NowPlayingMenuSheetProps) {
-  const { state: playerState, openQueue, toggleRidingMode } = usePlayer();
+  const { state: playerState, openQueue } = usePlayer();
   const { state: appState, dispatch, isFavorite, toggleFavorite, addToPlaylist, removeFromPlaylist } = useApp();
   const { currentSong } = playerState;
 
@@ -456,67 +456,6 @@ export function NowPlayingMenuSheet({ onClose }: NowPlayingMenuSheetProps) {
               <div style={{ flex: 1 }}>
                 <span>Playback Queue</span>
               </div>
-            </button>
-
-            {/* Riding Mode DJ Crossfade Toggle */}
-            <button
-              onClick={() => {
-                toggleRidingMode();
-                if (!playerState.ridingMode) {
-                  showToast('🏍️ Riding Mode ON — DJ Crossfade active', 'success');
-                } else {
-                  showToast('Riding Mode OFF — Standard playback', 'info');
-                }
-              }}
-              style={{
-                display: 'flex',
-                alignItems: 'center',
-                gap: 14,
-                padding: '12px 14px',
-                borderRadius: 'var(--radius-lg)',
-                background: playerState.ridingMode ? 'rgba(245, 158, 11, 0.12)' : 'var(--color-surface-2)',
-                border: playerState.ridingMode ? '1px solid rgba(245, 158, 11, 0.3)' : '1px solid transparent',
-                color: playerState.ridingMode ? 'var(--color-accent)' : 'var(--color-text-primary)',
-                fontSize: 'var(--text-sm)',
-                fontWeight: 600,
-                textAlign: 'left',
-                cursor: 'pointer',
-                transition: 'all 200ms ease',
-              }}
-            >
-              <div style={{
-                width: 32,
-                height: 32,
-                borderRadius: '50%',
-                display: 'flex',
-                alignItems: 'center',
-                justifyContent: 'center',
-                background: playerState.ridingMode ? 'var(--color-accent)' : 'rgba(255,255,255,0.08)',
-                color: playerState.ridingMode ? '#FFFFFF' : 'currentColor',
-                flexShrink: 0,
-              }}>
-                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                  <circle cx="5.5" cy="17.5" r="3.5"/>
-                  <circle cx="18.5" cy="17.5" r="3.5"/>
-                  <path d="M15 6h-3.5l-3 6.5h6l1.5-3.5 2.5 1"/>
-                  <path d="M9 17.5h5.5l1.5-3.5"/>
-                  <circle cx="15.5" cy="6.5" r="1.5"/>
-                </svg>
-              </div>
-              <div style={{ flex: 1 }}>
-                <span>Riding Mode (DJ Crossfade)</span>
-              </div>
-              <span style={{
-                fontSize: 'var(--text-xs)',
-                fontWeight: 700,
-                background: playerState.ridingMode ? 'var(--color-accent)' : 'var(--color-surface)',
-                color: playerState.ridingMode ? '#FFFFFF' : 'var(--color-text-muted)',
-                padding: '2px 8px',
-                borderRadius: 999,
-                border: '1px solid var(--color-border)',
-              }}>
-                {playerState.ridingMode ? 'ON' : 'OFF'}
-              </span>
             </button>
           </div>
 

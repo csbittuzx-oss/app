@@ -9,7 +9,7 @@
 import type { Song, RepeatMode, AudioQuality } from '../../data/models';
 import { shuffle } from '../../core/utils';
 import { resolveFullTrack, formatMediaUrlWithQuality, isPreviewAudioUrl } from '../../data/api/saavnApi';
-import { cacheCompletedSongForOfflineBackup, getOfflineSongStream } from '../../services/OfflineBackupService';
+import { cacheSongForOfflineBackup, getOfflineSongStream } from '../../services/OfflineBackupService';
 import { showToast } from '../../core/utils/toast';
 import { MediaNotificationService } from '../../services/MediaNotificationService';
 import {
@@ -23,8 +23,6 @@ import { adaptiveStreaming } from '../../services/AdaptiveStreamingService';
 import { studioAudioEngine } from './StudioAudioEngine';
 import { YouTubeQueueService } from '../../services/YouTubeQueue';
 import { BeatAnalyzer } from './BeatAnalyzer';
-
-import { checkDolbyAtmosSupport } from '../../core/utils/audioDeviceUtils';
 
 export interface PlaybackSession {
   song: Song;
@@ -53,22 +51,12 @@ export type AudioPlayerEvent =
   | { type: 'songchange'; song: Song | null }
   | { type: 'autoplaychange'; autoPlay: boolean }
   | { type: 'automixchange'; automixQueue: Song[] }
-  | { type: 'qualitychange'; quality: AudioQuality; activeQualityLabel: string }
+  | { type: 'qualitychange'; quality: AudioQuality }
   | { type: 'ridingmodechange'; ridingMode: boolean };
 
 class AudioPlayer {
-  private channelA: HTMLAudioElement;
-  private channelB: HTMLAudioElement;
-  private activeChannel: 'A' | 'B' = 'A';
-
-  get audio(): HTMLAudioElement {
-    return this.activeChannel === 'A' ? this.channelA : this.channelB;
-  }
-
-  get crossfadeAudio(): HTMLAudioElement {
-    return this.activeChannel === 'A' ? this.channelB : this.channelA;
-  }
-
+  private audio: HTMLAudioElement;
+  private crossfadeAudio: HTMLAudioElement;
   private _queue: Song[] = [];
   private _originalQueue: Song[] = [];
   private _queueIndex = 0;
@@ -78,9 +66,6 @@ class AudioPlayer {
   private _autoPlay = true;
   private _ridingMode = false;
   private _audioQuality: AudioQuality = 'high';
-  private _activeQuality: AudioQuality = 'high';
-  private _activeQualityLabel: string = '320 kbps';
-  private _isDolbySupported: boolean = checkDolbyAtmosSupport();
   private callbacks: Set<AudioPlayerCallback> = new Set();
 
   // Endless Seed Radio & Automix state
@@ -115,17 +100,11 @@ class AudioPlayer {
   private pendingSeekPosition = 0;
   private lastSavedPositionTime = 0;
 
-  // Real listening & full completion tracking for Offline Backup
-  private currentSongAccumulatedPlaybackSec = 0;
-  private lastPlaybackTimestamp = 0;
-  private currentSongCachedForOffline = false;
-  private currentPlayingStreamUrl: string | null = null;
-
   constructor() {
-    this.channelA = new Audio();
-    this.channelB = new Audio();
-    adaptiveStreaming.configureAudioElement(this.channelA);
-    adaptiveStreaming.configureAudioElement(this.channelB);
+    this.audio = new Audio();
+    this.crossfadeAudio = new Audio();
+    adaptiveStreaming.configureAudioElement(this.audio);
+    adaptiveStreaming.configureAudioElement(this.crossfadeAudio);
     // Initialise network monitoring immediately
     adaptiveStreaming.initNetworkMonitor();
 
@@ -154,8 +133,8 @@ class AudioPlayer {
     this.bindEvents();
 
     // Attach high-definition DSP audio engine
-    studioAudioEngine.attachAudioElement(this.channelA);
-    studioAudioEngine.attachAudioElement(this.channelB);
+    studioAudioEngine.attachAudioElement(this.audio);
+    studioAudioEngine.attachAudioElement(this.crossfadeAudio);
     studioAudioEngine.setQuality(this._audioQuality);
   }
 
@@ -260,97 +239,137 @@ class AudioPlayer {
       onSeekTo: (seconds) => this.seekToTime(seconds),
     });
 
-    const setupChannel = (el: HTMLAudioElement, getIsActive: () => boolean) => {
-      el.addEventListener('play', () => {
-        if (!getIsActive() && !this.isCrossfading) return;
-        this.emit({ type: 'play' });
-        this.emit({ type: 'error', error: null });
-        if (this.currentSong) {
-          MediaNotificationService.update(
-            this.currentSong,
-            true,
-            this.audio.duration,
-            this.audio.currentTime
-          );
-        }
-      });
+    this.audio.addEventListener('play', () => {
+      this.emit({ type: 'play' });
+      this.emit({ type: 'error', error: null });
+      if (this.currentSong) {
+        MediaNotificationService.update(
+          this.currentSong,
+          true,
+          this.audio.duration,
+          this.audio.currentTime
+        );
+      }
+    });
 
-      el.addEventListener('playing', () => {
-        if (!getIsActive()) return;
-        this.emit({ type: 'loading', isLoading: false });
-        this.emit({ type: 'error', error: null });
-      });
+    this.audio.addEventListener('playing', () => {
+      this.emit({ type: 'loading', isLoading: false });
+      this.emit({ type: 'error', error: null });
+    });
 
-      el.addEventListener('pause', () => {
-        if (!getIsActive()) return;
-        if (this.isCrossfading && !this.isCrossfadePaused) return;
-        this.emit({ type: 'pause' });
+    this.audio.addEventListener('pause', () => {
+      this.emit({ type: 'pause' });
+      this.saveCurrentSession();
+      if (this.currentSong) {
+        MediaNotificationService.update(
+          this.currentSong,
+          false,
+          this.audio.duration,
+          this.audio.currentTime
+        );
+      }
+    });
+
+    this.audio.addEventListener('ended', () => {
+      this.saveCurrentSession();
+      this.handleEnded();
+    });
+
+    this.audio.addEventListener('timeupdate', () => {
+      const duration = this.audio.duration || 0;
+      const currentTime = this.audio.currentTime;
+      const progress = duration > 0 ? currentTime / duration : 0;
+      this.emit({ type: 'timeupdate', currentTime, duration, progress });
+      this.updateMediaSessionPosition();
+
+      // Periodically persist playback position every 4 seconds
+      const now = Date.now();
+      if (now - this.lastSavedPositionTime > 4000) {
+        this.lastSavedPositionTime = now;
         this.saveCurrentSession();
-        if (this.currentSong) {
-          MediaNotificationService.update(
-            this.currentSong,
-            false,
-            this.audio.duration,
-            this.audio.currentTime
-          );
+      }
+
+      // Track listening duration in intelligence profile
+      const currentSec = Math.floor(currentTime);
+      if (currentSec > this.lastTimeUpdateSecond) {
+        userProfileTracker.recordListeningDuration(currentSec - this.lastTimeUpdateSecond);
+        this.lastTimeUpdateSecond = currentSec;
+      }
+
+      // When Riding Mode is ON, continuously check remaining duration and trigger DJ crossfade 8-9s before track end
+      if (
+        this._ridingMode &&
+        !this.isCrossfading &&
+        !this.isResolvingCrossfade &&
+        !this.audio.paused &&
+        this.currentSong &&
+        this.crossfadeSongId !== this.currentSong.id &&
+        duration > 15 &&
+        currentTime > 0
+      ) {
+        const remaining = duration - currentTime;
+        if (remaining > 0 && remaining <= 9 && this._repeat !== 'one') {
+          const nextIndex = this._queueIndex + 1;
+          const hasNext = nextIndex < this._queue.length || (this._repeat === 'all' && this._queue.length > 0) || (this._autoPlay && (this._queue.length > 0 || this._automixQueue.length > 0));
+          if (hasNext) {
+            this.crossfadeSongId = this.currentSong.id;
+            this.startCrossfade();
+          }
         }
-      });
+      }
 
-      el.addEventListener('ended', () => {
-        if (!getIsActive()) return;
-        if (this.isCrossfading) return; // Suppress ended during active DJ crossfade
-        this.saveCurrentSession();
-        this.handleEnded();
-      });
+      // ── Non-Stop Playback AutoMix Auto-Injection ──
+      // When user is near the final track in queue (<= 16s remaining), pop next automix song and append
+      const remainingSec = duration - currentTime;
+      if (
+        this._autoPlay &&
+        duration > 20 &&
+        remainingSec > 0 &&
+        remainingSec <= 16 &&
+        this._queueIndex >= this._queue.length - 1 &&
+        this._automixQueue.length > 0
+      ) {
+        this.injectNextAutomixTrack();
+      }
 
-      el.addEventListener('timeupdate', () => {
-        if (!getIsActive()) return;
-        this.handleTimeUpdate();
-      });
+      // Proactively replenish automix buffer if it drops below 5 items
+      if (
+        this._autoPlay &&
+        this.currentSong &&
+        this._automixQueue.length < 5 &&
+        !this.isAutomixReplenishing
+      ) {
+        this.replenishAutomixQueue(this.currentSong);
+      }
 
-      el.addEventListener('loadstart', () => {
-        if (getIsActive()) this.emit({ type: 'loading', isLoading: true });
-      });
+      // Proactively pre-fetch context-pure recommendations when 50% through the song and near queue end
+      if (
+        this._autoPlay &&
+        progress > 0.50 &&
+        this.currentSong &&
+        this.lastPrefetchedSongId !== this.currentSong.id &&
+        this._queueIndex >= this._queue.length - 2
+      ) {
+        this.lastPrefetchedSongId = this.currentSong.id;
+        this.triggerSmartPreload(this.currentSong);
+      }
+    });
 
-      el.addEventListener('canplay', () => {
-        if (getIsActive()) {
-          this.emit({ type: 'loading', isLoading: false });
-          this.emit({ type: 'error', error: null });
-        }
-      });
+    this.audio.addEventListener('loadstart', () => this.emit({ type: 'loading', isLoading: true }));
+    this.audio.addEventListener('canplay', () => {
+      this.emit({ type: 'loading', isLoading: false });
+      this.emit({ type: 'error', error: null });
+    });
+    this.audio.addEventListener('error', () => {
+      const err = this.audio.error;
+      // Filter out abort errors, empty src resets during song switching, or unmounted states
+      if (!this.audio.src || !this.currentSong || err?.code === MediaError.MEDIA_ERR_ABORTED) {
+        return;
+      }
 
-      el.addEventListener('error', async () => {
-        if (!getIsActive()) return;
-        const err = el.error;
-        if (!el.src || !this.currentSong || err?.code === MediaError.MEDIA_ERR_ABORTED) {
-          return;
-        }
-
-        const current = this.currentSong;
-        const failedSrc = el.src;
-
-        // Auto-recovery 1: Offline song playback error -> Silently recover with live stream if online (NEVER delete song)
-        if (navigator.onLine && (failedSrc.startsWith('blob:') || current.provider === 'offline' || current.isDownloaded)) {
-          console.log('Seamlessly playing live stream for offline track:', current.title);
-          current.previewUrl = '';
-          current.provider = 'saavn';
-          this.play(current, this._queue, this._queueIndex);
-          return;
-        }
-
-        // Auto-recovery 2: Live stream error -> Dynamic bitrate downgrade / YouTube fallback
-        if (navigator.onLine && !failedSrc.startsWith('blob:')) {
-          const recovered = await this.handleStreamFailureOrStall(this._audioQuality);
-          if (recovered) return;
-        }
-
-        this.emit({ type: 'loading', isLoading: false });
-        this.emit({ type: 'error', error: 'Playback failed. Tap to retry.' });
-      });
-    };
-
-    setupChannel(this.channelA, () => this.activeChannel === 'A');
-    setupChannel(this.channelB, () => this.activeChannel === 'B');
+      this.emit({ type: 'loading', isLoading: false });
+      this.emit({ type: 'error', error: 'Playback failed. Tap to retry.' });
+    });
 
     // Install adaptive stall watcher for graceful buffering recovery
     this.installAdaptiveStallWatcher();
@@ -364,162 +383,6 @@ class AudioPlayer {
           this.saveCurrentSession();
         }
       });
-    }
-  }
-
-  private handleTimeUpdate() {
-    const duration = this.audio.duration || 0;
-    const currentTime = this.audio.currentTime;
-    const progress = duration > 0 ? currentTime / duration : 0;
-    this.emit({ type: 'timeupdate', currentTime, duration, progress });
-    this.updateMediaSessionPosition();
-
-    // Periodically persist playback position every 4 seconds
-    const now = Date.now();
-    if (now - this.lastSavedPositionTime > 4000) {
-      this.lastSavedPositionTime = now;
-      this.saveCurrentSession();
-    }
-
-    // Track actual playback elapsed duration
-    if (this.lastPlaybackTimestamp > 0 && !this.audio.paused) {
-      const deltaSec = (now - this.lastPlaybackTimestamp) / 1000;
-      if (deltaSec > 0 && deltaSec < 3) {
-        this.currentSongAccumulatedPlaybackSec += deltaSec;
-      }
-    }
-    this.lastPlaybackTimestamp = now;
-
-    // Offline Backup: Strict Completion Rule (~95%+ duration + >= 85% actual playback time)
-    if (
-      !this.currentSongCachedForOffline &&
-      this.currentSong &&
-      duration > 25 &&
-      progress >= 0.95 &&
-      this.currentSongAccumulatedPlaybackSec >= duration * 0.85 &&
-      this.currentPlayingStreamUrl &&
-      !this.currentPlayingStreamUrl.startsWith('blob:') &&
-      navigator.onLine
-    ) {
-      this.currentSongCachedForOffline = true;
-      cacheCompletedSongForOfflineBackup(this.currentSong, this.currentPlayingStreamUrl).catch(() => {});
-    }
-
-    // Track listening duration in intelligence profile
-    const currentSec = Math.floor(currentTime);
-    if (currentSec > this.lastTimeUpdateSecond) {
-      userProfileTracker.recordListeningDuration(currentSec - this.lastTimeUpdateSecond);
-      this.lastTimeUpdateSecond = currentSec;
-    }
-
-    // ── Early Next Track Pre-Resolution (12-25s before end) ──
-    const remaining = duration - currentTime;
-    if (duration > 20 && remaining > 7 && remaining <= 25) {
-      this.preloadUpcomingTrack();
-    }
-
-    // ── Riding Mode DJ Crossfade Trigger (6-7s before track end) ──
-    if (
-      this._ridingMode &&
-      !this.isCrossfading &&
-      !this.isResolvingCrossfade &&
-      !this.audio.paused &&
-      this.currentSong &&
-      this.crossfadeSongId !== this.currentSong.id &&
-      duration > 15 &&
-      currentTime > 0
-    ) {
-      if (remaining > 0 && remaining <= 7 && this._repeat !== 'one') {
-        const nextIndex = this._queueIndex + 1;
-        const hasNext = nextIndex < this._queue.length || (this._repeat === 'all' && this._queue.length > 0) || (this._autoPlay && (this._queue.length > 0 || this._automixQueue.length > 0));
-        if (hasNext) {
-          this.crossfadeSongId = this.currentSong.id;
-          this.startCrossfade();
-        }
-      }
-    }
-
-    // ── Non-Stop Playback AutoMix Auto-Injection ──
-    if (
-      this._autoPlay &&
-      duration > 20 &&
-      remaining > 0 &&
-      remaining <= 16 &&
-      this._queueIndex >= this._queue.length - 1 &&
-      this._automixQueue.length > 0
-    ) {
-      this.injectNextAutomixTrack();
-    }
-
-    // Proactively replenish automix buffer if it drops below 5 items
-    if (
-      this._autoPlay &&
-      this.currentSong &&
-      this._automixQueue.length < 5 &&
-      !this.isAutomixReplenishing
-    ) {
-      this.replenishAutomixQueue(this.currentSong);
-    }
-
-    // Proactively pre-fetch context-pure recommendations when 50% through the song and near queue end
-    if (
-      this._autoPlay &&
-      progress > 0.50 &&
-      this.currentSong &&
-      this.lastPrefetchedSongId !== this.currentSong.id &&
-      this._queueIndex >= this._queue.length - 2
-    ) {
-      this.lastPrefetchedSongId = this.currentSong.id;
-      this.triggerSmartPreload(this.currentSong);
-    }
-  }
-
-  /**
-   * Pre-resolves full stream for upcoming track in background so Riding Mode DJ crossfade is instantaneous.
-   */
-  private async preloadUpcomingTrack(): Promise<void> {
-    let nextIndex = this._queueIndex + 1;
-    let nextSong = this._queue[nextIndex];
-    if (!nextSong && this._repeat === 'all' && this._queue.length > 0) {
-      nextSong = this._queue[0];
-    }
-    if (!nextSong && this._autoPlay && this._automixQueue.length > 0) {
-      nextSong = this._automixQueue[0];
-    }
-    if (!nextSong) return;
-
-    if (!nextSong.previewUrl || isPreviewAudioUrl(nextSong.previewUrl)) {
-      if (navigator.onLine) {
-        try {
-          const isSpotifyImport = nextSong.id.startsWith('spotify_');
-          const fullTrack = await resolveFullTrack(
-            nextSong.title,
-            nextSong.artist,
-            this._audioQuality,
-            nextSong.duration,
-            isSpotifyImport
-          );
-          if (fullTrack?.streamUrl && !isPreviewAudioUrl(fullTrack.streamUrl)) {
-            nextSong.previewUrl = fullTrack.streamUrl;
-            if (fullTrack.duration > 0) nextSong.duration = fullTrack.duration;
-            nextSong.provider = 'saavn';
-          } else {
-            const { resolveYouTubeFullAudioStream } = await import('../../data/api/youtubeMusicApi');
-            const ytStream = await resolveYouTubeFullAudioStream(nextSong.title, nextSong.artist, nextSong.duration);
-            if (ytStream?.streamUrl && !isPreviewAudioUrl(ytStream.streamUrl)) {
-              nextSong.previewUrl = ytStream.streamUrl;
-              if (ytStream.duration > 0) nextSong.duration = ytStream.duration;
-              nextSong.provider = 'youtube';
-            }
-          }
-        } catch {
-          // non-blocking
-        }
-      }
-    }
-
-    if (nextSong.previewUrl && !nextSong.previewUrl.startsWith('blob:') && navigator.onLine) {
-      adaptiveStreaming.preBufferSong(nextSong.id, nextSong.previewUrl, this._audioQuality);
     }
   }
 
@@ -570,154 +433,12 @@ class AudioPlayer {
   }
 
   /**
-   * Resolves genuine active quality and handles fallback logic for FLAC and Dolby Atmos.
-   */
-  public resolveTrackQuality(
-    targetSong: Song,
-    selectedQuality: AudioQuality
-  ): { streamUrl: string; activeQuality: AudioQuality; activeQualityLabel: string } {
-    const hasFlac = !!(
-      targetSong.previewUrl?.endsWith('.flac') ||
-      targetSong.previewUrl?.includes('_flac') ||
-      targetSong.provider === 'local'
-    );
-
-    let effectiveQuality = selectedQuality;
-    let activeLabel = '320 kbps';
-
-    if (selectedQuality === 'auto') {
-      const net = adaptiveStreaming.networkCondition;
-      if (hasFlac && (net.tier === 'wifi' || net.tier === '5g')) {
-        effectiveQuality = 'flac_16_44';
-        activeLabel = 'Auto • FLAC 16/44.1';
-      } else if (net.tier === '2g' || (net.unstable && net.kbps < 100)) {
-        effectiveQuality = 'low';
-        activeLabel = 'Auto • 96 kbps';
-      } else if (net.tier === '3g' || (net.unstable && net.kbps < 300)) {
-        effectiveQuality = 'medium';
-        activeLabel = 'Auto • 192 kbps';
-      } else {
-        effectiveQuality = 'high';
-        activeLabel = 'Auto • 320 kbps';
-      }
-    } else if (selectedQuality === 'low') {
-      effectiveQuality = 'low';
-      activeLabel = '96 kbps';
-    } else if (selectedQuality === 'medium') {
-      effectiveQuality = 'medium';
-      activeLabel = '192 kbps';
-    } else if (selectedQuality === 'high') {
-      effectiveQuality = 'high';
-      activeLabel = '320 kbps';
-    } else if (selectedQuality.startsWith('flac_')) {
-      if (hasFlac) {
-        effectiveQuality = selectedQuality;
-        if (selectedQuality === 'flac_24_192') activeLabel = 'FLAC • 24-bit / 192 kHz';
-        else if (selectedQuality === 'flac_24_96') activeLabel = 'FLAC • 24-bit / 96 kHz';
-        else if (selectedQuality === 'flac_24_48') activeLabel = 'FLAC • 24-bit / 48 kHz';
-        else activeLabel = 'FLAC • 16-bit / 44.1 kHz';
-      } else {
-        effectiveQuality = 'high';
-        activeLabel = '320 kbps (High)';
-        const tierShort = selectedQuality === 'flac_24_192' ? '24/192' : selectedQuality === 'flac_24_96' ? '24/96' : selectedQuality === 'flac_24_48' ? '24/48' : 'FLAC';
-        showToast(`${tierShort} unavailable for this song — playing highest available quality (320 kbps).`, 'info', 2800);
-      }
-    } else if (selectedQuality === 'dolby_atmos') {
-      if (this._isDolbySupported) {
-        effectiveQuality = 'dolby_atmos';
-        activeLabel = 'Dolby Atmos';
-      } else {
-        effectiveQuality = 'high';
-        activeLabel = '320 kbps (Stereo)';
-        showToast('Dolby Atmos requires supported hardware — playing in 320 kbps Studio HD.', 'info', 2800);
-      }
-    }
-
-    const streamUrl = formatMediaUrlWithQuality(targetSong.previewUrl, effectiveQuality);
-    return { streamUrl, activeQuality: effectiveQuality, activeQualityLabel: activeLabel };
-  }
-
-  /**
-   * Automatically recovers playback during network stalls or broken bitrates without interrupting.
-   */
-  public async handleStreamFailureOrStall(failedQuality: AudioQuality): Promise<boolean> {
-    if (!navigator.onLine || !this.currentSong) return false;
-    const song = this.currentSong;
-    const currentPos = this.audio.currentTime || 0;
-
-    // Step 1: If high quality fails or stalls, step down to 192 kbps
-    if (failedQuality === 'high' || failedQuality === 'auto' || failedQuality.startsWith('flac_')) {
-      const lowerUrl = formatMediaUrlWithQuality(song.previewUrl, 'medium');
-      if (lowerUrl && lowerUrl !== this.audio.src) {
-        console.log('Stepping down stream to 192 kbps for smooth playback:', song.title);
-        this.audio.src = lowerUrl;
-        this.audio.currentTime = currentPos;
-        this.audio.play().catch(() => {});
-        return true;
-      }
-    }
-
-    // Step 2: If medium fails or stalls, step down to 96 kbps
-    if (failedQuality === 'medium' || failedQuality === 'high' || failedQuality === 'auto') {
-      const lowestUrl = formatMediaUrlWithQuality(song.previewUrl, 'low');
-      if (lowestUrl && lowestUrl !== this.audio.src) {
-        console.log('Stepping down stream to 96 kbps for smooth playback:', song.title);
-        this.audio.src = lowestUrl;
-        this.audio.currentTime = currentPos;
-        this.audio.play().catch(() => {});
-        return true;
-      }
-    }
-
-    // Step 3: Fallback to YouTube Music audio stream resolver
-    try {
-      console.log('Attempting live YouTube stream resolution fallback for:', song.title);
-      const { resolveYouTubeFullAudioStream } = await import('../../data/api/youtubeMusicApi');
-      const ytStream = await resolveYouTubeFullAudioStream(song.title, song.artist, song.duration);
-      if (ytStream?.streamUrl && this.currentSong?.id === song.id) {
-        song.previewUrl = ytStream.streamUrl;
-        song.provider = 'youtube';
-        this.audio.src = ytStream.streamUrl;
-        this.audio.currentTime = currentPos;
-        this.audio.play().catch(() => {});
-        return true;
-      }
-    } catch {}
-
-    return false;
-  }
-
-  /**
    * Updates audio quality in real-time and refreshes active stream if needed.
    */
   async setAudioQuality(quality: AudioQuality) {
     this._audioQuality = quality;
-    const current = this.currentSong;
-
-    if (current) {
-      const res = this.resolveTrackQuality(current, quality);
-      this._activeQuality = res.activeQuality;
-      this._activeQualityLabel = res.activeQualityLabel;
-      studioAudioEngine.setQuality(res.activeQuality);
-      this.emit({ type: 'qualitychange', quality, activeQualityLabel: res.activeQualityLabel });
-
-      if (current.provider === 'saavn' && current.previewUrl && !current.previewUrl.startsWith('blob:')) {
-        const currentTime = this.audio.currentTime;
-        const wasPlaying = !this.audio.paused;
-
-        if (res.streamUrl !== current.previewUrl) {
-          current.previewUrl = res.streamUrl;
-          this.audio.src = res.streamUrl;
-          this.audio.currentTime = currentTime;
-          if (wasPlaying) {
-            this.audio.play().catch(() => {});
-          }
-        }
-      }
-    } else {
-      studioAudioEngine.setQuality(quality);
-      this.emit({ type: 'qualitychange', quality, activeQualityLabel: this._activeQualityLabel });
-    }
+    studioAudioEngine.setQuality(quality);
+    this.emit({ type: 'qualitychange', quality });
 
     // Save preference
     try {
@@ -725,6 +446,23 @@ class AudioPlayer {
       cfg.audioQuality = quality;
       localStorage.setItem('sw_config', JSON.stringify(cfg));
     } catch {}
+
+    // If currently playing a Saavn track, switch stream seamlessly without losing position
+    const current = this.currentSong;
+    if (current && current.provider === 'saavn' && current.previewUrl && !current.previewUrl.startsWith('blob:')) {
+      const currentTime = this.audio.currentTime;
+      const wasPlaying = !this.audio.paused;
+
+      const formattedUrl = formatMediaUrlWithQuality(current.previewUrl, quality);
+      if (formattedUrl !== current.previewUrl) {
+        current.previewUrl = formattedUrl;
+        this.audio.src = formattedUrl;
+        this.audio.currentTime = currentTime;
+        if (wasPlaying) {
+          this.audio.play().catch(() => {});
+        }
+      }
+    }
   }
 
   // ─── Getters / Setters ──────────────────────────────────────────────────────
@@ -820,18 +558,6 @@ class AudioPlayer {
 
   get audioQuality(): AudioQuality {
     return this._audioQuality;
-  }
-
-  get activeQuality(): AudioQuality {
-    return this._activeQuality;
-  }
-
-  get activeQualityLabel(): string {
-    return this._activeQualityLabel;
-  }
-
-  get isDolbySupported(): boolean {
-    return this._isDolbySupported;
   }
 
   get automixQueue(): Song[] {
@@ -1017,95 +743,24 @@ class AudioPlayer {
     this.emit({ type: 'loading', isLoading: true });
     this.updateMediaSession(targetSong);
 
-    // ── Offline & Cached Stream Resolution ──
-    let offlineUrl: string | null = null;
-    try {
-      offlineUrl = await getOfflineSongStream(targetSong.id);
-    } catch {}
-
-    if (!offlineUrl && targetSong.previewUrl?.startsWith('blob:')) {
-      offlineUrl = targetSong.previewUrl;
-    }
-
-    if (!offlineUrl) {
-      try {
-        const cached = await adaptiveStreaming.getCachedUrl(targetSong.id, targetSong.previewUrl || '');
-        if (cached) offlineUrl = cached;
-      } catch {}
-    }
-
-    if (myGen !== this._playGeneration) return;   // newer song selected, bail
-
-    // ── If device is OFFLINE ──
+    // ── Offline check ──
     if (!navigator.onLine) {
+      let offlineUrl: string | null = null;
+      try { offlineUrl = await getOfflineSongStream(targetSong.id); } catch {}
+
+      if (!offlineUrl && targetSong.previewUrl?.startsWith('blob:')) {
+        offlineUrl = targetSong.previewUrl;
+      }
+
+      if (myGen !== this._playGeneration) return;   // newer song selected, bail
+
       if (offlineUrl) {
         targetSong.previewUrl = offlineUrl;
         targetSong.isDownloaded = true;
-        targetSong.provider = 'offline';
-        this.audio.src = offlineUrl;
-        this.audio.volume = this._volume;
-
-        if (this.pendingSeekPosition > 0) {
-          this.audio.currentTime = this.pendingSeekPosition;
-          this.pendingSeekPosition = 0;
-        } else {
-          this.audio.currentTime = 0;
-        }
-
-        this.emit({ type: 'songchange', song: { ...targetSong } });
-        this.emit({ type: 'loading', isLoading: false });
-        this.updateMediaSession(targetSong);
-        this.saveCurrentSession();
-
-        try {
-          const playPromise = this.audio.play();
-          if (playPromise !== undefined) await playPromise;
-        } catch {
-          const onCanPlay = () => {
-            this.audio.removeEventListener('canplay', onCanPlay);
-            if (myGen === this._playGeneration) this.audio.play().catch(() => {});
-          };
-          this.audio.addEventListener('canplay', onCanPlay, { once: true });
-        }
-        return; // Direct offline play completed!
       } else {
         this.emit({ type: 'loading', isLoading: false });
-        this.emit({ type: 'error', error: `Audio source unavailable for "${targetSong.title}".` });
-        showToast("You're offline. This song isn't cached for offline playback.", 'danger', 3200);
+        showToast("You're offline. This song isn't available for offline playback.", 'danger', 3200);
         return;
-      }
-    }
-
-    // ── If device is ONLINE and song was from Offline Backup / Downloaded ──
-    if (offlineUrl && (targetSong.provider === 'offline' || targetSong.isDownloaded || targetSong.previewUrl?.startsWith('blob:'))) {
-      try {
-        targetSong.previewUrl = offlineUrl;
-        targetSong.isDownloaded = true;
-        targetSong.provider = 'offline';
-        this.audio.src = offlineUrl;
-        this.audio.volume = this._volume;
-
-        if (this.pendingSeekPosition > 0) {
-          this.audio.currentTime = this.pendingSeekPosition;
-          this.pendingSeekPosition = 0;
-        } else {
-          this.audio.currentTime = 0;
-        }
-
-        this.emit({ type: 'songchange', song: { ...targetSong } });
-        this.emit({ type: 'loading', isLoading: false });
-        this.updateMediaSession(targetSong);
-        this.saveCurrentSession();
-
-        const playPromise = this.audio.play();
-        if (playPromise !== undefined) await playPromise;
-        return; // Successfully playing cached offline copy
-      } catch (err) {
-        console.warn('Offline blob playback failed, automatically resolving online stream:', err);
-        // Reset and fall through to live stream resolution below
-        targetSong.previewUrl = '';
-        targetSong.provider = 'saavn';
-        targetSong.isDownloaded = false;
       }
     }
 
@@ -1113,8 +768,7 @@ class AudioPlayer {
     const isShortPreview = (!targetSong.previewUrl && navigator.onLine)
       || targetSong.provider === 'itunes'
       || targetSong.id.startsWith('spotify_')
-      || (typeof targetSong.previewUrl === 'string' && !targetSong.previewUrl.startsWith('blob:') && isPreviewAudioUrl(targetSong.previewUrl))
-      || (targetSong.provider !== 'offline' && (!targetSong.previewUrl || (!targetSong.previewUrl.startsWith('http') && !targetSong.previewUrl.startsWith('blob:'))));
+      || isPreviewAudioUrl(targetSong.previewUrl);
 
     if (isShortPreview && navigator.onLine) {
       try {
@@ -1177,24 +831,23 @@ class AudioPlayer {
       return;
     }
 
-    // ── Resolve genuine stream URL & active quality ──
-    const qualityResult = this.resolveTrackQuality(targetSong, this._audioQuality);
-    this._activeQuality = qualityResult.activeQuality;
-    this._activeQualityLabel = qualityResult.activeQualityLabel;
-    studioAudioEngine.setQuality(qualityResult.activeQuality);
-    this.emit({ type: 'qualitychange', quality: this._audioQuality, activeQualityLabel: qualityResult.activeQualityLabel });
-
-    let resolvedUrl = qualityResult.streamUrl;
+    // ── Resolve stream URL ──
+    // Strategy: check cache first for instant play, then fall back to native streaming.
+    // We do NOT wait for a full download before setting audio.src — native streaming starts immediately.
+    let resolvedUrl = formatMediaUrlWithQuality(targetSong.previewUrl, this._audioQuality);
 
     if (!targetSong.previewUrl.startsWith('blob:') && navigator.onLine) {
       try {
+        // Check cache synchronously-ish (IndexedDB lookup only, no download)
         const cachedUrl = await adaptiveStreaming.getCachedUrl(targetSong.id, resolvedUrl);
         if (myGen !== this._playGeneration) return;
         if (cachedUrl) {
-          resolvedUrl = cachedUrl;
+          resolvedUrl = cachedUrl;   // instant cache hit – use blob URL
         }
+        // If no cache hit, use the direct stream URL immediately.
+        // The adaptive service will cache it in the background for next time.
       } catch {
-        // cache lookup fallback
+        // cache lookup failed – use direct URL
       }
     }
 
@@ -1205,12 +858,6 @@ class AudioPlayer {
     this.audio.src = resolvedUrl;
     this.audio.volume = this._volume;
 
-    // Reset tracking state for full playback completion
-    this.currentSongAccumulatedPlaybackSec = 0;
-    this.lastPlaybackTimestamp = Date.now();
-    this.currentSongCachedForOffline = false;
-    this.currentPlayingStreamUrl = resolvedUrl;
-
     if (this.pendingSeekPosition > 0) {
       this.audio.currentTime = this.pendingSeekPosition;
       this.pendingSeekPosition = 0;
@@ -1220,8 +867,10 @@ class AudioPlayer {
 
     this.saveCurrentSession();
 
-    // Background-download into the adaptive streaming cache for future instant-play
-    if (!resolvedUrl.startsWith('blob:') && navigator.onLine) {
+    // Background-cache for offline backup (non-blocking)
+    if (!resolvedUrl.startsWith('blob:')) {
+      cacheSongForOfflineBackup(targetSong, resolvedUrl).catch(() => {});
+      // Also background-download into the adaptive streaming cache for future instant-play
       adaptiveStreaming.preBufferSong(targetSong.id, resolvedUrl, this._audioQuality);
     }
 
@@ -1295,9 +944,6 @@ class AudioPlayer {
     } else if (this._repeat === 'all' && this._queue.length > 0) {
       nextIndex = 0;
       nextSong = this._queue[0];
-    } else if (this._autoPlay && this._automixQueue.length > 0) {
-      this.injectNextAutomixTrack();
-      nextSong = this._queue[nextIndex];
     } else if (this._autoPlay && this._queue.length > 0) {
       try {
         const current = this.currentSong;
@@ -1343,15 +989,17 @@ class AudioPlayer {
           targetSong.previewUrl = fullTrack.streamUrl;
           if (fullTrack.duration > 0) targetSong.duration = fullTrack.duration;
           targetSong.provider = 'saavn';
-        } else {
-          const { resolveYouTubeFullAudioStream } = await import('../../data/api/youtubeMusicApi');
-          const ytStream = await resolveYouTubeFullAudioStream(targetSong.title, targetSong.artist, targetSong.duration);
-          if (ytStream?.streamUrl && !isPreviewAudioUrl(ytStream.streamUrl)) {
-            streamUrl = ytStream.streamUrl;
-            targetSong.previewUrl = ytStream.streamUrl;
-            if (ytStream.duration > 0) targetSong.duration = ytStream.duration;
-            targetSong.provider = 'youtube';
-          }
+        }
+      }
+
+      if ((!streamUrl || isPreviewAudioUrl(streamUrl)) && navigator.onLine) {
+        const { resolveYouTubeFullAudioStream } = await import('../../data/api/youtubeMusicApi');
+        const ytStream = await resolveYouTubeFullAudioStream(targetSong.title, targetSong.artist, targetSong.duration);
+        if (ytStream?.streamUrl && !isPreviewAudioUrl(ytStream.streamUrl)) {
+          streamUrl = ytStream.streamUrl;
+          targetSong.previewUrl = ytStream.streamUrl;
+          if (ytStream.duration > 0) targetSong.duration = ytStream.duration;
+          targetSong.provider = 'youtube';
         }
       }
 
@@ -1379,19 +1027,18 @@ class AudioPlayer {
       this.crossfadeTargetSong = targetSong;
       this.crossfadeTargetIndex = targetIndex;
 
-      const incomingAudio = this.crossfadeAudio;
-      incomingAudio.src = streamUrl;
-      incomingAudio.currentTime = 0;
-      incomingAudio.volume = 0;
+      this.crossfadeAudio.src = streamUrl;
+      this.crossfadeAudio.currentTime = 0;
+      this.crossfadeAudio.volume = 0;
 
-      // Start playing incoming next song at 0% volume while current song continues playing
-      const playPromise = incomingAudio.play();
+      // Start playing next song at 0% volume while current song continues playing
+      const playPromise = this.crossfadeAudio.play();
       if (playPromise !== undefined) {
         await playPromise;
       }
 
       if (!this.isCrossfading || !this._ridingMode) {
-        incomingAudio.pause();
+        this.crossfadeAudio.pause();
         return;
       }
 
@@ -1412,8 +1059,8 @@ class AudioPlayer {
     const currentSong = this.currentSong;
     const targetSong = this.crossfadeTargetSong;
     const crossfadeDurationMs = (currentSong && targetSong)
-      ? BeatAnalyzer.calculateOptimalCrossfadeDuration(currentSong, targetSong, 6500)
-      : 6500;
+      ? BeatAnalyzer.calculateOptimalCrossfadeDuration(currentSong, targetSong, 8000)
+      : 8000;
     const stepInterval = 40; // 25 fps buttery-smooth volume increments
 
     this.crossfadeTimer = setInterval(() => {
@@ -1427,8 +1074,8 @@ class AudioPlayer {
       const fadeOutVol = Math.max(0, Math.min(1, this._volume * gainOut));
       const fadeInVol = Math.max(0, Math.min(1, this._volume * gainIn));
 
-      this.audio.volume = fadeOutVol;
-      this.crossfadeAudio.volume = fadeInVol;
+      if (this.audio) this.audio.volume = fadeOutVol;
+      if (this.crossfadeAudio) this.crossfadeAudio.volume = fadeInVol;
 
       if (p >= 1) {
         if (this.crossfadeTimer) {
@@ -1450,14 +1097,17 @@ class AudioPlayer {
       this.crossfadeTimer = null;
     }
 
-    // Stop and completely clean up outgoing audio channel
-    const outgoing = this.audio;
-    outgoing.pause();
-    outgoing.src = '';
-    outgoing.volume = 0;
+    // Stop and completely clean up old audio instance
+    this.audio.pause();
+    this.audio.src = '';
+    this.audio.volume = this._volume;
 
-    // Switch active channel cleanly (event listeners are permanent on both channels)
-    this.activeChannel = this.activeChannel === 'A' ? 'B' : 'A';
+    // Swap audio element instances
+    const oldPrimary = this.audio;
+    this.audio = this.crossfadeAudio;
+    this.crossfadeAudio = oldPrimary;
+    this.crossfadeAudio.volume = 0;
+    this.crossfadeAudio.src = '';
     this.audio.volume = this._volume;
 
     this._queueIndex = newIndex;
@@ -1466,6 +1116,9 @@ class AudioPlayer {
     this.crossfadeTargetSong = null;
     this.crossfadeProgress = 0;
     this.crossfadeSongId = null;
+
+    // Reattach event listeners to new primary audio element
+    this.bindEvents();
 
     this.emit({ type: 'songchange', song: nextSong });
     this.emit({ type: 'play' });
@@ -1479,11 +1132,10 @@ class AudioPlayer {
       clearInterval(this.crossfadeTimer);
       this.crossfadeTimer = null;
     }
-    const incoming = this.crossfadeAudio;
-    if (incoming) {
-      incoming.pause();
-      incoming.src = '';
-      incoming.volume = 0;
+    if (this.crossfadeAudio) {
+      this.crossfadeAudio.pause();
+      this.crossfadeAudio.src = '';
+      this.crossfadeAudio.volume = 0;
     }
     if (this.audio) {
       this.audio.volume = this._volume;
@@ -1515,8 +1167,10 @@ class AudioPlayer {
   pause() {
     if (this.isCrossfading) {
       this.isCrossfadePaused = true;
-      this.channelA.pause();
-      this.channelB.pause();
+      this.audio.pause();
+      if (this.crossfadeAudio && !this.crossfadeAudio.paused) {
+        this.crossfadeAudio.pause();
+      }
       this.emit({ type: 'pause' });
       return;
     }
@@ -1528,8 +1182,10 @@ class AudioPlayer {
     studioAudioEngine.resume();
     if (this.isCrossfading && this.isCrossfadePaused) {
       this.isCrossfadePaused = false;
-      this.channelA.play().catch(() => {});
-      this.channelB.play().catch(() => {});
+      this.audio.play().catch(() => {});
+      if (this.crossfadeAudio && this.crossfadeAudio.src) {
+        this.crossfadeAudio.play().catch(() => {});
+      }
       this.emit({ type: 'play' });
       return;
     }
@@ -1620,17 +1276,6 @@ class AudioPlayer {
     if (this.currentSong) {
       userProfileTracker.recordCompletion(this.currentSong);
       aiTasteProfileEngine.recordSongCompletion(this.currentSong);
-
-      // Offline Backup: Cache track if naturally completed and not cached yet
-      if (
-        !this.currentSongCachedForOffline &&
-        this.currentPlayingStreamUrl &&
-        !this.currentPlayingStreamUrl.startsWith('blob:') &&
-        navigator.onLine
-      ) {
-        this.currentSongCachedForOffline = true;
-        cacheCompletedSongForOfflineBackup(this.currentSong, this.currentPlayingStreamUrl).catch(() => {});
-      }
     }
 
     if (this._repeat === 'one') {

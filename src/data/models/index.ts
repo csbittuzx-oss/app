@@ -94,7 +94,7 @@ export interface SearchResult {
   total: number;
 }
 
-export type MusicProvider = 'itunes' | 'jamendo' | 'lastfm' | 'saavn' | 'youtube' | 'local' | 'offline';
+export type MusicProvider = 'itunes' | 'jamendo' | 'lastfm' | 'saavn' | 'youtube' | 'local';
 
 export type RepeatMode = 'off' | 'one' | 'all';
 
@@ -117,21 +117,9 @@ export interface PlayerState {
   showLyrics: boolean;
   autoPlay: boolean;
   ridingMode?: boolean;
-  audioQuality?: AudioQuality;
-  activeQualityLabel?: string;
-  isDolbySupported?: boolean;
 }
 
-export type AudioQuality =
-  | 'auto'
-  | 'low'
-  | 'medium'
-  | 'high'
-  | 'flac_16_44'
-  | 'flac_24_48'
-  | 'flac_24_96'
-  | 'flac_24_192'
-  | 'dolby_atmos';
+export type AudioQuality = 'high' | 'medium' | 'low';
 
 export interface AppState {
   theme: 'dark' | 'light';

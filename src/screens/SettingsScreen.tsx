@@ -2,9 +2,7 @@ import { useState } from 'react';
 import { useApp } from '../state/AppContext';
 import { usePlayer } from '../state/PlayerContext';
 import { aiTasteProfileEngine } from '../domain/ai/AITasteProfileEngine';
-import { showToast } from '../core/utils/toast';
 import type { AudioQuality } from '../data/models';
-import { AUDIO_QUALITY_OPTIONS } from '../core/utils/audioDeviceUtils';
 
 export function SettingsScreen() {
   const { state, dispatch, setMusicLanguages, resetOnboarding } = useApp();
@@ -13,6 +11,7 @@ export function SettingsScreen() {
   const [showPrivacyModal, setShowPrivacyModal] = useState(false);
   const [showTermsModal, setShowTermsModal] = useState(false);
   const [selectedLangs, setSelectedLangs] = useState<string[]>(state.musicLanguages || ['Hindi', 'International']);
+  const [toastMessage, setToastMessage] = useState<string | null>(null);
 
   const isDark = state.theme === 'dark';
   const audioQuality: AudioQuality = state.config.audioQuality || 'high';
@@ -26,62 +25,90 @@ export function SettingsScreen() {
     'Garhwali', 'Kumaoni', 'Manipuri', 'Nagpuri', 'Braj', 'Awadhi', 'Marwari',
   ];
 
+  const showToast = (msg: string) => {
+    setToastMessage(msg);
+    setTimeout(() => setToastMessage(null), 2500);
+  };
+
   const handleSaveLanguages = () => {
     if (selectedLangs.length === 0) {
-      showToast('Please select at least 1 language', 'danger');
+      showToast('Please select at least 1 language');
       return;
     }
     setMusicLanguages(selectedLangs);
     setShowLangModal(false);
-    showToast('Music recommendation preferences updated', 'success');
+    showToast('Music recommendation preferences updated');
   };
 
   const handleQualityChange = (q: AudioQuality) => {
     dispatch({ type: 'SET_CONFIG', payload: { audioQuality: q } });
     setAudioQuality(q);
-    const item = AUDIO_QUALITY_OPTIONS.find((o) => o.id === q);
-    const label = item ? item.title : q;
-    showToast(`Audio quality set to ${label}`, 'info');
+    const label = q === 'high' ? 'High (320 kbps Studio HD)' : q === 'medium' ? 'Medium (192 kbps)' : 'Low (96 kbps Data Saver)';
+    showToast(`Audio quality switched to ${label}`);
   };
 
   const handleAutoUpdateToggle = () => {
     dispatch({ type: 'SET_CONFIG', payload: { autoUpdate: !autoUpdate } });
-    showToast(autoUpdate ? 'Automatic updates disabled' : 'Automatic updates enabled', 'info');
+    showToast(autoUpdate ? 'Automatic updates disabled' : 'Automatic updates enabled');
   };
 
   return (
     <div style={{ display: 'flex', flexDirection: 'column', height: '100%', position: 'relative' }}>
+      {/* Settings Bottom Toast Notification */}
+      {toastMessage && (
+        <div style={{
+          position: 'fixed',
+          bottom: playerState.currentSong
+            ? 'calc(64px + 56px + env(safe-area-inset-bottom, 0px) + 16px)'
+            : 'calc(56px + env(safe-area-inset-bottom, 0px) + 16px)',
+          left: '50%',
+          transform: 'translateX(-50%)',
+          zIndex: 800,
+          background: '#1A1D2B',
+          border: '1px solid rgba(255, 255, 255, 0.15)',
+          color: '#F3F4F6',
+          padding: '10px 20px',
+          borderRadius: 'var(--radius-full)',
+          fontSize: 'var(--text-sm)',
+          fontWeight: 600,
+          boxShadow: '0 8px 30px rgba(0, 0, 0, 0.6)',
+          animation: 'slideUp 200ms cubic-bezier(0, 0, 0.2, 1)',
+          textAlign: 'center',
+          maxWidth: '85%',
+          display: 'flex',
+          alignItems: 'center',
+          gap: 8,
+          pointerEvents: 'none',
+        }}>
+          <span style={{ width: 6, height: 6, borderRadius: '50%', background: 'var(--color-accent)' }} />
+          <span>{toastMessage}</span>
+        </div>
+      )}
+
       {/* Main Content */}
-      <div
-        className="scroll-area"
-        style={{
-          flex: 1,
-          paddingBottom: 20,
-        }}
-      >
+      <div className="scroll-area" style={{ flex: 1, paddingBottom: 'var(--content-bottom-pad)' }}>
         {/* Header */}
-        <header style={{ padding: '16px 16px 10px' }}>
+        <header style={{ padding: '24px 20px 16px' }}>
           <h1 style={{
             margin: 0,
             fontFamily: 'var(--font-display)',
-            fontSize: '20px',
+            fontSize: 'var(--text-2xl)',
             color: 'var(--color-text-primary)',
-            letterSpacing: '-0.02em',
           }}>
             Settings
           </h1>
-          <p style={{ margin: '2px 0 0', fontSize: '11px', color: 'var(--color-text-secondary)' }}>
+          <p style={{ margin: '4px 0 0', fontSize: 'var(--text-sm)', color: 'var(--color-text-secondary)' }}>
             App Preferences, Audio Quality & Tools
           </p>
         </header>
 
-        <div style={{ padding: '0 16px', display: 'flex', flexDirection: 'column', gap: 14 }}>
+        <div style={{ padding: '0 20px', display: 'flex', flexDirection: 'column', gap: 24 }}>
 
           {/* ── 1. Appearance / Dark Theme ── */}
           <section aria-label="Appearance">
             <h2 style={{
-              margin: '0 0 6px',
-              fontSize: '9.5px',
+              margin: '0 0 10px',
+              fontSize: 'var(--text-xs)',
               fontWeight: 700,
               color: 'var(--color-text-muted)',
               textTransform: 'uppercase',
@@ -93,15 +120,15 @@ export function SettingsScreen() {
               background: 'var(--color-surface)',
               border: '1px solid var(--color-border)',
               borderRadius: 'var(--radius-lg)',
-              padding: '10px 12px',
+              padding: '14px 16px',
               display: 'flex',
               alignItems: 'center',
               justifyContent: 'space-between',
             }}>
-              <div style={{ display: 'flex', alignItems: 'center', gap: 11, minWidth: 0 }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: 14 }}>
                 <div style={{
-                  width: 32,
-                  height: 32,
+                  width: 40,
+                  height: 40,
                   borderRadius: 'var(--radius-md)',
                   background: 'var(--color-surface-2)',
                   display: 'flex',
@@ -110,15 +137,15 @@ export function SettingsScreen() {
                   color: 'var(--color-accent)',
                   flexShrink: 0,
                 }}>
-                  <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                  <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
                     <path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z" />
                   </svg>
                 </div>
-                <div style={{ minWidth: 0 }}>
-                  <p style={{ margin: 0, fontWeight: 600, fontSize: '13px', color: 'var(--color-text-primary)' }}>
+                <div>
+                  <p style={{ margin: 0, fontWeight: 600, fontSize: 'var(--text-md)', color: 'var(--color-text-primary)' }}>
                     Dark Theme
                   </p>
-                  <p style={{ margin: '1px 0 0', fontSize: '10.5px', color: 'var(--color-text-secondary)', lineHeight: 1.35 }}>
+                  <p style={{ margin: '2px 0 0', fontSize: 'var(--text-xs)', color: 'var(--color-text-secondary)' }}>
                     {isDark ? 'Dark OLED mode enabled' : 'Light mode enabled (Default)'}
                   </p>
                 </div>
@@ -134,41 +161,28 @@ export function SettingsScreen() {
 
           {/* ── 2. Audio Quality ── */}
           <section aria-label="Audio Quality">
-            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', margin: '0 0 6px' }}>
-              <h2 style={{
-                margin: 0,
-                fontSize: '9.5px',
-                fontWeight: 700,
-                color: 'var(--color-text-muted)',
-                textTransform: 'uppercase',
-                letterSpacing: '0.08em',
-              }}>
-                Audio Quality
-              </h2>
-              {playerState.activeQualityLabel && (
-                <span style={{
-                  fontSize: '9px',
-                  fontWeight: 700,
-                  color: 'var(--color-accent)',
-                  background: 'var(--color-accent-dim)',
-                  padding: '1px 6px',
-                  borderRadius: '4px',
-                }}>
-                  Active: {playerState.activeQualityLabel}
-                </span>
-              )}
-            </div>
+            <h2 style={{
+              margin: '0 0 10px',
+              fontSize: 'var(--text-xs)',
+              fontWeight: 700,
+              color: 'var(--color-text-muted)',
+              textTransform: 'uppercase',
+              letterSpacing: '0.08em',
+            }}>
+              Audio Quality
+            </h2>
             <div style={{
               background: 'var(--color-surface)',
               border: '1px solid var(--color-border)',
               borderRadius: 'var(--radius-lg)',
               overflow: 'hidden',
             }}>
-              {AUDIO_QUALITY_OPTIONS.map((item, index) => {
+              {[
+                { id: 'high' as AudioQuality, title: 'High Quality', bitrate: '320 kbps', desc: 'Best sound quality & crystal clear audio (Recommended)' },
+                { id: 'medium' as AudioQuality, title: 'Medium Quality', bitrate: '192 kbps', desc: 'Balanced streaming with moderate data usage' },
+                { id: 'low' as AudioQuality, title: 'Low Quality', bitrate: '96 kbps', desc: 'Data saver mode for slower connections' },
+              ].map((item, index) => {
                 const isSelected = audioQuality === item.id;
-                const isDolby = item.id === 'dolby_atmos';
-                const isDolbySupported = playerState.isDolbySupported ?? false;
-
                 return (
                   <div
                     key={item.id}
@@ -181,65 +195,40 @@ export function SettingsScreen() {
                       display: 'flex',
                       alignItems: 'center',
                       justifyContent: 'space-between',
-                      padding: '8px 12px',
+                      padding: '14px 16px',
                       cursor: 'pointer',
-                      borderBottom: index < AUDIO_QUALITY_OPTIONS.length - 1 ? '1px solid var(--color-border)' : 'none',
+                      borderBottom: index < 2 ? '1px solid var(--color-border)' : 'none',
                       background: isSelected ? 'var(--color-accent-dim)' : 'transparent',
                       transition: 'background 150ms ease',
                     }}
                   >
-                    <div style={{ minWidth: 0, paddingRight: 8 }}>
-                      <div style={{ display: 'flex', alignItems: 'center', gap: 6, flexWrap: 'wrap' }}>
-                        <p style={{
-                          margin: 0,
-                          fontWeight: 600,
-                          fontSize: '12.5px',
-                          color: isSelected ? 'var(--color-accent)' : 'var(--color-text-primary)',
-                        }}>
+                    <div>
+                      <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                        <p style={{ margin: 0, fontWeight: 600, fontSize: 'var(--text-md)', color: isSelected ? 'var(--color-accent)' : 'var(--color-text-primary)' }}>
                           {item.title}
                         </p>
                         <span style={{
-                          fontSize: '8.5px',
+                          fontSize: '10px',
                           fontWeight: 700,
-                          padding: '1px 5px',
+                          padding: '2px 6px',
                           borderRadius: '4px',
-                          background: isSelected
-                            ? 'var(--color-accent)'
-                            : item.isLossless
-                            ? 'rgba(245, 158, 11, 0.15)'
-                            : 'var(--color-surface-2)',
-                          color: isSelected
-                            ? 'var(--color-accent-on)'
-                            : item.isLossless
-                            ? 'var(--color-accent)'
-                            : 'var(--color-text-muted)',
+                          background: isSelected ? 'var(--color-accent)' : 'var(--color-surface-2)',
+                          color: isSelected ? 'var(--color-accent-on)' : 'var(--color-text-muted)',
                         }}>
-                          {item.badge}
+                          {item.bitrate}
                         </span>
-                        {isDolby && (
-                          <span style={{
-                            fontSize: '8px',
-                            fontWeight: 700,
-                            padding: '1px 4px',
-                            borderRadius: '3px',
-                            background: isDolbySupported ? 'rgba(34, 197, 94, 0.15)' : 'rgba(239, 68, 68, 0.12)',
-                            color: isDolbySupported ? '#22C55E' : 'var(--color-text-muted)',
-                          }}>
-                            {isDolbySupported ? 'Hardware Ready' : 'Device Dependent'}
-                          </span>
-                        )}
                       </div>
-                      <p style={{ margin: '1px 0 0', fontSize: '9.5px', color: 'var(--color-text-secondary)', lineHeight: 1.35 }}>
+                      <p style={{ margin: '3px 0 0', fontSize: 'var(--text-xs)', color: 'var(--color-text-secondary)' }}>
                         {item.desc}
                       </p>
                     </div>
 
                     {/* Radio Checkmark */}
                     <div style={{
-                      width: 17,
-                      height: 17,
+                      width: 22,
+                      height: 22,
                       borderRadius: '50%',
-                      border: '1.5px solid ' + (isSelected ? 'var(--color-accent)' : 'var(--color-text-muted)'),
+                      border: '2px solid ' + (isSelected ? 'var(--color-accent)' : 'var(--color-text-muted)'),
                       display: 'flex',
                       alignItems: 'center',
                       justifyContent: 'center',
@@ -247,8 +236,8 @@ export function SettingsScreen() {
                     }}>
                       {isSelected && (
                         <div style={{
-                          width: 7,
-                          height: 7,
+                          width: 12,
+                          height: 12,
                           borderRadius: '50%',
                           background: 'var(--color-accent)',
                         }} />
@@ -263,8 +252,8 @@ export function SettingsScreen() {
           {/* ── 3. Smart AutoPlay & Playback ── */}
           <section aria-label="Playback & Recommendations">
             <h2 style={{
-              margin: '0 0 6px',
-              fontSize: '9.5px',
+              margin: '0 0 10px',
+              fontSize: 'var(--text-xs)',
               fontWeight: 700,
               color: 'var(--color-text-muted)',
               textTransform: 'uppercase',
@@ -276,15 +265,15 @@ export function SettingsScreen() {
               background: 'var(--color-surface)',
               border: '1px solid var(--color-border)',
               borderRadius: 'var(--radius-lg)',
-              padding: '10px 12px',
+              padding: '14px 16px',
               display: 'flex',
               alignItems: 'center',
               justifyContent: 'space-between',
             }}>
-              <div style={{ display: 'flex', alignItems: 'center', gap: 11, minWidth: 0 }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: 14 }}>
                 <div style={{
-                  width: 32,
-                  height: 32,
+                  width: 40,
+                  height: 40,
                   borderRadius: 'var(--radius-md)',
                   background: 'var(--color-surface-2)',
                   display: 'flex',
@@ -293,15 +282,15 @@ export function SettingsScreen() {
                   color: 'var(--color-accent)',
                   flexShrink: 0,
                 }}>
-                  <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                  <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
                     <path d="M12 2v4M12 18v4M4.93 4.93l2.83 2.83M16.24 16.24l2.83 2.83M2 12h4M18 12h4M4.93 19.07l2.83-2.83M16.24 7.76l2.83-2.83"/>
                   </svg>
                 </div>
-                <div style={{ minWidth: 0 }}>
-                  <p style={{ margin: 0, fontWeight: 600, fontSize: '13px', color: 'var(--color-text-primary)' }}>
+                <div>
+                  <p style={{ margin: 0, fontWeight: 600, fontSize: 'var(--text-md)', color: 'var(--color-text-primary)' }}>
                     Smart AutoPlay
                   </p>
-                  <p style={{ margin: '1px 0 0', fontSize: '10.5px', color: 'var(--color-text-secondary)', lineHeight: 1.35 }}>
+                  <p style={{ margin: '2px 0 0', fontSize: 'var(--text-xs)', color: 'var(--color-text-secondary)' }}>
                     Auto-play personalized recommendations when queue finishes
                   </p>
                 </div>
@@ -312,7 +301,7 @@ export function SettingsScreen() {
                 checked={playerState.autoPlay}
                 onChange={() => {
                   toggleAutoPlay();
-                  showToast(playerState.autoPlay ? 'Smart AutoPlay disabled' : 'Smart AutoPlay enabled', 'info');
+                  showToast(playerState.autoPlay ? 'Smart AutoPlay disabled' : 'Smart AutoPlay enabled');
                 }}
               />
             </div>
@@ -321,8 +310,8 @@ export function SettingsScreen() {
           {/* ── 4. Updates ── */}
           <section aria-label="Updates">
             <h2 style={{
-              margin: '0 0 6px',
-              fontSize: '9.5px',
+              margin: '0 0 10px',
+              fontSize: 'var(--text-xs)',
               fontWeight: 700,
               color: 'var(--color-text-muted)',
               textTransform: 'uppercase',
@@ -334,15 +323,15 @@ export function SettingsScreen() {
               background: 'var(--color-surface)',
               border: '1px solid var(--color-border)',
               borderRadius: 'var(--radius-lg)',
-              padding: '10px 12px',
+              padding: '14px 16px',
               display: 'flex',
               alignItems: 'center',
               justifyContent: 'space-between',
             }}>
-              <div style={{ display: 'flex', alignItems: 'center', gap: 11, minWidth: 0 }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: 14 }}>
                 <div style={{
-                  width: 32,
-                  height: 32,
+                  width: 40,
+                  height: 40,
                   borderRadius: 'var(--radius-md)',
                   background: 'var(--color-surface-2)',
                   display: 'flex',
@@ -351,15 +340,15 @@ export function SettingsScreen() {
                   color: 'var(--color-success)',
                   flexShrink: 0,
                 }}>
-                  <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                  <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
                     <path d="M21.5 2v6h-6M21.34 15.57a10 10 0 1 1-.57-8.38l5.67-5.67"/>
                   </svg>
                 </div>
-                <div style={{ minWidth: 0 }}>
-                  <p style={{ margin: 0, fontWeight: 600, fontSize: '13px', color: 'var(--color-text-primary)' }}>
+                <div>
+                  <p style={{ margin: 0, fontWeight: 600, fontSize: 'var(--text-md)', color: 'var(--color-text-primary)' }}>
                     Automatically Update
                   </p>
-                  <p style={{ margin: '1px 0 0', fontSize: '10.5px', color: 'var(--color-text-secondary)', lineHeight: 1.35 }}>
+                  <p style={{ margin: '2px 0 0', fontSize: 'var(--text-xs)', color: 'var(--color-text-secondary)' }}>
                     Check and alert for new releases on startup
                   </p>
                 </div>
@@ -373,11 +362,11 @@ export function SettingsScreen() {
             </div>
           </section>
 
-          {/* ── 5. Music Recommendations & Languages ── */}
+          {/* ── 4. Music Recommendations & Languages ── */}
           <section aria-label="Music Recommendations">
             <h2 style={{
-              margin: '0 0 6px',
-              fontSize: '9.5px',
+              margin: '0 0 10px',
+              fontSize: 'var(--text-xs)',
               fontWeight: 700,
               color: 'var(--color-text-muted)',
               textTransform: 'uppercase',
@@ -389,16 +378,16 @@ export function SettingsScreen() {
               background: 'var(--color-surface)',
               border: '1px solid var(--color-border)',
               borderRadius: 'var(--radius-lg)',
-              padding: '10px 12px',
+              padding: '14px 16px',
               display: 'flex',
               flexDirection: 'column',
-              gap: 9,
+              gap: 12,
             }}>
               <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
-                <div style={{ display: 'flex', alignItems: 'center', gap: 11, minWidth: 0 }}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: 14 }}>
                   <div style={{
-                    width: 32,
-                    height: 32,
+                    width: 40,
+                    height: 40,
                     borderRadius: 'var(--radius-md)',
                     background: 'var(--color-surface-2)',
                     display: 'flex',
@@ -407,17 +396,17 @@ export function SettingsScreen() {
                     color: 'var(--color-accent)',
                     flexShrink: 0,
                   }}>
-                    <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                    <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
                       <path d="M9 18V5l12-2v13" />
                       <circle cx="6" cy="18" r="3" />
                       <circle cx="18" cy="16" r="3" />
                     </svg>
                   </div>
-                  <div style={{ minWidth: 0 }}>
-                    <p style={{ margin: 0, fontWeight: 600, fontSize: '13px', color: 'var(--color-text-primary)' }}>
+                  <div>
+                    <p style={{ margin: 0, fontWeight: 600, fontSize: 'var(--text-md)', color: 'var(--color-text-primary)' }}>
                       Music Languages
                     </p>
-                    <p style={{ margin: '1px 0 0', fontSize: '10.5px', color: 'var(--color-text-secondary)', lineHeight: 1.35, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                    <p style={{ margin: '2px 0 0', fontSize: 'var(--text-xs)', color: 'var(--color-text-secondary)' }}>
                       {state.musicLanguages?.join(', ') || 'Hindi, International'}
                     </p>
                   </div>
@@ -433,11 +422,10 @@ export function SettingsScreen() {
                     color: 'var(--color-accent)',
                     border: '1px solid var(--color-accent)',
                     borderRadius: 'var(--radius-md)',
-                    padding: '4px 10px',
-                    fontSize: '10.5px',
+                    padding: '6px 12px',
+                    fontSize: 'var(--text-xs)',
                     fontWeight: 700,
                     cursor: 'pointer',
-                    flexShrink: 0,
                   }}
                 >
                   Change
@@ -445,12 +433,12 @@ export function SettingsScreen() {
               </div>
 
               {/* Reset AI Personalization & Taste Profile */}
-              <div style={{ borderTop: '1px solid var(--color-border)', paddingTop: 8, display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                <div style={{ minWidth: 0 }}>
-                  <p style={{ margin: 0, fontSize: '11.5px', fontWeight: 600, color: 'var(--color-text-primary)' }}>
+              <div style={{ borderTop: '1px solid var(--color-border)', paddingTop: 10, display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                <div>
+                  <p style={{ margin: 0, fontSize: 'var(--text-xs)', fontWeight: 600, color: 'var(--color-text-primary)' }}>
                     Reset Personalization Profile
                   </p>
-                  <p style={{ margin: '1px 0 0', fontSize: '10px', color: 'var(--color-text-muted)', lineHeight: 1.3 }}>
+                  <p style={{ margin: '2px 0 0', fontSize: '11px', color: 'var(--color-text-muted)' }}>
                     Wipe learned taste affinities, skips, and discovery history
                   </p>
                 </div>
@@ -458,18 +446,17 @@ export function SettingsScreen() {
                   type="button"
                   onClick={() => {
                     aiTasteProfileEngine.resetPersonalizationProfile();
-                    showToast('Personalization and taste profile reset', 'info');
+                    showToast('Personalization and taste profile reset');
                   }}
                   style={{
                     background: 'rgba(239, 68, 68, 0.1)',
                     border: '1px solid rgba(239, 68, 68, 0.3)',
                     color: '#EF4444',
                     borderRadius: 'var(--radius-md)',
-                    padding: '4px 10px',
-                    fontSize: '10.5px',
+                    padding: '6px 12px',
+                    fontSize: 'var(--text-xs)',
                     fontWeight: 700,
                     cursor: 'pointer',
-                    flexShrink: 0,
                   }}
                 >
                   Reset
@@ -477,25 +464,24 @@ export function SettingsScreen() {
               </div>
 
               {/* Re-run Onboarding */}
-              <div style={{ borderTop: '1px solid var(--color-border)', paddingTop: 8, display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                <span style={{ fontSize: '10.5px', color: 'var(--color-text-secondary)' }}>
+              <div style={{ borderTop: '1px solid var(--color-border)', paddingTop: 10, display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                <span style={{ fontSize: 'var(--text-xs)', color: 'var(--color-text-secondary)' }}>
                   Re-take first-time setup
                 </span>
                 <button
                   type="button"
                   onClick={() => {
                     resetOnboarding();
-                    showToast('Restarting onboarding setup...', 'info');
+                    showToast('Restarting onboarding setup...');
                   }}
                   style={{
                     background: 'none',
                     border: 'none',
                     color: 'var(--color-text-muted)',
-                    fontSize: '10.5px',
+                    fontSize: 'var(--text-xs)',
                     fontWeight: 600,
                     textDecoration: 'underline',
                     cursor: 'pointer',
-                    padding: 0,
                   }}
                 >
                   Reset Onboarding
@@ -504,11 +490,11 @@ export function SettingsScreen() {
             </div>
           </section>
 
-          {/* ── 6. About ── */}
+          {/* ── 5. About ── */}
           <section aria-label="About">
             <h2 style={{
-              margin: '0 0 6px',
-              fontSize: '9.5px',
+              margin: '0 0 10px',
+              fontSize: 'var(--text-xs)',
               fontWeight: 700,
               color: 'var(--color-text-muted)',
               textTransform: 'uppercase',
@@ -516,38 +502,38 @@ export function SettingsScreen() {
             }}>
               About
             </h2>
-            <div style={{ display: 'flex', flexDirection: 'column', gap: 9 }}>
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
               {/* App Info Card */}
               <div style={{
                 background: 'var(--color-surface)',
                 border: '1px solid var(--color-border)',
                 borderRadius: 'var(--radius-lg)',
-                padding: '14px 12px',
+                padding: '20px 16px',
                 display: 'flex',
                 flexDirection: 'column',
                 alignItems: 'center',
                 textAlign: 'center',
-                gap: 8,
+                gap: 12,
               }}>
                 <img
                   src="/logo.png"
                   alt="Soundwave Logo"
-                  width={44}
-                  height={44}
-                  style={{ borderRadius: 'var(--radius-md)', objectFit: 'cover', border: '1px solid var(--color-border)' }}
+                  width={60}
+                  height={60}
+                  style={{ borderRadius: 'var(--radius-lg)', objectFit: 'cover', border: '1px solid var(--color-border)' }}
                 />
                 <div>
-                  <h3 style={{ margin: 0, fontFamily: 'var(--font-display)', fontSize: '16px', color: 'var(--color-text-primary)' }}>
+                  <h3 style={{ margin: 0, fontFamily: 'var(--font-display)', fontSize: 'var(--text-xl)', color: 'var(--color-text-primary)' }}>
                     Soundwave
                   </h3>
-                  <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 6, marginTop: 2 }}>
-                    <span style={{ fontSize: '10.5px', color: 'var(--color-text-secondary)', fontWeight: 600 }}>
+                  <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8, marginTop: 4 }}>
+                    <span style={{ fontSize: 'var(--text-xs)', color: 'var(--color-text-secondary)', fontWeight: 600 }}>
                       Version 1.2.1
                     </span>
                     <span style={{
-                      fontSize: '9px',
+                      fontSize: '10.5px',
                       fontWeight: 700,
-                      padding: '1px 6px',
+                      padding: '2px 8px',
                       borderRadius: 'var(--radius-full)',
                       background: 'rgba(245, 158, 11, 0.15)',
                       color: 'var(--color-accent)',
@@ -558,17 +544,17 @@ export function SettingsScreen() {
                   </div>
                 </div>
                 <div style={{
-                  fontSize: '10px',
+                  fontSize: '11.5px',
                   fontWeight: 600,
                   color: '#10B981',
                   background: 'rgba(16, 185, 129, 0.12)',
-                  padding: '3px 10px',
+                  padding: '5px 14px',
                   borderRadius: 'var(--radius-full)',
                   display: 'flex',
                   alignItems: 'center',
-                  gap: 5,
+                  gap: 6,
                 }}>
-                  <span style={{ width: 6, height: 6, borderRadius: '50%', background: '#10B981', boxShadow: '0 0 5px rgba(16, 185, 129, 0.6)' }} />
+                  <span style={{ width: 7, height: 7, borderRadius: '50%', background: '#10B981', boxShadow: '0 0 6px rgba(16, 185, 129, 0.6)' }} />
                   <span>All Systems Operational</span>
                 </div>
               </div>
@@ -578,15 +564,15 @@ export function SettingsScreen() {
                 background: 'var(--color-surface)',
                 border: '1px solid var(--color-border)',
                 borderRadius: 'var(--radius-lg)',
-                padding: '10px 12px',
+                padding: '14px 16px',
                 display: 'flex',
                 alignItems: 'center',
                 justifyContent: 'space-between',
               }}>
-                <div style={{ display: 'flex', alignItems: 'center', gap: 11, minWidth: 0 }}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: 14 }}>
                   <div style={{
-                    width: 32,
-                    height: 32,
+                    width: 38,
+                    height: 38,
                     borderRadius: 'var(--radius-md)',
                     background: 'var(--color-surface-2)',
                     display: 'flex',
@@ -595,16 +581,16 @@ export function SettingsScreen() {
                     color: 'var(--color-accent)',
                     flexShrink: 0,
                   }}>
-                    <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                    <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
                       <path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2" />
                       <circle cx="12" cy="7" r="4" />
                     </svg>
                   </div>
-                  <div style={{ minWidth: 0 }}>
-                    <p style={{ margin: 0, fontWeight: 600, fontSize: '13px', color: 'var(--color-text-primary)' }}>
+                  <div>
+                    <p style={{ margin: 0, fontWeight: 600, fontSize: 'var(--text-md)', color: 'var(--color-text-primary)' }}>
                       Developed by Pandit Bittu
                     </p>
-                    <p style={{ margin: '1px 0 0', fontSize: '10.5px', color: 'var(--color-text-secondary)', lineHeight: 1.35 }}>
+                    <p style={{ margin: '2px 0 0', fontSize: 'var(--text-xs)', color: 'var(--color-text-secondary)' }}>
                       Lead Developer & Architect
                     </p>
                   </div>
@@ -616,19 +602,18 @@ export function SettingsScreen() {
                   style={{
                     display: 'flex',
                     alignItems: 'center',
-                    gap: 5,
+                    gap: 6,
                     background: 'rgba(225, 48, 108, 0.1)',
                     color: '#E1306C',
-                    padding: '4px 10px',
+                    padding: '6px 12px',
                     borderRadius: 'var(--radius-full)',
-                    fontSize: '10.5px',
+                    fontSize: 'var(--text-xs)',
                     fontWeight: 700,
                     textDecoration: 'none',
                     border: '1px solid rgba(225, 48, 108, 0.25)',
-                    flexShrink: 0,
                   }}
                 >
-                  <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                  <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
                     <rect x="2" y="2" width="20" height="20" rx="5" ry="5"/>
                     <path d="M16 11.37A4 4 0 1 1 12.63 8 4 4 0 0 1 16 11.37z"/>
                     <line x1="17.5" y1="6.5" x2="17.51" y2="6.5"/>
@@ -654,7 +639,7 @@ export function SettingsScreen() {
                     alignItems: 'center',
                     justifyContent: 'space-between',
                     width: '100%',
-                    padding: '10px 12px',
+                    padding: '14px 16px',
                     background: 'none',
                     border: 'none',
                     borderBottom: '1px solid var(--color-border)',
@@ -662,10 +647,10 @@ export function SettingsScreen() {
                     textAlign: 'left',
                   }}
                 >
-                  <div style={{ display: 'flex', alignItems: 'center', gap: 11, minWidth: 0 }}>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 14 }}>
                     <div style={{
-                      width: 30,
-                      height: 30,
+                      width: 36,
+                      height: 36,
                       borderRadius: 'var(--radius-md)',
                       background: 'var(--color-surface-2)',
                       display: 'flex',
@@ -674,20 +659,20 @@ export function SettingsScreen() {
                       color: 'var(--color-accent)',
                       flexShrink: 0,
                     }}>
-                      <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                      <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
                         <path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/>
                       </svg>
                     </div>
-                    <div style={{ minWidth: 0 }}>
-                      <p style={{ margin: 0, fontWeight: 600, fontSize: '13px', color: 'var(--color-text-primary)' }}>
+                    <div>
+                      <p style={{ margin: 0, fontWeight: 600, fontSize: 'var(--text-md)', color: 'var(--color-text-primary)' }}>
                         Privacy Policy
                       </p>
-                      <p style={{ margin: '1px 0 0', fontSize: '10.5px', color: 'var(--color-text-secondary)', lineHeight: 1.35 }}>
+                      <p style={{ margin: '2px 0 0', fontSize: 'var(--text-xs)', color: 'var(--color-text-secondary)' }}>
                         Your Privacy Matters • Zero tracking policy
                       </p>
                     </div>
                   </div>
-                  <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="var(--color-text-muted)" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                  <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="var(--color-text-muted)" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
                     <polyline points="9 18 15 12 9 6" />
                   </svg>
                 </button>
@@ -702,17 +687,17 @@ export function SettingsScreen() {
                     alignItems: 'center',
                     justifyContent: 'space-between',
                     width: '100%',
-                    padding: '10px 12px',
+                    padding: '14px 16px',
                     background: 'none',
                     border: 'none',
                     cursor: 'pointer',
                     textAlign: 'left',
                   }}
                 >
-                  <div style={{ display: 'flex', alignItems: 'center', gap: 11, minWidth: 0 }}>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 14 }}>
                     <div style={{
-                      width: 30,
-                      height: 30,
+                      width: 36,
+                      height: 36,
                       borderRadius: 'var(--radius-md)',
                       background: 'var(--color-surface-2)',
                       display: 'flex',
@@ -721,7 +706,7 @@ export function SettingsScreen() {
                       color: 'var(--color-accent)',
                       flexShrink: 0,
                     }}>
-                      <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                      <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
                         <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/>
                         <polyline points="14 2 14 8 20 8"/>
                         <line x1="16" y1="13" x2="8" y2="13"/>
@@ -729,16 +714,16 @@ export function SettingsScreen() {
                         <polyline points="10 9 9 9 8 9"/>
                       </svg>
                     </div>
-                    <div style={{ minWidth: 0 }}>
-                      <p style={{ margin: 0, fontWeight: 600, fontSize: '13px', color: 'var(--color-text-primary)' }}>
+                    <div>
+                      <p style={{ margin: 0, fontWeight: 600, fontSize: 'var(--text-md)', color: 'var(--color-text-primary)' }}>
                         Terms & Conditions
                       </p>
-                      <p style={{ margin: '1px 0 0', fontSize: '10.5px', color: 'var(--color-text-secondary)', lineHeight: 1.35 }}>
+                      <p style={{ margin: '2px 0 0', fontSize: 'var(--text-xs)', color: 'var(--color-text-secondary)' }}>
                         Usage guidelines & third-party terms
                       </p>
                     </div>
                   </div>
-                  <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="var(--color-text-muted)" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                  <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="var(--color-text-muted)" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
                     <polyline points="9 18 15 12 9 6" />
                   </svg>
                 </button>
@@ -746,6 +731,8 @@ export function SettingsScreen() {
             </div>
           </section>
         </div>
+
+        <div style={{ height: 24 }} />
       </div>
 
       {/* Music Languages Modal */}
@@ -769,29 +756,29 @@ export function SettingsScreen() {
             width: '100%',
             maxWidth: 'var(--screen-max)',
             borderRadius: 'var(--radius-xl) var(--radius-xl) 0 0',
-            padding: '20px 16px',
-            paddingBottom: 'calc(20px + env(safe-area-inset-bottom, 0px))',
+            padding: '24px 20px',
+            paddingBottom: 'calc(24px + env(safe-area-inset-bottom, 0px))',
             animation: 'slideUp 250ms cubic-bezier(0, 0, 0.2, 1)',
             display: 'flex',
             flexDirection: 'column',
-            gap: 12,
+            gap: 16,
             maxHeight: '80vh',
           }}>
             <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
               <div>
-                <h3 style={{ margin: 0, fontSize: '15px', fontWeight: 700, color: 'var(--color-text-primary)' }}>
+                <h3 style={{ margin: 0, fontSize: 'var(--text-lg)', fontWeight: 700, color: 'var(--color-text-primary)' }}>
                   Music Languages
                 </h3>
-                <p style={{ margin: '2px 0 0', fontSize: '11px', color: 'var(--color-text-secondary)' }}>
+                <p style={{ margin: '2px 0 0', fontSize: 'var(--text-xs)', color: 'var(--color-text-secondary)' }}>
                   Select languages for personalized recommendations
                 </p>
               </div>
               <button
                 onClick={() => setShowLangModal(false)}
                 className="btn-icon"
-                style={{ padding: 4 }}
+                style={{ padding: 6 }}
               >
-                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round">
+                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round">
                   <line x1="18" y1="6" x2="6" y2="18" />
                   <line x1="6" y1="6" x2="18" y2="18" />
                 </svg>
@@ -799,7 +786,7 @@ export function SettingsScreen() {
             </div>
 
             {/* Language Selection Grid */}
-            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(2, 1fr)', gap: 6, overflowY: 'auto', maxHeight: '42vh', padding: '2px 0' }}>
+            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(2, 1fr)', gap: 8, overflowY: 'auto', maxHeight: '42vh', padding: '4px 0' }}>
               {ALL_LANGUAGES.map((lang) => {
                 const isSelected = selectedLangs.includes(lang);
                 return (
@@ -813,7 +800,7 @@ export function SettingsScreen() {
                       );
                     }}
                     style={{
-                      padding: '9px 11px',
+                      padding: '12px 14px',
                       borderRadius: 'var(--radius-md)',
                       background: isSelected ? 'rgba(245, 158, 11, 0.12)' : 'var(--color-surface-2)',
                       border: isSelected ? '1.5px solid var(--color-accent)' : '1px solid var(--color-border)',
@@ -822,14 +809,14 @@ export function SettingsScreen() {
                       alignItems: 'center',
                       justifyContent: 'space-between',
                       fontWeight: 600,
-                      fontSize: '12px',
+                      fontSize: 'var(--text-sm)',
                       color: isSelected ? 'var(--color-accent)' : 'var(--color-text-primary)',
                     }}
                   >
                     <span>{lang}</span>
                     <div style={{
-                      width: 16,
-                      height: 16,
+                      width: 18,
+                      height: 18,
                       borderRadius: '50%',
                       background: isSelected ? 'var(--color-accent)' : 'transparent',
                       border: isSelected ? 'none' : '1.5px solid var(--color-border)',
@@ -839,7 +826,7 @@ export function SettingsScreen() {
                       color: '#FFFFFF',
                     }}>
                       {isSelected && (
-                        <svg width="9" height="9" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round">
+                        <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round">
                           <polyline points="20 6 9 17 4 12" />
                         </svg>
                       )}
@@ -849,12 +836,12 @@ export function SettingsScreen() {
               })}
             </div>
 
-            <div style={{ display: 'flex', gap: 10, marginTop: 4 }}>
+            <div style={{ display: 'flex', gap: 12, marginTop: 4 }}>
               <button
                 type="button"
                 onClick={() => setShowLangModal(false)}
                 className="btn btn-ghost"
-                style={{ flex: 1, padding: '9px', borderRadius: 'var(--radius-md)', fontSize: '12px' }}
+                style={{ flex: 1, padding: '12px', borderRadius: 'var(--radius-md)' }}
               >
                 Cancel
               </button>
@@ -863,13 +850,13 @@ export function SettingsScreen() {
                 onClick={handleSaveLanguages}
                 style={{
                   flex: 1,
-                  padding: '9px',
+                  padding: '12px',
                   borderRadius: 'var(--radius-md)',
                   background: 'var(--color-accent)',
                   color: 'var(--color-accent-on)',
                   border: 'none',
                   fontWeight: 700,
-                  fontSize: '12px',
+                  fontSize: 'var(--text-sm)',
                   cursor: 'pointer',
                 }}
               >
@@ -907,21 +894,21 @@ export function SettingsScreen() {
             width: '100%',
             maxWidth: 'var(--screen-max)',
             borderRadius: 'var(--radius-xl) var(--radius-xl) 0 0',
-            padding: '20px 16px',
-            paddingBottom: 'calc(20px + env(safe-area-inset-bottom, 0px))',
+            padding: '24px 20px',
+            paddingBottom: 'calc(24px + env(safe-area-inset-bottom, 0px))',
             animation: 'slideUp 250ms cubic-bezier(0, 0, 0.2, 1)',
             display: 'flex',
             flexDirection: 'column',
-            gap: 12,
+            gap: 16,
             maxHeight: '85vh',
             boxShadow: '0 -10px 40px rgba(0,0,0,0.4)',
           }}>
             {/* Header with Close button */}
-            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', borderBottom: '1px solid var(--color-border)', paddingBottom: 10 }}>
-              <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', borderBottom: '1px solid var(--color-border)', paddingBottom: 14 }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
                 <div style={{
-                  width: 28,
-                  height: 28,
+                  width: 32,
+                  height: 32,
                   borderRadius: '50%',
                   background: 'var(--color-accent-dim)',
                   display: 'flex',
@@ -929,11 +916,11 @@ export function SettingsScreen() {
                   justifyContent: 'center',
                   color: 'var(--color-accent)',
                 }}>
-                  <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+                  <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
                     <path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/>
                   </svg>
                 </div>
-                <h3 style={{ margin: 0, fontSize: '15px', fontWeight: 700, color: 'var(--color-text-primary)' }}>
+                <h3 style={{ margin: 0, fontSize: 'var(--text-lg)', fontWeight: 700, color: 'var(--color-text-primary)' }}>
                   Privacy Policy
                 </h3>
               </div>
@@ -943,8 +930,8 @@ export function SettingsScreen() {
                 onClick={() => setShowPrivacyModal(false)}
                 className="btn-icon"
                 style={{
-                  width: 28,
-                  height: 28,
+                  width: 32,
+                  height: 32,
                   borderRadius: '50%',
                   background: 'var(--color-surface-2)',
                   display: 'flex',
@@ -956,7 +943,7 @@ export function SettingsScreen() {
                 }}
                 aria-label="Close Privacy Policy"
               >
-                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round">
+                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round">
                   <line x1="18" y1="6" x2="6" y2="18" />
                   <line x1="6" y1="6" x2="18" y2="18" />
                 </svg>
@@ -964,72 +951,72 @@ export function SettingsScreen() {
             </div>
 
             {/* Scrollable Content */}
-            <div className="scroll-area" style={{ overflowY: 'auto', maxHeight: '65vh', paddingRight: 4, display: 'flex', flexDirection: 'column', gap: 12 }}>
-              <div style={{ background: 'var(--color-surface-2)', padding: '10px 12px', borderRadius: 'var(--radius-md)', border: '1px solid var(--color-border)' }}>
-                <h4 style={{ margin: 0, fontSize: '13px', fontWeight: 700, color: 'var(--color-accent)' }}>
+            <div className="scroll-area" style={{ overflowY: 'auto', maxHeight: '65vh', paddingRight: 4, display: 'flex', flexDirection: 'column', gap: 16 }}>
+              <div style={{ background: 'var(--color-surface-2)', padding: '12px 14px', borderRadius: 'var(--radius-md)', border: '1px solid var(--color-border)' }}>
+                <h4 style={{ margin: 0, fontSize: 'var(--text-md)', fontWeight: 700, color: 'var(--color-accent)' }}>
                   Your Privacy Matters
                 </h4>
-                <p style={{ margin: '3px 0 0', fontSize: '10.5px', color: 'var(--color-text-secondary)', lineHeight: 1.45 }}>
+                <p style={{ margin: '4px 0 0', fontSize: 'var(--text-xs)', color: 'var(--color-text-secondary)', lineHeight: 1.5 }}>
                   Soundwave is designed with privacy in mind. We do not collect, sell, or share your personal data.
                 </p>
               </div>
 
               <div>
-                <h5 style={{ margin: '0 0 3px', fontSize: '12px', fontWeight: 700, color: 'var(--color-text-primary)' }}>
+                <h5 style={{ margin: '0 0 4px', fontSize: 'var(--text-sm)', fontWeight: 700, color: 'var(--color-text-primary)' }}>
                   What we collect
                 </h5>
-                <p style={{ margin: 0, fontSize: '10.5px', color: 'var(--color-text-secondary)', lineHeight: 1.5 }}>
+                <p style={{ margin: 0, fontSize: 'var(--text-xs)', color: 'var(--color-text-secondary)', lineHeight: 1.6 }}>
                   Soundwave does not intentionally collect personal information from your device.
                 </p>
-                <p style={{ margin: '4px 0 0', fontSize: '10.5px', color: 'var(--color-text-secondary)', lineHeight: 1.5 }}>
+                <p style={{ margin: '6px 0 0', fontSize: 'var(--text-xs)', color: 'var(--color-text-secondary)', lineHeight: 1.6 }}>
                   Your playlists, liked songs, search history, playback history, preferences, and saved settings are stored locally on your device.
                 </p>
-                <p style={{ margin: '4px 0 0', fontSize: '10.5px', color: 'var(--color-text-secondary)', lineHeight: 1.5 }}>
+                <p style={{ margin: '6px 0 0', fontSize: 'var(--text-xs)', color: 'var(--color-text-secondary)', lineHeight: 1.6 }}>
                   Your local music data remains on your device.
                 </p>
               </div>
 
               <div>
-                <h5 style={{ margin: '0 0 3px', fontSize: '12px', fontWeight: 700, color: 'var(--color-text-primary)' }}>
+                <h5 style={{ margin: '0 0 4px', fontSize: 'var(--text-sm)', fontWeight: 700, color: 'var(--color-text-primary)' }}>
                   Your Data
                 </h5>
-                <p style={{ margin: 0, fontSize: '10.5px', color: 'var(--color-text-secondary)', lineHeight: 1.5 }}>
+                <p style={{ margin: 0, fontSize: 'var(--text-xs)', color: 'var(--color-text-secondary)', lineHeight: 1.6 }}>
                   Your personal music preferences and app data are kept on your device and are not sold or shared by Soundwave.
                 </p>
               </div>
 
               <div>
-                <h5 style={{ margin: '0 0 3px', fontSize: '12px', fontWeight: 700, color: 'var(--color-text-primary)' }}>
+                <h5 style={{ margin: '0 0 4px', fontSize: 'var(--text-sm)', fontWeight: 700, color: 'var(--color-text-primary)' }}>
                   Third-Party Services
                 </h5>
-                <p style={{ margin: 0, fontSize: '10.5px', color: 'var(--color-text-secondary)', lineHeight: 1.5 }}>
+                <p style={{ margin: 0, fontSize: 'var(--text-xs)', color: 'var(--color-text-secondary)', lineHeight: 1.6 }}>
                   Soundwave may use third-party music services/APIs to provide music and related functionality. Those services may have their own privacy policies and data practices.
                 </p>
               </div>
 
               <div>
-                <h5 style={{ margin: '0 0 3px', fontSize: '12px', fontWeight: 700, color: 'var(--color-text-primary)' }}>
+                <h5 style={{ margin: '0 0 4px', fontSize: 'var(--text-sm)', fontWeight: 700, color: 'var(--color-text-primary)' }}>
                   Security
                 </h5>
-                <p style={{ margin: 0, fontSize: '10.5px', color: 'var(--color-text-secondary)', lineHeight: 1.5 }}>
+                <p style={{ margin: 0, fontSize: 'var(--text-xs)', color: 'var(--color-text-secondary)', lineHeight: 1.6 }}>
                   We take reasonable measures to protect the information stored by the app. However, no software can guarantee absolute security.
                 </p>
               </div>
 
               <div>
-                <h5 style={{ margin: '0 0 3px', fontSize: '12px', fontWeight: 700, color: 'var(--color-text-primary)' }}>
+                <h5 style={{ margin: '0 0 4px', fontSize: 'var(--text-sm)', fontWeight: 700, color: 'var(--color-text-primary)' }}>
                   Changes
                 </h5>
-                <p style={{ margin: 0, fontSize: '10.5px', color: 'var(--color-text-secondary)', lineHeight: 1.5 }}>
+                <p style={{ margin: 0, fontSize: 'var(--text-xs)', color: 'var(--color-text-secondary)', lineHeight: 1.6 }}>
                   This Privacy Policy may be updated when Soundwave adds or changes features. Any updated version will be available inside the app.
                 </p>
               </div>
 
-              <div style={{ borderTop: '1px solid var(--color-border)', paddingTop: 10 }}>
-                <h5 style={{ margin: '0 0 3px', fontSize: '12px', fontWeight: 700, color: 'var(--color-text-primary)' }}>
+              <div style={{ borderTop: '1px solid var(--color-border)', paddingTop: 12 }}>
+                <h5 style={{ margin: '0 0 4px', fontSize: 'var(--text-sm)', fontWeight: 700, color: 'var(--color-text-primary)' }}>
                   Contact
                 </h5>
-                <p style={{ margin: 0, fontSize: '10.5px', color: 'var(--color-text-secondary)', lineHeight: 1.5 }}>
+                <p style={{ margin: 0, fontSize: 'var(--text-xs)', color: 'var(--color-text-secondary)', lineHeight: 1.6 }}>
                   Developer: <strong>Pandit Bittu</strong><br/>
                   Instagram: <strong>@panditbittu.x</strong>
                 </p>
@@ -1066,21 +1053,21 @@ export function SettingsScreen() {
             width: '100%',
             maxWidth: 'var(--screen-max)',
             borderRadius: 'var(--radius-xl) var(--radius-xl) 0 0',
-            padding: '20px 16px',
-            paddingBottom: 'calc(20px + env(safe-area-inset-bottom, 0px))',
+            padding: '24px 20px',
+            paddingBottom: 'calc(24px + env(safe-area-inset-bottom, 0px))',
             animation: 'slideUp 250ms cubic-bezier(0, 0, 0.2, 1)',
             display: 'flex',
             flexDirection: 'column',
-            gap: 12,
+            gap: 16,
             maxHeight: '85vh',
             boxShadow: '0 -10px 40px rgba(0,0,0,0.4)',
           }}>
             {/* Header with Close button */}
-            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', borderBottom: '1px solid var(--color-border)', paddingBottom: 10 }}>
-              <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', borderBottom: '1px solid var(--color-border)', paddingBottom: 14 }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
                 <div style={{
-                  width: 28,
-                  height: 28,
+                  width: 32,
+                  height: 32,
                   borderRadius: '50%',
                   background: 'var(--color-accent-dim)',
                   display: 'flex',
@@ -1088,12 +1075,12 @@ export function SettingsScreen() {
                   justifyContent: 'center',
                   color: 'var(--color-accent)',
                 }}>
-                  <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+                  <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
                     <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/>
                     <polyline points="14 2 14 8 20 8"/>
                   </svg>
                 </div>
-                <h3 style={{ margin: 0, fontSize: '15px', fontWeight: 700, color: 'var(--color-text-primary)' }}>
+                <h3 style={{ margin: 0, fontSize: 'var(--text-lg)', fontWeight: 700, color: 'var(--color-text-primary)' }}>
                   Terms & Conditions
                 </h3>
               </div>
@@ -1103,8 +1090,8 @@ export function SettingsScreen() {
                 onClick={() => setShowTermsModal(false)}
                 className="btn-icon"
                 style={{
-                  width: 28,
-                  height: 28,
+                  width: 32,
+                  height: 32,
                   borderRadius: '50%',
                   background: 'var(--color-surface-2)',
                   display: 'flex',
@@ -1116,7 +1103,7 @@ export function SettingsScreen() {
                 }}
                 aria-label="Close Terms & Conditions"
               >
-                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round">
+                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round">
                   <line x1="18" y1="6" x2="6" y2="18" />
                   <line x1="6" y1="6" x2="18" y2="18" />
                 </svg>
@@ -1124,84 +1111,84 @@ export function SettingsScreen() {
             </div>
 
             {/* Scrollable Content */}
-            <div className="scroll-area" style={{ overflowY: 'auto', maxHeight: '65vh', paddingRight: 4, display: 'flex', flexDirection: 'column', gap: 12 }}>
-              <div style={{ background: 'var(--color-surface-2)', padding: '10px 12px', borderRadius: 'var(--radius-md)', border: '1px solid var(--color-border)' }}>
-                <h4 style={{ margin: 0, fontSize: '13px', fontWeight: 700, color: 'var(--color-accent)' }}>
+            <div className="scroll-area" style={{ overflowY: 'auto', maxHeight: '65vh', paddingRight: 4, display: 'flex', flexDirection: 'column', gap: 16 }}>
+              <div style={{ background: 'var(--color-surface-2)', padding: '12px 14px', borderRadius: 'var(--radius-md)', border: '1px solid var(--color-border)' }}>
+                <h4 style={{ margin: 0, fontSize: 'var(--text-md)', fontWeight: 700, color: 'var(--color-accent)' }}>
                   Welcome to Soundwave
                 </h4>
-                <p style={{ margin: '3px 0 0', fontSize: '10.5px', color: 'var(--color-text-secondary)', lineHeight: 1.45 }}>
+                <p style={{ margin: '4px 0 0', fontSize: 'var(--text-xs)', color: 'var(--color-text-secondary)', lineHeight: 1.5 }}>
                   By using Soundwave, you agree to these Terms & Conditions.
                 </p>
               </div>
 
               <div>
-                <h5 style={{ margin: '0 0 3px', fontSize: '12px', fontWeight: 700, color: 'var(--color-text-primary)' }}>
+                <h5 style={{ margin: '0 0 4px', fontSize: 'var(--text-sm)', fontWeight: 700, color: 'var(--color-text-primary)' }}>
                   1. Use of the App
                 </h5>
-                <p style={{ margin: 0, fontSize: '10.5px', color: 'var(--color-text-secondary)', lineHeight: 1.5 }}>
+                <p style={{ margin: 0, fontSize: 'var(--text-xs)', color: 'var(--color-text-secondary)', lineHeight: 1.6 }}>
                   Soundwave is provided for personal and lawful music listening. You must not use the app for unlawful activities or attempt to disrupt, exploit, or bypass its security.
                 </p>
               </div>
 
               <div>
-                <h5 style={{ margin: '0 0 3px', fontSize: '12px', fontWeight: 700, color: 'var(--color-text-primary)' }}>
+                <h5 style={{ margin: '0 0 4px', fontSize: 'var(--text-sm)', fontWeight: 700, color: 'var(--color-text-primary)' }}>
                   2. Music & Content
                 </h5>
-                <p style={{ margin: 0, fontSize: '10.5px', color: 'var(--color-text-secondary)', lineHeight: 1.5 }}>
+                <p style={{ margin: 0, fontSize: 'var(--text-xs)', color: 'var(--color-text-secondary)', lineHeight: 1.6 }}>
                   Music and related content may be provided through third-party services. Soundwave does not claim ownership of third-party music, artwork, artist names, or other copyrighted content.
                 </p>
               </div>
 
               <div>
-                <h5 style={{ margin: '0 0 3px', fontSize: '12px', fontWeight: 700, color: 'var(--color-text-primary)' }}>
+                <h5 style={{ margin: '0 0 4px', fontSize: 'var(--text-sm)', fontWeight: 700, color: 'var(--color-text-primary)' }}>
                   3. Third-Party Services
                 </h5>
-                <p style={{ margin: 0, fontSize: '10.5px', color: 'var(--color-text-secondary)', lineHeight: 1.5 }}>
+                <p style={{ margin: 0, fontSize: 'var(--text-xs)', color: 'var(--color-text-secondary)', lineHeight: 1.6 }}>
                   Soundwave may rely on third-party APIs and services. Their availability, content, and policies may change without notice.
                 </p>
               </div>
 
               <div>
-                <h5 style={{ margin: '0 0 3px', fontSize: '12px', fontWeight: 700, color: 'var(--color-text-primary)' }}>
+                <h5 style={{ margin: '0 0 4px', fontSize: 'var(--text-sm)', fontWeight: 700, color: 'var(--color-text-primary)' }}>
                   4. User Data
                 </h5>
-                <p style={{ margin: 0, fontSize: '10.5px', color: 'var(--color-text-secondary)', lineHeight: 1.5 }}>
+                <p style={{ margin: 0, fontSize: 'var(--text-xs)', color: 'var(--color-text-secondary)', lineHeight: 1.6 }}>
                   Soundwave is designed to keep your app preferences and local music-related data on your device. We do not sell or intentionally share your personal data.
                 </p>
               </div>
 
               <div>
-                <h5 style={{ margin: '0 0 3px', fontSize: '12px', fontWeight: 700, color: 'var(--color-text-primary)' }}>
+                <h5 style={{ margin: '0 0 4px', fontSize: 'var(--text-sm)', fontWeight: 700, color: 'var(--color-text-primary)' }}>
                   5. Availability
                 </h5>
-                <p style={{ margin: 0, fontSize: '10.5px', color: 'var(--color-text-secondary)', lineHeight: 1.5 }}>
+                <p style={{ margin: 0, fontSize: 'var(--text-xs)', color: 'var(--color-text-secondary)', lineHeight: 1.6 }}>
                   Features, music availability, streaming quality, and third-party services may change or become temporarily unavailable.
                 </p>
               </div>
 
               <div>
-                <h5 style={{ margin: '0 0 3px', fontSize: '12px', fontWeight: 700, color: 'var(--color-text-primary)' }}>
+                <h5 style={{ margin: '0 0 4px', fontSize: 'var(--text-sm)', fontWeight: 700, color: 'var(--color-text-primary)' }}>
                   6. Prohibited Use
                 </h5>
-                <p style={{ margin: 0, fontSize: '10.5px', color: 'var(--color-text-secondary)', lineHeight: 1.5 }}>
+                <p style={{ margin: 0, fontSize: 'var(--text-xs)', color: 'var(--color-text-secondary)', lineHeight: 1.6 }}>
                   You must not reverse engineer, abuse, modify, exploit, or attempt to gain unauthorized access to Soundwave or its services.
                 </p>
               </div>
 
               <div>
-                <h5 style={{ margin: '0 0 3px', fontSize: '12px', fontWeight: 700, color: 'var(--color-text-primary)' }}>
+                <h5 style={{ margin: '0 0 4px', fontSize: 'var(--text-sm)', fontWeight: 700, color: 'var(--color-text-primary)' }}>
                   7. Changes to These Terms
                 </h5>
-                <p style={{ margin: 0, fontSize: '10.5px', color: 'var(--color-text-secondary)', lineHeight: 1.5 }}>
+                <p style={{ margin: 0, fontSize: 'var(--text-xs)', color: 'var(--color-text-secondary)', lineHeight: 1.6 }}>
                   These Terms may be updated as Soundwave develops. Continued use of the app after an update means you accept the updated Terms.
                 </p>
               </div>
 
-              <div style={{ borderTop: '1px solid var(--color-border)', paddingTop: 10 }}>
-                <h5 style={{ margin: '0 0 3px', fontSize: '12px', fontWeight: 700, color: 'var(--color-text-primary)' }}>
+              <div style={{ borderTop: '1px solid var(--color-border)', paddingTop: 12 }}>
+                <h5 style={{ margin: '0 0 4px', fontSize: 'var(--text-sm)', fontWeight: 700, color: 'var(--color-text-primary)' }}>
                   8. Contact
                 </h5>
-                <p style={{ margin: 0, fontSize: '10.5px', color: 'var(--color-text-secondary)', lineHeight: 1.5 }}>
+                <p style={{ margin: 0, fontSize: 'var(--text-xs)', color: 'var(--color-text-secondary)', lineHeight: 1.6 }}>
                   Developer: <strong>Pandit Bittu</strong><br/>
                   Instagram: <strong>@panditbittu.x</strong>
                 </p>
@@ -1224,11 +1211,11 @@ function ToggleSwitch({ id, checked, onChange, label }: { id: string; checked: b
       aria-label={label}
       onClick={onChange}
       style={{
-        width: 44,
-        height: 24,
-        borderRadius: 12,
+        width: 50,
+        height: 28,
+        borderRadius: 14,
         background: checked ? 'var(--color-accent)' : 'var(--color-surface-2)',
-        border: '1.5px solid ' + (checked ? 'var(--color-accent)' : 'var(--color-border)'),
+        border: '2px solid ' + (checked ? 'var(--color-accent)' : 'var(--color-border)'),
         cursor: 'pointer',
         padding: 0,
         position: 'relative',
@@ -1237,13 +1224,13 @@ function ToggleSwitch({ id, checked, onChange, label }: { id: string; checked: b
       }}
     >
       <div style={{
-        width: 18,
-        height: 18,
+        width: 20,
+        height: 20,
         borderRadius: '50%',
         background: '#fff',
         position: 'absolute',
-        top: 1.5,
-        left: checked ? 21 : 2,
+        top: 2,
+        left: checked ? 24 : 2,
         transition: 'left 200ms var(--ease-spring)',
         boxShadow: 'var(--shadow-sm)',
       }} />
