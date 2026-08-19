@@ -1330,3 +1330,14 @@ function deduplicateAlbums(albums: Album[]): Album[] {
     return true;
   });
 }
+
+// ═══════════════════════════════════════════
+//  YouTube InnerTube Browse Repository Exports
+// ═══════════════════════════════════════════
+export { YouTube, YouTubeRepository, YouTubeResult } from './youtubeBrowseRepository';
+export {
+  fetchYouTubeHome,
+  fetchYouTubeExplore,
+  fetchYouTubeCharts,
+} from '../api/youtubeBrowseApi';
+export * from '../models/youtubeBrowse';

@@ -41,3 +41,5 @@ export function usePrevious<T>(value: T): T | undefined {
 export function useOnMount(fn: () => void) {
   useEffect(() => { fn(); }, []); // eslint-disable-line react-hooks/exhaustive-deps
 }
+
+export * from './useHomeViewModel';
