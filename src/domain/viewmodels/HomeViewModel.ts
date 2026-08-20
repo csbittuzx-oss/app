@@ -1,7 +1,14 @@
-// ═══════════════════════════════════════════════════════════════════
-//  HomeViewModel — YouTube Music InnerTube Browse & Trending Pipeline
-//  Implements Parallel Network Dispatching & Mood/Filter Pipeline
-// ═══════════════════════════════════════════════════════════════════
+﻿// =============================================================================
+//  HomeViewModel - YouTube Music InnerTube Browse & Trending Data Pipeline
+//
+//  1 Core Browse Endpoints: home (FEmusic_home), explore (FEmusic_explore),
+//    charts (FEmusic_charts)
+//  2 Parallel Network Dispatching: Promise.all concurrent fetches
+//  3 Dynamic Mood Chip Switching with previousHomePage memory cache
+//  4 Content Cleaning & Sanitization:
+//    filterExplicit / filterVideoSongs / filterYoutubeShorts / distinctBy
+//  5 Reactive StateFlow Exposure consumed by React via useHomeViewModel hook
+// =============================================================================
 
 import { YouTube } from '../../data/repository/youtubeBrowseRepository';
 import {
@@ -15,10 +22,59 @@ import {
   filterExplicit,
   filterVideoSongs,
   filterYoutubeShorts,
+  distinctBy,
   songItemToSong,
   albumItemToAlbum,
 } from '../../data/models/youtubeBrowse';
 import type { Song, Album } from '../../data/models';
+
+// =============================================================================
+//  5 REACTIVE STATE FLOW IMPLEMENTATION
+//  TypeScript-native equivalent of Kotlin StateFlow / MutableStateFlow.
+// =============================================================================
+
+export interface StateFlow<T> {
+  readonly value: T;
+  subscribe(listener: (value: T) => void): () => void;
+}
+
+export class MutableStateFlow<T> implements StateFlow<T> {
+  private _value: T;
+  private readonly _listeners = new Set<(value: T) => void>();
+
+  constructor(initialValue: T) {
+    this._value = initialValue;
+  }
+
+  get value(): T {
+    return this._value;
+  }
+
+  set value(newValue: T) {
+    if (this._value === newValue && typeof newValue !== 'object') return;
+    this._value = newValue;
+    for (const listener of this._listeners) {
+      try { listener(this._value); } catch (e) { console.error('[StateFlow]', e); }
+    }
+  }
+
+  emit(newValue: T): void {
+    this._value = newValue;
+    for (const listener of this._listeners) {
+      try { listener(this._value); } catch (e) { console.error('[StateFlow]', e); }
+    }
+  }
+
+  subscribe(listener: (value: T) => void): () => void {
+    this._listeners.add(listener);
+    listener(this._value); // hot - deliver current value immediately
+    return () => { this._listeners.delete(listener); };
+  }
+}
+
+// =============================================================================
+//  HOME VIEW STATE  (aggregated snapshot for legacy observer pattern)
+// =============================================================================
 
 export interface HomeViewState {
   homePage: HomePage | null;
@@ -33,307 +89,353 @@ export interface HomeViewState {
 
 export type HomeStateListener = (state: HomeViewState) => void;
 
+// =============================================================================
+//  HOME VIEW MODEL
+// =============================================================================
+
 export class HomeViewModel {
-  private state: HomeViewState = {
-    homePage: null,
-    explorePage: null,
-    chartsPage: null,
-    selectedChip: null,
-    isLoading: false,
-    isRefreshing: false,
-    error: null,
-    filterOptions: {
-      hideExplicit: false,
-      hideVideoSongs: false,
-      hideYoutubeShorts: false,
-    },
-  };
 
-  private listeners = new Set<HomeStateListener>();
+  // 5 - Public StateFlow accessors -------------------------------------------
+  private readonly _homePage    = new MutableStateFlow<HomePage | null>(null);
+  private readonly _explorePage = new MutableStateFlow<ExplorePage | null>(null);
+  private readonly _chartsPage  = new MutableStateFlow<ChartsPage | null>(null);
+  private readonly _selectedChip  = new MutableStateFlow<HomePageChip | null>(null);
+  private readonly _isLoading     = new MutableStateFlow<boolean>(false);
+  private readonly _isRefreshing  = new MutableStateFlow<boolean>(false);
+  private readonly _error         = new MutableStateFlow<string | null>(null);
+  private readonly _filterOptions = new MutableStateFlow<BrowseFilterOptions>({
+    hideExplicit: false,
+    hideVideoSongs: false,
+    hideYoutubeShorts: false,
+  });
 
-  constructor(initialFilters?: BrowseFilterOptions) {
+  readonly homePage:      StateFlow<HomePage | null>      = this._homePage;
+  readonly explorePage:   StateFlow<ExplorePage | null>   = this._explorePage;
+  readonly chartsPage:    StateFlow<ChartsPage | null>    = this._chartsPage;
+  readonly selectedChip:  StateFlow<HomePageChip | null>  = this._selectedChip;
+  readonly isLoading:     StateFlow<boolean>              = this._isLoading;
+  readonly isRefreshing:  StateFlow<boolean>              = this._isRefreshing;
+  readonly error:         StateFlow<string | null>        = this._error;
+  readonly filterOptions: StateFlow<BrowseFilterOptions>  = this._filterOptions;
+
+  // 3 - previousHomePage memory cache for instant chip deselection ------------
+  private previousHomePage: HomePage | null = null;
+
+  // Legacy aggregated listeners -----------------------------------------------
+  private readonly listeners = new Set<HomeStateListener>();
+
+  constructor(initialFilters?: Partial<BrowseFilterOptions>) {
     if (initialFilters) {
-      this.state.filterOptions = { ...this.state.filterOptions, ...initialFilters };
+      this._filterOptions.value = { ...this._filterOptions.value, ...initialFilters };
     }
+    const notifyAll = () => this._notifyLegacyListeners();
+    this._homePage.subscribe(notifyAll);
+    this._explorePage.subscribe(notifyAll);
+    this._chartsPage.subscribe(notifyAll);
+    this._selectedChip.subscribe(notifyAll);
+    this._isLoading.subscribe(notifyAll);
+    this._isRefreshing.subscribe(notifyAll);
+    this._error.subscribe(notifyAll);
+    this._filterOptions.subscribe(notifyAll);
   }
 
-  // ─── State Observers ───
+  // ---------------------------------------------------------------------------
+  //  STATE OBSERVATION
+  // ---------------------------------------------------------------------------
 
   getState(): HomeViewState {
-    return { ...this.state };
+    return {
+      homePage:      this._homePage.value,
+      explorePage:   this._explorePage.value,
+      chartsPage:    this._chartsPage.value,
+      selectedChip:  this._selectedChip.value,
+      isLoading:     this._isLoading.value,
+      isRefreshing:  this._isRefreshing.value,
+      error:         this._error.value,
+      filterOptions: this._filterOptions.value,
+    };
   }
 
   subscribe(listener: HomeStateListener): () => void {
     this.listeners.add(listener);
     listener(this.getState());
-    return () => {
-      this.listeners.delete(listener);
-    };
+    return () => { this.listeners.delete(listener); };
   }
 
-  private notify() {
-    const currentState = this.getState();
+  private _notifyLegacyListeners(): void {
+    const state = this.getState();
     for (const listener of this.listeners) {
-      try {
-        listener(currentState);
-      } catch (e) {
-        console.error('[HomeViewModel] Listener error:', e);
-      }
+      try { listener(state); } catch (e) { console.error('[HomeViewModel] Listener error:', e); }
     }
   }
 
-  private updateState(partial: Partial<HomeViewState>) {
-    this.state = { ...this.state, ...partial };
-    this.notify();
-  }
+  // ---------------------------------------------------------------------------
+  //  2 PARALLEL NETWORK DISPATCHING
+  //  Concurrent fetches via Promise.all - equivalent to Kotlin coroutineScope
+  //  with launch(Dispatchers.IO) for each feed.
+  // ---------------------------------------------------------------------------
 
-  // ═══════════════════════════════════════════════════════════════════
-  //  2️⃣ PARALLEL NETWORK DISPATCHING (HomeViewModel / Repository)
-  //  Loads all feeds concurrently in parallel on launch / refresh
-  // ═══════════════════════════════════════════════════════════════════
-
-  /**
-   * Dispatches parallel concurrent network requests for:
-   * 1. YouTube.home()
-   * 2. YouTube.explore()
-   * 3. YouTube.charts()
-   */
   async loadAllFeeds(isRefresh = false): Promise<void> {
     if (isRefresh) {
-      this.updateState({ isRefreshing: true, error: null });
+      this._isRefreshing.emit(true);
     } else {
-      this.updateState({ isLoading: true, error: null });
+      this._isLoading.emit(true);
     }
+    this._error.emit(null);
 
-    const { hideExplicit, hideVideoSongs, hideYoutubeShorts } = this.state.filterOptions;
-    const moodParams = this.state.selectedChip?.params;
+    const { hideExplicit: _he, hideVideoSongs: _hv, hideYoutubeShorts: _hs } = this._filterOptions.value;
+    const hideExplicit = !!_he; const hideVideoSongs = !!_hv; const hideYoutubeShorts = !!_hs;
+    const moodParams =
+      this._selectedChip.value?.endpoint?.params ||
+      this._selectedChip.value?.params ||
+      undefined;
 
     try {
-      // Parallel concurrent execution: coroutineScope / Promise.all
       await Promise.all([
-        // 1. Home / Mood feed
+
+        // 1 - Base Home Feed / Mood-Vibe Feed (FEmusic_home)
         YouTube.home(moodParams).then((result) => {
           result.onSuccess((page) => {
-            const filteredSections = page.sections
-              .map((section) => {
-                let items = section.items;
-                if (hideExplicit) items = filterExplicit(items, true);
-                if (hideVideoSongs) items = filterVideoSongs(items, true);
-                if (hideYoutubeShorts) items = filterYoutubeShorts(items, true);
-
-                if (items.length === 0) return null;
-                return {
-                  ...section,
-                  items,
-                };
-              })
-              .filter(Boolean) as HomePageSection[];
-
-            this.updateState({
-              homePage: {
-                ...page,
-                sections: filteredSections,
-              },
-            });
+            const processed = this._processHomePage(page, hideExplicit, hideVideoSongs, hideYoutubeShorts);
+            if (!this._selectedChip.value) {
+              this.previousHomePage = processed;
+            }
+            this._homePage.value = processed;
+          }).onFailure((err) => {
+            console.warn('[HomeViewModel] Home feed error:', err.message);
           });
         }),
 
-        // 2. Explore / New Releases feed
+        // 2 - New Releases & Explore (FEmusic_explore)
         YouTube.explore().then((result) => {
           result.onSuccess((page) => {
-            this.updateState({
-              explorePage: {
-                ...page,
-                newReleaseAlbums: hideExplicit
-                  ? filterExplicit(page.newReleaseAlbums, true)
-                  : page.newReleaseAlbums,
-                trendingSongs: hideExplicit
-                  ? filterExplicit(page.trendingSongs, true)
-                  : page.trendingSongs,
-              },
-            });
+            this._explorePage.value = {
+              ...page,
+              newReleaseAlbums: distinctBy(
+                hideExplicit ? filterExplicit(page.newReleaseAlbums, true) : page.newReleaseAlbums,
+                (it) => it.id
+              ),
+              trendingSongs: distinctBy(
+                hideExplicit ? filterExplicit(page.trendingSongs, true) : page.trendingSongs,
+                (it) => it.id
+              ),
+            };
+          }).onFailure((err) => {
+            console.warn('[HomeViewModel] Explore feed error:', err.message);
           });
         }),
 
-        // 3. Charts / Trending feed
+        // 3 - Trending & Charts (FEmusic_charts)
         YouTube.charts('IN').then((result) => {
           result.onSuccess((page) => {
-            let topSongs = page.topSongs;
+            let topSongs  = page.topSongs;
             let topVideos = page.topVideos;
             let dailyHits = page.dailyHits;
 
             if (hideExplicit) {
-              topSongs = filterExplicit(topSongs, true);
+              topSongs  = filterExplicit(topSongs,  true);
               topVideos = filterExplicit(topVideos, true);
               dailyHits = filterExplicit(dailyHits, true);
             }
             if (hideVideoSongs) {
-              topSongs = filterVideoSongs(topSongs, true) as SongItem[];
+              topSongs  = filterVideoSongs(topSongs,  true) as SongItem[];
               dailyHits = filterVideoSongs(dailyHits, true) as SongItem[];
             }
             if (hideYoutubeShorts) {
-              topSongs = filterYoutubeShorts(topSongs, true) as SongItem[];
+              topSongs  = filterYoutubeShorts(topSongs,  true) as SongItem[];
               dailyHits = filterYoutubeShorts(dailyHits, true) as SongItem[];
             }
 
-            this.updateState({
-              chartsPage: {
-                ...page,
-                topSongs,
-                topVideos,
-                dailyHits,
-              },
-            });
+            this._chartsPage.value = {
+              ...page,
+              topSongs:  distinctBy(topSongs,  (it) => it.id),
+              topVideos: distinctBy(topVideos, (it) => it.id),
+              dailyHits: distinctBy(dailyHits, (it) => it.id),
+            };
+          }).onFailure((err) => {
+            console.warn('[HomeViewModel] Charts feed error:', err.message);
           });
         }),
+
       ]);
-    } catch (err: any) {
-      console.error('[HomeViewModel] Parallel dispatch failed:', err);
-      this.updateState({ error: err?.message || 'Failed to load feeds' });
+    } catch (err: unknown) {
+      const msg = err instanceof Error ? err.message : String(err);
+      console.error('[HomeViewModel] Parallel dispatch error:', msg);
+      this._error.value = msg || 'Failed to load feeds';
     } finally {
-      this.updateState({ isLoading: false, isRefreshing: false });
+      this._isLoading.emit(false);
+      this._isRefreshing.emit(false);
     }
   }
 
-  /**
-   * Refreshes all feeds concurrently.
-   */
   async refresh(): Promise<void> {
     return this.loadAllFeeds(true);
   }
 
-  // ═══════════════════════════════════════════════════════════════════
-  //  Mood / Vibe Filter Dispatcher
-  // ═══════════════════════════════════════════════════════════════════
+  // ---------------------------------------------------------------------------
+  //  3 DYNAMIC MOOD CHIP SWITCHING LOGIC
+  // ---------------------------------------------------------------------------
 
   /**
-   * Selects a Mood / Vibe Chip (Romance, Energize, Relax, Focus, Party, etc.)
-   * and loads the corresponding dynamic mood-customized song sections.
+   * Toggles a mood/vibe chip (Romance, Energize, Relax, Focus, Party, etc.)
+   *
+   * Selecting a NEW chip:
+   *   1. Saves current homePage to previousHomePage memory cache.
+   *   2. Fetches YouTube.home(chip.endpoint.params) for the mood-customised feed.
+   *   3. Emits filtered sections to homePage StateFlow.
+   *
+   * Tapping the ACTIVE chip again OR passing null (deselect):
+   *   1. Clears selectedChip.
+   *   2. Restores previousHomePage instantly from memory - zero network call.
+   *   3. Falls back to loadAllFeeds() only if cache is empty.
    */
-  async selectMoodChip(chip: HomePageChip): Promise<void> {
-    const isSame = this.state.selectedChip?.params === chip.params;
-    const newSelected = isSame ? null : chip;
+  async toggleChip(chip: HomePageChip | null): Promise<void> {
+    const activeChip = this._selectedChip.value;
 
-    this.updateState({
-      selectedChip: newSelected,
-      isLoading: true,
-      error: null,
-    });
+    const isDeselecting =
+      !chip ||
+      (activeChip !== null &&
+        (activeChip.params === chip.params ||
+          (chip.endpoint?.params && activeChip.endpoint?.params === chip.endpoint.params)));
 
-    const { hideExplicit, hideVideoSongs, hideYoutubeShorts } = this.state.filterOptions;
-    const targetParams = newSelected?.params;
+    if (isDeselecting) {
+      this._selectedChip.value = null;
+      if (this.previousHomePage) {
+        this._homePage.value = this.previousHomePage;
+        return;
+      }
+      return this.loadAllFeeds(false);
+    }
+
+    // Switching to a new chip - cache base page first
+    if (activeChip === null && this._homePage.value) {
+      this.previousHomePage = this._homePage.value;
+    }
+
+    this._selectedChip.value = chip;
+    this._isLoading.emit(true);
+    this._error.emit(null);
+
+    const { hideExplicit: _he, hideVideoSongs: _hv, hideYoutubeShorts: _hs } = this._filterOptions.value;
+    const hideExplicit = !!_he; const hideVideoSongs = !!_hv; const hideYoutubeShorts = !!_hs;
+    const targetParams = chip.endpoint?.params || chip.params;
 
     try {
       const result = await YouTube.home(targetParams);
-      result.onSuccess((page) => {
-        const filteredSections = page.sections
-          .map((section) => {
-            let items = section.items;
-            if (hideExplicit) items = filterExplicit(items, true);
-            if (hideVideoSongs) items = filterVideoSongs(items, true);
-            if (hideYoutubeShorts) items = filterYoutubeShorts(items, true);
-
-            if (items.length === 0) return null;
-            return {
-              ...section,
-              items,
-            };
-          })
-          .filter(Boolean) as HomePageSection[];
-
-        this.updateState({
-          homePage: {
-            ...page,
-            sections: filteredSections,
-          },
+      result
+        .onSuccess((page) => {
+          this._homePage.value = this._processHomePage(
+            page, hideExplicit, hideVideoSongs, hideYoutubeShorts
+          );
+        })
+        .onFailure((err) => {
+          console.warn('[HomeViewModel] Mood feed error:', err.message);
+          this._error.value = err.message || 'Failed to load mood feed';
         });
-      });
-    } catch (err: any) {
-      this.updateState({ error: err?.message || 'Failed to load mood feed' });
+    } catch (err: unknown) {
+      const msg = err instanceof Error ? err.message : String(err);
+      this._error.value = msg;
     } finally {
-      this.updateState({ isLoading: false });
+      this._isLoading.emit(false);
     }
   }
 
-  /**
-   * Clears active mood filter and restores default home feed.
-   */
-  async clearMoodFilter(): Promise<void> {
-    if (!this.state.selectedChip) return;
-    this.updateState({ selectedChip: null });
-    return this.loadAllFeeds();
+  async selectMoodChip(chip: HomePageChip): Promise<void> {
+    return this.toggleChip(chip);
   }
 
-  // ═══════════════════════════════════════════════════════════════════
-  //  Filter Options
-  // ═══════════════════════════════════════════════════════════════════
+  async clearMoodFilter(): Promise<void> {
+    return this.toggleChip(null);
+  }
+
+  // ---------------------------------------------------------------------------
+  //  4 CONTENT CLEANING & SANITIZATION OPTIONS
+  // ---------------------------------------------------------------------------
 
   /**
-   * Updates filter options and triggers immediate re-filtering / reloading.
+   * Updates content filter options and immediately reloads all feeds with
+   * the new settings. Invalidates the previousHomePage cache so restored
+   * pages also respect the new filter preferences.
    */
   setFilterOptions(options: Partial<BrowseFilterOptions>): void {
-    this.updateState({
-      filterOptions: {
-        ...this.state.filterOptions,
-        ...options,
-      },
-    });
-    this.loadAllFeeds();
+    this._filterOptions.value = { ...this._filterOptions.value, ...options };
+    this.previousHomePage = null;
+    this.loadAllFeeds(false);
   }
 
-  // ═══════════════════════════════════════════════════════════════════
-  //  Exposed Data Convenience Getters (Domain Models)
-  // ═══════════════════════════════════════════════════════════════════
+  // ---------------------------------------------------------------------------
+  //  4 INTERNAL CONTENT SANITIZATION PIPELINE
+  // ---------------------------------------------------------------------------
 
   /**
-   * Returns Top Trending & Daily Chart hits as standard playable Song[] models.
+   * Applies the full sanitization pipeline to a raw HomePage:
+   *   - filterExplicit(hideExplicit)           - removes explicit tracks
+   *   - filterVideoSongs(hideVideoSongs)        - removes non-music video tracks
+   *   - filterYoutubeShorts(hideYoutubeShorts)  - removes short clips (< 60s)
+   *   - distinctBy { it.id }                   - cross-section deduplication
+   *
+   * Sections that become empty after filtering are dropped entirely.
    */
+  private _processHomePage(
+    page: HomePage,
+    hideExplicit: boolean,
+    hideVideoSongs: boolean,
+    hideYoutubeShorts: boolean
+  ): HomePage {
+    const seenIds = new Set<string>();
+    const filteredSections: HomePageSection[] = [];
+
+    for (const section of page.sections) {
+      let items = section.items;
+
+      if (hideExplicit)      items = filterExplicit(items, true);
+      if (hideVideoSongs)    items = filterVideoSongs(items, true);
+      if (hideYoutubeShorts) items = filterYoutubeShorts(items, true);
+
+      // distinctBy { it.id } - cross-page deduplication
+      items = items.filter((item) => {
+        if (!item.id || seenIds.has(item.id)) return false;
+        seenIds.add(item.id);
+        return true;
+      });
+
+      if (items.length === 0) continue;
+      filteredSections.push({ ...section, items });
+    }
+
+    return { ...page, sections: filteredSections };
+  }
+
+  // ---------------------------------------------------------------------------
+  //  DOMAIN MODEL CONVENIENCE GETTERS
+  // ---------------------------------------------------------------------------
+
   getTrendingSongs(): Song[] {
-    if (this.state.chartsPage?.topSongs && this.state.chartsPage.topSongs.length > 0) {
-      return this.state.chartsPage.topSongs.map(songItemToSong);
-    }
-    if (this.state.chartsPage?.dailyHits && this.state.chartsPage.dailyHits.length > 0) {
-      return this.state.chartsPage.dailyHits.map(songItemToSong);
-    }
+    const charts = this._chartsPage.value;
+    if (charts?.topSongs?.length)  return charts.topSongs.map(songItemToSong);
+    if (charts?.dailyHits?.length) return charts.dailyHits.map(songItemToSong);
     return [];
   }
 
-  /**
-   * Returns New Releases as standard Album[] models.
-   */
   getNewReleaseAlbums(): Album[] {
-    if (this.state.explorePage?.newReleaseAlbums) {
-      return this.state.explorePage.newReleaseAlbums.map(albumItemToAlbum);
-    }
-    return [];
+    return this._explorePage.value?.newReleaseAlbums?.map(albumItemToAlbum) ?? [];
   }
 
-  /**
-   * Returns Top Music Videos as standard playable Song[] models.
-   */
   getTopMusicVideos(): Song[] {
-    if (this.state.chartsPage?.topVideos) {
-      return this.state.chartsPage.topVideos.map(songItemToSong);
-    }
-    return [];
+    return this._chartsPage.value?.topVideos?.map(songItemToSong) ?? [];
   }
 
-  /**
-   * Returns Available Mood / Vibe Chips.
-   */
   getMoodChips(): HomePageChip[] {
-    return this.state.homePage?.chips || [];
+    return this._homePage.value?.chips ?? [];
   }
 
-  /**
-   * Returns Home Sections.
-   */
   getHomeSections(): HomePageSection[] {
-    return this.state.homePage?.sections || [];
+    return this._homePage.value?.sections ?? [];
   }
 }
 
-/**
- * Singleton ViewModel instance.
- */
+// =============================================================================
+//  SINGLETON
+// =============================================================================
 export const homeViewModel = new HomeViewModel();
+

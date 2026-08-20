@@ -184,6 +184,20 @@ export function filterYoutubeShorts<T extends HomeItem>(items: T[], hideYoutubeS
 }
 
 /**
+ * Deduplicates an array using a key function, preserving first occurrence.
+ * Equivalent to Kotlin's distinctBy { it.id }.
+ */
+export function distinctBy<T>(items: T[], keyFn: (item: T) => string): T[] {
+  const seen = new Set<string>();
+  return items.filter((item) => {
+    const key = keyFn(item);
+    if (seen.has(key)) return false;
+    seen.add(key);
+    return true;
+  });
+}
+
+/**
  * Applies all user-selected filters to a list of HomeItems
  */
 export function applyHomeItemFilters(
