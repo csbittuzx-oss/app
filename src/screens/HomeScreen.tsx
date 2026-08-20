@@ -247,16 +247,6 @@ export function HomeScreen({ isVisible = true }: { isVisible?: boolean }) {
   const isContinuePlaying = isContinueActive && playerState.isPlaying;
   const playerProgress = isContinueActive ? playerState.progress : 0;
 
-  const quickAccessItems = useMemo(() => {
-    const list = deduplicateSongs([
-      ...(appState.recentlyPlayed || []),
-      ...(appState.favorites || []),
-    ]);
-    const filtered = continueListeningSong
-      ? list.filter((s) => s.id !== continueListeningSong.id)
-      : list;
-    return filtered.slice(0, 6);
-  }, [appState.recentlyPlayed, appState.favorites, continueListeningSong]);
 
   // ── 3. Data States for the 10 Sections ─────────────────────────────────────
   const [jumpBackInTracks, setJumpBackInTracks] = useState<Song[]>([]);
@@ -538,7 +528,7 @@ export function HomeScreen({ isVisible = true }: { isVisible?: boolean }) {
           🌟 NOW-PLAYING / CONTINUE LISTENING (Top Card)
       ═════════════════════════════════════════════════════════════════════ */}
       {continueListeningSong && (
-        <section style={{ padding: '0 20px 16px' }}>
+        <section style={{ padding: '0 20px 4px' }}>
           {/* Main Now-Playing Hero Card */}
           <div
             onClick={() => {
@@ -680,102 +670,6 @@ export function HomeScreen({ isVisible = true }: { isVisible?: boolean }) {
               )}
             </div>
           </div>
-
-          {/* Quick-Access 2-Column Grid (6 items) */}
-          {quickAccessItems.length > 0 && (
-            <div
-              style={{
-                display: 'grid',
-                gridTemplateColumns: 'repeat(2, 1fr)',
-                gap: 8,
-                marginTop: 10,
-              }}
-            >
-              {quickAccessItems.map((song, i) => {
-                const isCurrent = playerState.currentSong?.id === song.id;
-                const isPlaying = isCurrent && playerState.isPlaying;
-
-                return (
-                  <div
-                    key={song.id}
-                    onClick={() => playSong(song, quickAccessItems, i)}
-                    onContextMenu={(e) => {
-                      e.preventDefault();
-                      triggerLongPress(song);
-                    }}
-                    style={{
-                      display: 'flex',
-                      alignItems: 'center',
-                      gap: 8,
-                      padding: '6px 8px',
-                      background: isCurrent
-                        ? 'var(--color-accent-subtle, rgba(249, 115, 22, 0.12))'
-                        : 'var(--color-surface)',
-                      border: isCurrent
-                        ? '1px solid var(--color-accent)'
-                        : '1px solid var(--color-border)',
-                      borderRadius: 'var(--radius-md, 10px)',
-                      cursor: 'pointer',
-                      overflow: 'hidden',
-                      minHeight: 48,
-                      boxShadow: 'var(--shadow-sm)',
-                      transition: 'transform 120ms ease, background 150ms ease',
-                    }}
-                    onMouseDown={(e) => (e.currentTarget.style.transform = 'scale(0.97)')}
-                    onMouseUp={(e) => (e.currentTarget.style.transform = 'scale(1)')}
-                  >
-                    <img
-                      src={resizeImageUrl(song.artwork, 96, 96)}
-                      alt={song.title}
-                      width={36}
-                      height={36}
-                      loading="lazy"
-                      style={{
-                        borderRadius: 'var(--radius-sm, 6px)',
-                        objectFit: 'cover',
-                        flexShrink: 0,
-                      }}
-                      onError={(e) => {
-                        (e.target as HTMLImageElement).src = CONFIG.ARTWORK_PLACEHOLDER;
-                      }}
-                    />
-                    <div style={{ flex: 1, minWidth: 0 }}>
-                      <p
-                        style={{
-                          margin: 0,
-                          fontSize: '12px',
-                          fontWeight: 600,
-                          color: isCurrent ? 'var(--color-accent)' : 'var(--color-text-primary)',
-                          overflow: 'hidden',
-                          textOverflow: 'ellipsis',
-                          whiteSpace: 'nowrap',
-                        }}
-                      >
-                        {song.title}
-                      </p>
-                      <p
-                        style={{
-                          margin: '1px 0 0',
-                          fontSize: '10px',
-                          color: 'var(--color-text-secondary)',
-                          overflow: 'hidden',
-                          textOverflow: 'ellipsis',
-                          whiteSpace: 'nowrap',
-                        }}
-                      >
-                        {song.artist}
-                      </p>
-                    </div>
-                    {isPlaying && (
-                      <div style={{ marginRight: 2 }}>
-                        <EqBars />
-                      </div>
-                    )}
-                  </div>
-                );
-              })}
-            </div>
-          )}
         </section>
       )}
 
