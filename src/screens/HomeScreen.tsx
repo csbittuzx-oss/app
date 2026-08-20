@@ -246,7 +246,17 @@ export function HomeScreen({ isVisible = true }: { isVisible?: boolean }) {
   const isContinueActive = playerState.currentSong?.id === continueListeningSong?.id;
   const isContinuePlaying = isContinueActive && playerState.isPlaying;
   const playerProgress = isContinueActive ? playerState.progress : 0;
-
+  const recentlyPlayedList = useMemo(() => {
+    const recents = appState.recentlyPlayed || [];
+    const searchRecents = appState.searchRecentlyPlayed || [];
+    const favs = appState.favorites || [];
+    const combined = deduplicateSongs([
+      ...recents,
+      ...searchRecents,
+      ...favs,
+    ]);
+    return combined.slice(0, 24);
+  }, [appState.recentlyPlayed, appState.searchRecentlyPlayed, appState.favorites]);
 
   // ── 3. Data States for the 10 Sections ─────────────────────────────────────
   const [jumpBackInTracks, setJumpBackInTracks] = useState<Song[]>([]);
@@ -927,12 +937,12 @@ export function HomeScreen({ isVisible = true }: { isVisible?: boolean }) {
       {/* ═════════════════════════════════════════════════════════════════════
           3️⃣ SECTION: RECENTLY PLAYED
       ═════════════════════════════════════════════════════════════════════ */}
-      {appState.recentlyPlayed && appState.recentlyPlayed.length > 0 && (
+      {recentlyPlayedList.length > 0 && (
         <section>
           <SectionHeader
             title="Recently played"
             subtitle="Your recent track listening history"
-            onPlayAll={() => playSong(appState.recentlyPlayed[0], appState.recentlyPlayed, 0)}
+            onPlayAll={() => playSong(recentlyPlayedList[0], recentlyPlayedList, 0)}
           />
 
           <div
@@ -940,7 +950,7 @@ export function HomeScreen({ isVisible = true }: { isVisible?: boolean }) {
               display: 'grid',
               gridTemplateRows: 'repeat(2, auto)',
               gridAutoFlow: 'column',
-              gridAutoColumns: '260px',
+              gridAutoColumns: '215px',
               gap: 10,
               overflowX: 'auto',
               padding: '4px 20px 14px',
@@ -950,14 +960,14 @@ export function HomeScreen({ isVisible = true }: { isVisible?: boolean }) {
               boxSizing: 'border-box',
             }}
           >
-            {deduplicateSongs(appState.recentlyPlayed).slice(0, 12).map((song, i) => {
+            {recentlyPlayedList.map((song, i) => {
               const isCurrent = playerState.currentSong?.id === song.id;
               const isPlaying = isCurrent && playerState.isPlaying;
 
               return (
                 <div
                   key={song.id}
-                  onClick={() => playSong(song, appState.recentlyPlayed, i)}
+                  onClick={() => playSong(song, recentlyPlayedList, i)}
                   onContextMenu={(e) => {
                     e.preventDefault();
                     triggerLongPress(song);
