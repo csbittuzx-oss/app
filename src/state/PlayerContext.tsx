@@ -43,6 +43,7 @@ function getInitialPlayerState(): PlayerState {
           duration: session.duration || session.song.duration || 0,
           progress: session.progress || (session.duration > 0 ? (session.playbackPosition / session.duration) : 0),
           isPlaying: false,
+          error: null,
         };
       }
     }
@@ -184,13 +185,17 @@ export function PlayerProvider({ children }: { children: React.ReactNode }) {
       : targetQueue.findIndex(s => s.id === song.id);
     const validIndex = initialIndex !== -1 ? initialIndex : 0;
 
+    dispatch({ type: 'SET_ERROR', payload: null });
     audioPlayer.play(song, targetQueue, validIndex);
     dispatch({ type: 'SET_SONG', payload: song });
     dispatch({ type: 'SET_QUEUE', payload: { queue: targetQueue, queueIndex: validIndex } });
     dispatch({ type: 'SET_PROGRESS', payload: { currentTime: 0, duration: song.duration || 0, progress: 0 } });
   }, []);
 
-  const togglePlay = useCallback(() => audioPlayer.togglePlay(), []);
+  const togglePlay = useCallback(() => {
+    dispatch({ type: 'SET_ERROR', payload: null });
+    audioPlayer.togglePlay();
+  }, []);
   const next = useCallback(() => audioPlayer.next(), []);
   const previous = useCallback((force = false) => audioPlayer.previous(force), []);
   const seek = useCallback((p: number) => audioPlayer.seek(p), []);

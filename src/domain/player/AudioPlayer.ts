@@ -99,6 +99,7 @@ class AudioPlayer {
   private savedResumePosition = 0;
   private pendingSeekPosition = 0;
   private lastSavedPositionTime = 0;
+  private isAutoRecovering = false;
 
   constructor() {
     this.audio = new Audio();
@@ -158,9 +159,11 @@ class AudioPlayer {
       this.savedResumePosition = session.playbackPosition || 0;
       this.pendingSeekPosition = 0;
 
-      if (session.song.previewUrl) {
-        this.audio.src = session.song.previewUrl;
-      }
+      // DO NOT set this.audio.src here!
+      // Setting this.audio.src to an expired or cached URL causes the browser to immediately
+      // validate/fetch the URL, throwing a 403 Forbidden / network error before the user interacts,
+      // which produces "Playback failed. Tap to retry."
+      this.audio.src = '';
     } catch {
       // ignore
     }
@@ -364,6 +367,26 @@ class AudioPlayer {
       const err = this.audio.error;
       // Filter out abort errors, empty src resets during song switching, or unmounted states
       if (!this.audio.src || !this.currentSong || err?.code === MediaError.MEDIA_ERR_ABORTED) {
+        return;
+      }
+
+      // If online and we haven't already attempted an auto-recovery for this stream error,
+      // proactively re-resolve a fresh audio stream and resume playback before showing any error
+      if (navigator.onLine && this.currentSong && !this.isAutoRecovering) {
+        this.isAutoRecovering = true;
+        const songToRecover = this.currentSong;
+        const resumePos = this.audio.currentTime || this.savedResumePosition || 0;
+        if (!songToRecover.previewUrl?.startsWith('blob:') && !songToRecover.isDownloaded) {
+          songToRecover.previewUrl = null; // force fresh stream resolution
+        }
+        this.play(songToRecover, this._queue, this._queueIndex, resumePos)
+          .catch(() => {
+            this.emit({ type: 'loading', isLoading: false });
+            this.emit({ type: 'error', error: 'Playback failed. Tap to retry.' });
+          })
+          .finally(() => {
+            this.isAutoRecovering = false;
+          });
         return;
       }
 
@@ -764,7 +787,12 @@ class AudioPlayer {
       }
     }
 
-    // ── Full-track URL resolution (Spotify / iTunes / Previews → JioSaavn) ──
+    // ── Full-track URL resolution (Spotify / iTunes / Previews / Restored Session → JioSaavn) ──
+    const isRestoredTrack = this.savedResumeTrackId === targetSong.id;
+    if (isRestoredTrack && targetSong.previewUrl && !targetSong.previewUrl.startsWith('blob:') && !targetSong.isDownloaded) {
+      targetSong.previewUrl = null;
+    }
+
     const isShortPreview = (!targetSong.previewUrl && navigator.onLine)
       || targetSong.provider === 'itunes'
       || targetSong.id.startsWith('spotify_')
@@ -1192,23 +1220,29 @@ class AudioPlayer {
 
     if (this.audio.paused) {
       const current = this.currentSong;
+      if (!current) return;
+
       // If user explicitly resumes the restored session from previous app launch
-      if (current && this.savedResumeTrackId === current.id && this.savedResumePosition > 0) {
-        const resumePos = this.savedResumePosition;
+      if (this.savedResumeTrackId === current.id) {
+        const resumePos = this.savedResumePosition || 0;
         this.savedResumePosition = 0;
         this.savedResumeTrackId = null;
-        if (!this.audio.src) {
-          this.play(current, this._queue, this._queueIndex, resumePos);
-          return;
-        } else {
-          this.audio.currentTime = resumePos;
-          this.audio.play().catch(() => {});
-        }
-      } else if (!this.audio.src && this.currentSong) {
-        this.play(this.currentSong, this._queue, this._queueIndex);
-      } else {
-        this.audio.play().catch(() => {});
+        this.play(current, this._queue, this._queueIndex, resumePos);
+        return;
       }
+
+      // If no valid audio src is loaded
+      if (!this.audio.src || this.audio.src === '' || this.audio.src === window.location.href) {
+        const curTime = this.audio.currentTime || this.savedResumePosition || 0;
+        this.play(current, this._queue, this._queueIndex, curTime);
+        return;
+      }
+
+      // Attempt to play existing src, and if play rejects (e.g. expired link), re-resolve stream cleanly
+      this.audio.play().catch(() => {
+        const curTime = this.audio.currentTime || this.savedResumePosition || 0;
+        this.play(current, this._queue, this._queueIndex, curTime);
+      });
     }
   }
 
