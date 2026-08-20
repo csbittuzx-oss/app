@@ -7,13 +7,13 @@
 
 export const CONFIG = {
   // Backend API URL (Render or Local)
-  BACKEND_URL: import.meta.env.VITE_BACKEND_URL || '',
+  BACKEND_URL: (typeof import.meta !== 'undefined' && import.meta.env?.VITE_BACKEND_URL) || '',
 
   // Last.fm — free account, no credit card
-  LASTFM_API_KEY: import.meta.env.VITE_LASTFM_API_KEY || 'b25b959554ed76058ac220b7b2e0a026',
+  LASTFM_API_KEY: (typeof import.meta !== 'undefined' && import.meta.env?.VITE_LASTFM_API_KEY) || 'b25b959554ed76058ac220b7b2e0a026',
 
   // Jamendo — free account, CC-licensed full tracks
-  JAMENDO_CLIENT_ID: import.meta.env.VITE_JAMENDO_CLIENT_ID || '',
+  JAMENDO_CLIENT_ID: (typeof import.meta !== 'undefined' && import.meta.env?.VITE_JAMENDO_CLIENT_ID) || '',
 
   // iTunes — no key required (30s previews)
   ITUNES_SEARCH_URL: 'https://itunes.apple.com/search',

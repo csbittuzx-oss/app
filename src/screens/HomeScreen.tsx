@@ -236,6 +236,7 @@ export function HomeScreen({ isVisible = true }: { isVisible?: boolean }) {
   }, [onboardingLanguages, appState.recentlyPlayed.length, appState.favorites.length]);
 
   const primaryLanguage = dynamicLanguages[0] || 'Hindi';
+  const languagesSubtitle = dynamicLanguages.length > 1 ? dynamicLanguages.slice(0, 3).join(' • ') : (primaryLanguage || 'Hindi');
 
   // Context Bottom Sheet state for long-press
   const [selectedSongForMenu, setSelectedSongForMenu] = useState<Song | null>(null);
@@ -1228,7 +1229,7 @@ export function HomeScreen({ isVisible = true }: { isVisible?: boolean }) {
         <section>
           <SectionHeader
             title="Charts"
-            subtitle={`Top trending songs in ${primaryLanguage} & India`}
+            subtitle={dynamicLanguages.length > 1 ? `Top trending songs across ${languagesSubtitle}` : `Top trending songs in ${primaryLanguage} & India`}
             badge="Top 100"
             onPlayAll={() => {
               const list = chartsTracks.length > 0 ? chartsTracks : ytViewModel.getTrendingSongs();
@@ -1346,7 +1347,7 @@ export function HomeScreen({ isVisible = true }: { isVisible?: boolean }) {
         <section>
           <SectionHeader
             title="New releases for you"
-            subtitle={`Fresh tracks and singles just dropped in ${primaryLanguage}`}
+            subtitle={dynamicLanguages.length > 1 ? `Fresh tracks and singles across ${languagesSubtitle}` : `Fresh tracks and singles just dropped in ${primaryLanguage}`}
             badge="New"
             onPlayAll={() => playSong(newReleasesList[0], newReleasesList, 0)}
           />

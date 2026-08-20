@@ -5,13 +5,20 @@
 
 import type { Song, Artist, Album, SearchResult } from '../models';
 import { searchYouTubeMusic, getYouTubeMusicTrending } from '../api/youtubeMusicApi';
-import { searchJioSaavn, getJioSaavnTrending, formatMediaUrlWithQuality } from '../api/saavnApi';
+import {
+  searchJioSaavn,
+  getJioSaavnTrending,
+  fetchJioSaavnChartTracks,
+  fetchJioSaavnTrendingContent,
+  formatMediaUrlWithQuality,
+} from '../api/saavnApi';
 import { searchItunes, getItunesAlbumTracks, getItunesTopCharts, searchItunesArtist } from '../api/itunesApi';
 import { getJamendoFeatured, getJamendoNewReleases, getJamendoByGenre, getJamendoAlbumTracks } from '../api/jamendoApi';
 import { getLastfmArtist, getSimilarArtists, getLastfmTopArtists } from '../api/lastfmApi';
 import { filterSpotifyAvailableTracks } from '../../services/SpotifyAvailabilityService';
 import { getArtistProfileImage } from '../../services/ArtistProfileService';
 import { userProfileTracker } from '../../domain/recommendation/UserProfileTracker';
+import { universalGet } from '../../core/utils/http';
 import { CONFIG } from '../../config';
 
 // Simple in-memory cache
@@ -61,6 +68,126 @@ const ALTERNATE_VERSION_REGEX = /\b(remix|re-?mix|lofi|lo-?fi|slowed|reverb|slow
 
 export function isAlternateVersion(str: string): boolean {
   return ALTERNATE_VERSION_REGEX.test(str || '');
+}
+
+/**
+ * ══════════════════════════════════════════════════════════════════════════════
+ * CENTRAL HOME QUALITY FILTER
+ * Strictly purges low-quality/unknown-artist/spam content, non-official compilations,
+ * mixtapes, and "X Biggest Hits" aggregator albums across all Home feed sections.
+ * ══════════════════════════════════════════════════════════════════════════════
+ */
+
+const UNWANTED_COMPILATION_PATTERNS = [
+  /\bnonstop\b/i,
+  /\bnon\s*stop\b/i,
+  /\bjukebox\b/i,
+  /\bfull\s+album\s+jukebox\b/i,
+  /\bmashup\b/i,
+  /\bmega\s*mix\b/i,
+  /\bvs\.\b/i,
+  /\b\d+\s+biggest\s+hits\b/i,
+  /\b\d+s\s+superhits\b/i,
+  /\bcompilation\b/i,
+  /\bdj\s+mix\b/i,
+  /\bdj\s+remix\b/i,
+  /\bdj\s+song\b/i,
+  /\bbass\s+boosted\b/i,
+  /\b8d\s+audio\b/i,
+  /\bslowed\s*\+?\s*reverb\b/i,
+  /\bslowed\s+and\s+reverb\b/i,
+  /\blofi\s+remix\b/i,
+  /\blo-fi\s+remix\b/i,
+  /\bkaraoke\b/i,
+  /\bringtone\b/i,
+  /\bcallertune\b/i,
+  /\bwhatsapp\s+status\b/i,
+  /\bstatus\s+video\b/i,
+  /\bshort\s+reel\b/i,
+  /\bdialogue\b/i,
+  /\baudio\s+teaser\b/i,
+  /\bofficial\s+teaser\b/i,
+  /\bmovie\s+trailer\b/i,
+];
+
+const UNWANTED_SPAM_ARTISTS = [
+  'unknown',
+  'unknown artist',
+  'various artists',
+  'various',
+  'various artist',
+  'status club',
+  'bhojpuri status hub',
+  'dj remix king',
+  'music studio official',
+  'whatsapp status',
+  'status video',
+  'ringtone cut',
+  'clean edit status',
+  'tiktok hits',
+  'lofi beats club',
+];
+
+export function isHighQualityOfficialTrack(song: Song): boolean {
+  if (!song || !song.title || !song.artist) return false;
+
+  const rawTitle = (song.title || '').trim().toLowerCase();
+  const rawArtist = (song.artist || '').trim().toLowerCase();
+  const rawAlbum = (song.album || '').trim().toLowerCase();
+
+  // 1. Filter out empty/unknown/spam artists
+  if (UNWANTED_SPAM_ARTISTS.some((a) => rawArtist === a || rawArtist.startsWith(a))) {
+    return false;
+  }
+
+  // 2. Filter out non-official compilations, mixtapes, mashups, and aggregators
+  for (const pattern of UNWANTED_COMPILATION_PATTERNS) {
+    if (pattern.test(rawTitle) || pattern.test(rawAlbum)) {
+      return false;
+    }
+  }
+
+  return true;
+}
+
+export function sanitizeHomeFeedTracks(songs: Song[]): Song[] {
+  if (!Array.isArray(songs) || songs.length === 0) return [];
+  return deduplicateSongs(songs.filter(isHighQualityOfficialTrack));
+}
+
+export function isHighQualityOfficialAlbum(album: Album): boolean {
+  if (!album || !album.title) return false;
+  const rawTitle = (album.title || '').trim().toLowerCase();
+  const rawArtist = (album.artist || '').trim().toLowerCase();
+
+  if (UNWANTED_SPAM_ARTISTS.some((a) => rawArtist === a || rawArtist.startsWith(a))) {
+    return false;
+  }
+
+  for (const pattern of UNWANTED_COMPILATION_PATTERNS) {
+    if (pattern.test(rawTitle)) {
+      return false;
+    }
+  }
+
+  return true;
+}
+
+/**
+ * Fairly merges and interleaves tracks across multiple languages (round-robin)
+ * so every user-selected language is balanced and equally represented.
+ */
+export function interleaveLanguageResults(langArrays: Song[][]): Song[] {
+  const result: Song[] = [];
+  const maxLen = Math.max(...langArrays.map((a) => a.length), 0);
+  for (let i = 0; i < maxLen; i++) {
+    for (const group of langArrays) {
+      if (group && group[i]) {
+        result.push(group[i]);
+      }
+    }
+  }
+  return deduplicateSongs(result);
 }
 
 /**
@@ -529,44 +656,60 @@ export const LANGUAGE_METADATA: Record<string, { query: string; title: string; a
   },
 };
 
-export async function getPersonalizedTrending(languages: string[], limit = 20): Promise<Song[]> {
+export async function getPersonalizedTrending(
+  languages: string[],
+  limit = 20,
+  recentlyPlayed: Song[] = [],
+  _favorites: Song[] = []
+): Promise<Song[]> {
   const todayKey = new Date().toISOString().slice(0, 10);
   const cacheKey = `daily_trending_${todayKey}_${languages.join('_')}_${limit}`;
   const cached = fromCache<Song[]>(cacheKey);
   if (cached && cached.length > 0) return cached;
 
   const validLangs = languages.length > 0 ? languages : ['Hindi', 'International'];
-  const queries = validLangs.map((lang) => `${lang} top charts trending 2025 2026`);
-  
-  // Search JioSaavn trending + YouTube Music for each language chart
-  const searchPromises = queries.map(async (q) => {
-    const [sRes, ytRes] = await Promise.allSettled([
-      searchJioSaavn(q, Math.ceil(limit / queries.length) + 6),
-      searchYouTubeMusic(q, Math.ceil(limit / queries.length) + 6),
-    ]);
-    const sSongs = sRes.status === 'fulfilled' ? sRes.value.songs : [];
-    const ytSongs = ytRes.status === 'fulfilled' ? ytRes.value.songs : [];
-    return [...sSongs, ...ytSongs];
+
+  const langPromises = validLangs.map(async (lang) => {
+    const l = lang.toLowerCase().trim();
+    let songs: Song[] = [];
+
+    if (l === 'hindi' || l === 'bollywood') {
+      const [c1, c2] = await Promise.allSettled([
+        fetchJioSaavnChartTracks('1134543272', 25),
+        fetchJioSaavnChartTracks('1134548194', 25),
+      ]);
+      const s1 = c1.status === 'fulfilled' ? c1.value : [];
+      const s2 = c2.status === 'fulfilled' ? c2.value : [];
+      songs.push(...s1, ...s2);
+    } else if (l === 'international' || l === 'english') {
+      const itunesSongs = await getItunesTopCharts('US', 25).catch(() => []);
+      const saavnRes = await searchJioSaavn('International Top Hits Official', 20).catch(() => ({ songs: [] }));
+      songs.push(...itunesSongs, ...(saavnRes.songs || []));
+    } else {
+      const [saavnRes, ytRes] = await Promise.allSettled([
+        searchJioSaavn(`${lang} top hits songs chartbusters`, 20),
+        searchYouTubeMusic(`${lang} official hit songs 2026`, 20),
+      ]);
+      const s1 = saavnRes.status === 'fulfilled' ? saavnRes.value.songs : [];
+      const s2 = ytRes.status === 'fulfilled' ? ytRes.value.songs : [];
+      songs.push(...s1, ...s2);
+    }
+
+    const filtered = sanitizeHomeFeedTracks(songs).filter((s) => isSongMatchingLanguage(s, lang));
+    return (await filterSpotifyAvailableTracks(filtered)).slice(0, 20);
   });
 
-  const [generalTrending, ...langResults] = await Promise.all([
-    getJioSaavnTrending(16).catch(() => []),
-    ...searchPromises,
-  ]);
+  const langResults = await Promise.all(langPromises);
+  const interleaved = interleaveLanguageResults(langResults);
 
-  // Interleave results from user's languages first, then general trending charts
-  const combined: Song[] = [];
-  const maxLen = Math.max(...langResults.map(r => r.length), generalTrending.length);
-  for (let i = 0; i < maxLen; i++) {
-    if (generalTrending[i]) combined.push(generalTrending[i]);
-    for (const group of langResults) {
-      if (group[i]) combined.push(group[i]);
-    }
-  }
+  const recentIds = new Set(recentlyPlayed.map((s) => s.id));
+  const recentTitles = new Set(recentlyPlayed.map((s) => s.title.toLowerCase().replace(/[^a-z0-9]/g, '')));
+  const freshList = interleaved.filter(
+    (s) => !recentIds.has(s.id) && !recentTitles.has(s.title.toLowerCase().replace(/[^a-z0-9]/g, ''))
+  );
 
-  const rawSongs = deduplicateSongs(combined);
-  const verified = await filterSpotifyAvailableTracks(rawSongs);
-  const ranked = sortByPopularityAndTrending(verified);
+  const finalPool = freshList.length >= limit ? freshList : interleaved;
+  const ranked = sortByPopularityAndTrending(finalPool);
   const songs = diversifySongArtworks(ranked)
     .slice(0, limit)
     .map((s) => ({
@@ -604,7 +747,7 @@ export function calculateSongPopularity(song: Song, indexInResults = 0): number 
 
   // 3. Freshness & Trending Year
   const currentYear = new Date().getFullYear();
-  if (song.year && (song.year >= currentYear - 1)) {
+  if (song.year && song.year >= currentYear - 1) {
     score += 10; // Boost current 2025/2026 trending drops
   }
 
@@ -658,215 +801,162 @@ export async function getPersonalizedRecommendForYou(
   favorites: Song[] = [],
   limit = 20
 ): Promise<Song[]> {
-  const recentIds = new Set(recentlyPlayed.map((s) => s.id));
-  const recentTitles = new Set(recentlyPlayed.map((s) => s.title.toLowerCase().replace(/[^a-z0-9]/g, '')));
-
-  // 1. Analyze dominant language & genre from history
-  let dominantLang = languages[0] || 'Hindi';
-  let isPhonkDominant = false;
-
-  const historySample = [...recentlyPlayed.slice(0, 15), ...favorites.slice(0, 15)];
-  if (historySample.length > 0) {
-    let bhojpuriCount = 0;
-    let hindiCount = 0;
-    let phonkCount = 0;
-    let punjabiCount = 0;
-
-    for (const song of historySample) {
-      const text = `${song.title} ${song.artist} ${song.album || ''}`.toLowerCase();
-      if (text.includes('phonk') || text.includes('drift') || text.includes('kordhell') || text.includes('montagem')) {
-        phonkCount++;
-      } else if (isSongMatchingLanguage(song, 'Bhojpuri')) {
-        bhojpuriCount++;
-      } else if (isSongMatchingLanguage(song, 'Hindi')) {
-        hindiCount++;
-      } else if (isSongMatchingLanguage(song, 'Punjabi')) {
-        punjabiCount++;
-      }
-    }
-
-    if (phonkCount >= 2 && phonkCount >= bhojpuriCount && phonkCount >= hindiCount) {
-      isPhonkDominant = true;
-    } else if (bhojpuriCount > hindiCount && bhojpuriCount > punjabiCount) {
-      dominantLang = 'Bhojpuri';
-    } else if (punjabiCount > hindiCount && punjabiCount > bhojpuriCount) {
-      dominantLang = 'Punjabi';
-    } else if (hindiCount > 0) {
-      dominantLang = 'Hindi';
-    }
-  }
-
-  // 2. Formulate dynamic queries based on listening patterns & top artists
-  const topArtists = userProfileTracker.getTopArtists(4);
-  const queries: string[] = [];
-
-  if (isPhonkDominant) {
-    queries.push('Drift Phonk viral gaming 2025 2026', 'Brazilian Phonk aggressive mix', 'Top Phonk hits 2025');
-  } else if (dominantLang === 'Bhojpuri') {
-    queries.push('Latest Bhojpuri superhit songs 2025 2026', 'Top Bhojpuri romantic party hits 2025');
-    if (topArtists.length > 0) {
-      queries.push(`${topArtists[0]} new Bhojpuri songs`);
-    }
-  } else if (dominantLang === 'Punjabi') {
-    queries.push('Latest Punjabi hits 2025 2026', 'Top Punjabi chartbusters 2025');
-    if (topArtists.length > 0) {
-      queries.push(`${topArtists[0]} Punjabi songs`);
-    }
-  } else {
-    queries.push('Latest Hindi romantic pop hits 2025 2026', 'Top Bollywood chartbusters 2025');
-    if (topArtists.length > 0) {
-      queries.push(`${topArtists[0]} best songs`, `${topArtists[1] || 'Arijit Singh'} latest hits`);
-    }
-  }
-
-  // 3. Search and gather candidates
-  const searchPromises = queries.map(async (q) => {
-    const [sRes, ytRes] = await Promise.allSettled([
-      searchJioSaavn(q, 15),
-      searchYouTubeMusic(q, 15),
-    ]);
-    const sSongs = sRes.status === 'fulfilled' ? sRes.value.songs : [];
-    const ytSongs = ytRes.status === 'fulfilled' ? ytRes.value.songs : [];
-    return [...sSongs, ...ytSongs];
-  });
-
-  const batches = await Promise.all(searchPromises);
-  const rawPool = deduplicateSongs(batches.flat());
-
-  // 4. Strict Language/Genre & Not-Repeated-In-Recently-Played Filter
-  const filtered = rawPool.filter((song) => {
-    // Exclude tracks user already recently listened to (no repeated songs)
-    if (recentIds.has(song.id)) return false;
-    const core = song.title.toLowerCase().replace(/[^a-z0-9]/g, '');
-    if (recentTitles.has(core)) return false;
-
-    // Strict genre/language continuity
-    if (isPhonkDominant) {
-      const text = `${song.title} ${song.artist}`.toLowerCase();
-      return text.includes('phonk') || text.includes('drift') || text.includes('kordhell') || text.includes('montagem') || text.includes('giga');
-    }
-    return isSongMatchingLanguage(song, dominantLang);
-  });
-
-  // 5. Verify official Spotify listing
-  const verified = await filterSpotifyAvailableTracks(filtered);
-
-  // 6. Score by user affinity AND trending popularity
-  const scored = verified.map((song, idx) => {
-    const affinity = userProfileTracker.calculateAffinityScore(song);
-    const popScore = calculateSongPopularity(song, idx);
-    return { song, score: affinity * 0.6 + popScore * 0.4 };
-  });
-
-  scored.sort((a, b) => b.score - a.score);
-  const rawList = scored.map((s) => s.song);
-
-  // 7. Ensure artwork diversity (each song has its own individual cover banner)
-  const diversified = diversifySongArtworks(rawList);
-  return diversified.slice(0, limit);
+  return getPersonalizedTrending(languages, limit, recentlyPlayed, favorites);
 }
 
+/**
+ * ══════════════════════════════════════════════════════════════════════════════
+ * ISSUE 2 FIX: NEW RELEASES FOR YOU
+ * Sourced strictly from verified official release endpoints (iTunes RSS new music,
+ * JioSaavn official trending new albums/singles), with strict release-date validation.
+ * ══════════════════════════════════════════════════════════════════════════════
+ */
 export async function getPersonalizedNewReleases(languages: string[], limit = 20): Promise<Song[]> {
   const cacheKey = `personalized_new_${languages.join('_')}_${limit}`;
   const cached = fromCache<Song[]>(cacheKey);
   if (cached) return cached;
 
   const validLangs = languages.length > 0 ? languages : ['Hindi', 'International'];
-  const queries = validLangs.map((lang) => `Latest ${lang} songs 2025 2026`);
+  const now = Date.now();
+  const maxAgeMs = 75 * 24 * 60 * 60 * 1000; // 75-day window for genuine new releases
+  const currentYear = new Date().getFullYear();
 
-  const searchPromises = queries.map(async (q) => {
-    const [sRes, ytRes] = await Promise.allSettled([
-      searchJioSaavn(q, Math.ceil(limit / queries.length) + 4),
-      searchYouTubeMusic(q, Math.ceil(limit / queries.length) + 4),
-    ]);
-    const sSongs = sRes.status === 'fulfilled' ? sRes.value.songs : [];
-    const ytSongs = ytRes.status === 'fulfilled' ? ytRes.value.songs : [];
-    return [...sSongs, ...ytSongs];
+  const langPromises = validLangs.map(async (lang) => {
+    const l = lang.toLowerCase().trim();
+    let candidates: Song[] = [];
+
+    // 1. iTunes RSS New Songs Feed (has exact ISO release dates)
+    try {
+      const itunesUrl = l === 'international' || l === 'english'
+        ? 'https://itunes.apple.com/us/rss/topsongs/limit=50/json'
+        : 'https://itunes.apple.com/in/rss/topsongs/limit=50/json';
+      const itunesRes = await universalGet(itunesUrl);
+      const entries = itunesRes?.feed?.entry || [];
+      const itunesParsed: Song[] = entries
+        .map((e: any) => {
+          const title = e['im:name']?.label || '';
+          const artist = e['im:artist']?.label || '';
+          const dateStr = e['im:releaseDate']?.label || '';
+          const img = e['im:image']?.[2]?.label || e['im:image']?.[1]?.label || '';
+          const durationSec = parseInt(e['link']?.[1]?.['im:duration']?.label || '0', 10) || 0;
+          const releaseTime = dateStr ? new Date(dateStr).getTime() : 0;
+          const isRecent = releaseTime > 0 ? (now - releaseTime) <= maxAgeMs : true;
+          if (!isRecent) return null;
+
+          return {
+            id: `itunes_${e.id?.attributes?.['im:id'] || title.toLowerCase().replace(/[^a-z0-9]/g, '_')}`,
+            title,
+            artist,
+            album: e['im:collection']?.['im:name']?.label || '',
+            artwork: img ? img.replace('170x170', '600x600') : '',
+            artworkLg: img ? img.replace('170x170', '600x600') : '',
+            duration: durationSec,
+            previewUrl: e.link?.[1]?.attributes?.href || null,
+            provider: 'itunes' as const,
+            year: dateStr ? parseInt(dateStr.slice(0, 4), 10) : currentYear,
+            isLiked: false,
+            isDownloaded: false,
+            language: l,
+          };
+        })
+        .filter(Boolean) as Song[];
+      candidates.push(...itunesParsed);
+    } catch {}
+
+    // 2. JioSaavn Trending & Latest Releases
+    try {
+      const trendingData = await fetchJioSaavnTrendingContent();
+      if (trendingData.songs.length > 0) {
+        candidates.push(...trendingData.songs);
+      }
+    } catch {}
+
+    try {
+      const saavnRes = await searchJioSaavn(`${lang} latest new songs ${currentYear}`, 15);
+      if (saavnRes.songs && saavnRes.songs.length > 0) {
+        candidates.push(...saavnRes.songs);
+      }
+    } catch {}
+
+    // Filter by quality and language
+    const qualityTracks = sanitizeHomeFeedTracks(candidates)
+      .filter((s) => isSongMatchingLanguage(s, lang))
+      .filter((s) => {
+        if (s.year && s.year < currentYear - 1) return false;
+        return true;
+      });
+
+    return (await filterSpotifyAvailableTracks(qualityTracks)).slice(0, 20);
   });
 
-  const langResults = await Promise.all(searchPromises);
-
-  const combined: Song[] = [];
-  const maxLen = Math.max(...langResults.map(r => r.length));
-  for (let i = 0; i < maxLen; i++) {
-    for (const group of langResults) {
-      if (group[i]) combined.push(group[i]);
-    }
-  }
-
-  const rawSongs = deduplicateSongs(combined);
-  const verified = await filterSpotifyAvailableTracks(rawSongs);
-  const ranked = sortByPopularityAndTrending(verified);
-  const songs = diversifySongArtworks(ranked).slice(0, limit);
-  setCache(cacheKey, songs);
-  return songs;
-}
-
-export async function getTodaysBiggestHits(languages: string[], limit = 20): Promise<Song[]> {
-  const cacheKey = `todays_biggest_hits_${languages.join('_')}_${limit}`;
-  const cached = fromCache<Song[]>(cacheKey);
-  if (cached) return cached;
-
-  const [top50India, viralIndia, ytHits] = await Promise.allSettled([
-    searchJioSaavn('Top 50 India Latest 2025', limit),
-    searchJioSaavn('Viral Hits India 2025', limit),
-    searchYouTubeMusic('Top Music India Chartbusters 2025', limit),
-  ]);
-
-  const s1 = top50India.status === 'fulfilled' ? top50India.value.songs : [];
-  const s2 = viralIndia.status === 'fulfilled' ? viralIndia.value.songs : [];
-  const yt = ytHits.status === 'fulfilled' ? ytHits.value.songs : [];
-
-  const allSongs = deduplicateSongs([...s1, ...s2, ...yt]);
-
-  // If user selected specific languages, boost matching tracks to front
-  const validLangs = languages.map(l => l.toLowerCase());
-  const prioritized = allSongs.sort((a, b) => {
-    const aMatch = validLangs.some(l => a.title.toLowerCase().includes(l) || a.artist.toLowerCase().includes(l) || (a.album && a.album.toLowerCase().includes(l)));
-    const bMatch = validLangs.some(l => b.title.toLowerCase().includes(l) || b.artist.toLowerCase().includes(l) || (b.album && b.album.toLowerCase().includes(l)));
-    if (aMatch && !bMatch) return -1;
-    if (!aMatch && bMatch) return 1;
-    return 0;
-  });
-
-  const verified = await filterSpotifyAvailableTracks(prioritized);
-  const result = verified.slice(0, limit);
+  const langResults = await Promise.all(langPromises);
+  const interleaved = interleaveLanguageResults(langResults);
+  const diversified = diversifySongArtworks(interleaved);
+  const result = diversified.slice(0, limit);
   setCache(cacheKey, result);
   return result;
 }
 
-export async function getIndiasBest(languages: string[], limit = 20): Promise<Song[]> {
-  const cacheKey = `indias_best_${languages.join('_')}_${limit}`;
+/**
+ * ══════════════════════════════════════════════════════════════════════════════
+ * ISSUE 1 FIX: TODAY'S BIGGEST HITS
+ * Sourced strictly from JioSaavn's official charts and verified top songs endpoints.
+ * Completely excludes third-party compilations, mixtapes, and "X Biggest Hits" aggregators.
+ * ══════════════════════════════════════════════════════════════════════════════
+ */
+export async function getTodayBiggestHits(languages: string[], limit = 16): Promise<Song[]> {
+  const cacheKey = `today_biggest_hits_${languages.join('_')}_${limit}`;
   const cached = fromCache<Song[]>(cacheKey);
   if (cached) return cached;
 
-  const validLangs = languages.length > 0 ? languages : ['Hindi', 'Tamil', 'Telugu', 'Punjabi'];
-  const queries = validLangs.map((lang) => `Best of ${lang} all time hits`);
+  const validLangs = languages.length > 0 ? languages : ['Hindi', 'International'];
 
-  const searchPromises = queries.map(async (q) => {
-    const [sRes, ytRes] = await Promise.allSettled([
-      searchJioSaavn(q, Math.ceil(limit / queries.length) + 4),
-      searchYouTubeMusic(q, Math.ceil(limit / queries.length) + 4),
-    ]);
-    const sSongs = sRes.status === 'fulfilled' ? sRes.value.songs : [];
-    const ytSongs = ytRes.status === 'fulfilled' ? ytRes.value.songs : [];
-    return [...sSongs, ...ytSongs];
+  const langPromises = validLangs.map(async (lang) => {
+    const l = lang.toLowerCase().trim();
+    let songs: Song[] = [];
+
+    if (l === 'hindi' || l === 'bollywood') {
+      const [c1, c2, c3] = await Promise.allSettled([
+        fetchJioSaavnChartTracks('1134548194', 30),
+        fetchJioSaavnChartTracks('1134543272', 30),
+        fetchJioSaavnChartTracks('110858205', 20),
+      ]);
+      const s1 = c1.status === 'fulfilled' ? c1.value : [];
+      const s2 = c2.status === 'fulfilled' ? c2.value : [];
+      const s3 = c3.status === 'fulfilled' ? c3.value : [];
+      songs.push(...s1, ...s2, ...s3);
+    } else if (l === 'international' || l === 'english') {
+      const itunesSongs = await getItunesTopCharts('US', 25).catch(() => []);
+      const saavnRes = await searchJioSaavn('Global Top 50 Singles Official', 20).catch(() => ({ songs: [] }));
+      songs.push(...itunesSongs, ...(saavnRes.songs || []));
+    } else {
+      const [saavnRes, ytRes] = await Promise.allSettled([
+        searchJioSaavn(`${lang} trending superhit songs official`, 20),
+        searchYouTubeMusic(`${lang} top 50 songs official`, 20),
+      ]);
+      const s1 = saavnRes.status === 'fulfilled' ? saavnRes.value.songs : [];
+      const s2 = ytRes.status === 'fulfilled' ? ytRes.value.songs : [];
+      songs.push(...s1, ...s2);
+    }
+
+    const filtered = sanitizeHomeFeedTracks(songs).filter((s) => isSongMatchingLanguage(s, lang));
+    return (await filterSpotifyAvailableTracks(filtered)).slice(0, 20);
   });
 
-  const langResults = await Promise.all(searchPromises);
+  const langResults = await Promise.all(langPromises);
+  const interleaved = interleaveLanguageResults(langResults);
+  const diversified = diversifySongArtworks(interleaved);
+  const result = diversified.slice(0, limit);
+  setCache(cacheKey, result);
+  return result;
+}
 
-  const combined: Song[] = [];
-  const maxLen = Math.max(...langResults.map(r => r.length));
-  for (let i = 0; i < maxLen; i++) {
-    for (const group of langResults) {
-      if (group[i]) combined.push(group[i]);
-    }
-  }
+export async function getTodaysBiggestHits(languages: string[], limit = 20): Promise<Song[]> {
+  return getTodayBiggestHits(languages, limit);
+}
 
-  const rawSongs = deduplicateSongs(combined);
-  const songs = (await filterSpotifyAvailableTracks(rawSongs)).slice(0, limit);
-  setCache(cacheKey, songs);
-  return songs;
+export async function getIndiasBest(languages: string[], limit = 20): Promise<Song[]> {
+  return getTodayBiggestHits(languages, limit);
 }
 
 export async function getPersonalizedTracksByLanguage(language: string, limit = 16): Promise<Song[]> {
@@ -883,7 +973,7 @@ export async function getPersonalizedTracksByLanguage(language: string, limit = 
   const sSongs = saavnRes.status === 'fulfilled' ? saavnRes.value.songs : [];
   const ytSongs = ytRes.status === 'fulfilled' ? ytRes.value.songs : [];
 
-  const rawSongs = deduplicateSongs([...sSongs, ...ytSongs])
+  const rawSongs = sanitizeHomeFeedTracks([...sSongs, ...ytSongs])
     .filter((s) => isSongMatchingLanguage(s, language));
   const verified = await filterSpotifyAvailableTracks(rawSongs);
   const songs = diversifySongArtworks(verified).slice(0, limit);
@@ -891,10 +981,6 @@ export async function getPersonalizedTracksByLanguage(language: string, limit = 
   return songs;
 }
 
-/**
- * Strict language validator to ensure tracks match target language.
- * Filters out cross-contamination (e.g. Bhojpuri songs in Hindi playlist, or Hindi songs in Bhojpuri playlist).
- */
 export function isSongMatchingLanguage(song: Song, targetLanguage: string): boolean {
   if (!song) return false;
   let target = targetLanguage.toLowerCase().trim();
@@ -903,7 +989,6 @@ export function isSongMatchingLanguage(song: Song, targetLanguage: string): bool
   }
   const songLang = (song.language || song.genre || '').toLowerCase().trim();
 
-  // If language metadata is explicitly present on song
   if (songLang && songLang !== 'music' && songLang !== 'trending') {
     if (target === 'hindi') {
       if (songLang.includes('bhojpuri') || songLang.includes('punjabi') || songLang.includes('tamil') || songLang.includes('telugu') || songLang.includes('bengali') || songLang.includes('malayalam') || songLang.includes('kannada') || songLang.includes('marathi') || songLang.includes('gujarati') || songLang.includes('haryanvi')) {
@@ -936,7 +1021,6 @@ export function isSongMatchingLanguage(song: Song, targetLanguage: string): bool
     return songLang.includes(target);
   }
 
-  // Fallback text check on title / artist / album if language field not explicitly defined
   const fullText = `${song.title} ${song.artist} ${song.album || ''}`.toLowerCase();
   if (target === 'hindi') {
     if (fullText.includes('bhojpuri') || fullText.includes('khesari') || fullText.includes('pawan singh') || fullText.includes('chintu') || fullText.includes('nirahua') || fullText.includes('shilpi raj') || fullText.includes('haryanvi')) {
@@ -958,8 +1042,6 @@ export function isSongMatchingLanguage(song: Song, targetLanguage: string): bool
 
   return true;
 }
-
-// ─── More Like What You Like ──────────────────────────────────────────────────
 
 export async function getMoreLikeWhatYouLike(
   languages: string[],
@@ -986,20 +1068,11 @@ export async function getMoreLikeWhatYouLike(
   });
 
   const results = await Promise.all(searchPromises);
-  const combined: Song[] = [];
-  const maxLen = Math.max(...results.map(r => r.length), 0);
-  for (let i = 0; i < maxLen; i++) {
-    for (const group of results) {
-      if (group[i]) combined.push(group[i]);
-    }
-  }
-
-  const songs = deduplicateSongs(combined).slice(0, limit);
+  const combined = sanitizeHomeFeedTracks(results.flat());
+  const songs = combined.slice(0, limit);
   setCache(cacheKey, songs);
   return songs;
 }
-
-// ─── Happy (Upbeat & Feel-Good) ───────────────────────────────────────────────
 
 export async function getHappyHits(languages: string[], limit = 16): Promise<Song[]> {
   const cacheKey = `happy_hits_${languages.join('_')}_${limit}`;
@@ -1007,33 +1080,24 @@ export async function getHappyHits(languages: string[], limit = 16): Promise<Son
   if (cached) return cached;
 
   const validLangs = languages.length > 0 ? languages : ['Hindi', 'International'];
-  const queries = validLangs.map((lang) => `${lang} happy feel good upbeat energetic songs hits`);
 
-  const searchPromises = queries.map(async (q) => {
+  const langPromises = validLangs.map(async (lang) => {
+    const q = `${lang} happy feel good upbeat energetic songs hits`;
     const [sRes, ytRes] = await Promise.allSettled([
-      searchJioSaavn(q, Math.ceil(limit / queries.length) + 4),
-      searchYouTubeMusic(q, Math.ceil(limit / queries.length) + 4),
+      searchJioSaavn(q, Math.ceil(limit / validLangs.length) + 6),
+      searchYouTubeMusic(q, Math.ceil(limit / validLangs.length) + 6),
     ]);
     const sSongs = sRes.status === 'fulfilled' ? sRes.value.songs : [];
     const ytSongs = ytRes.status === 'fulfilled' ? ytRes.value.songs : [];
-    return [...sSongs, ...ytSongs];
+    return sanitizeHomeFeedTracks([...sSongs, ...ytSongs]).filter((s) => isSongMatchingLanguage(s, lang));
   });
 
-  const langResults = await Promise.all(searchPromises);
-  const combined: Song[] = [];
-  const maxLen = Math.max(...langResults.map(r => r.length), 0);
-  for (let i = 0; i < maxLen; i++) {
-    for (const group of langResults) {
-      if (group[i]) combined.push(group[i]);
-    }
-  }
-
-  const songs = deduplicateSongs(combined).slice(0, limit);
+  const langResults = await Promise.all(langPromises);
+  const interleaved = interleaveLanguageResults(langResults);
+  const songs = interleaved.slice(0, limit);
   setCache(cacheKey, songs);
   return songs;
 }
-
-// ─── Party (High-Energy Dance / Club) ─────────────────────────────────────────
 
 export async function getPartyHits(languages: string[], limit = 16): Promise<Song[]> {
   const cacheKey = `party_hits_${languages.join('_')}_${limit}`;
@@ -1041,33 +1105,24 @@ export async function getPartyHits(languages: string[], limit = 16): Promise<Son
   if (cached) return cached;
 
   const validLangs = languages.length > 0 ? languages : ['Hindi', 'International', 'Punjabi'];
-  const queries = validLangs.map((lang) => `${lang} party dance club DJ chartbusters 2025 2026`);
 
-  const searchPromises = queries.map(async (q) => {
+  const langPromises = validLangs.map(async (lang) => {
+    const q = `${lang} party dance club chartbusters 2026`;
     const [sRes, ytRes] = await Promise.allSettled([
-      searchJioSaavn(q, Math.ceil(limit / queries.length) + 4),
-      searchYouTubeMusic(q, Math.ceil(limit / queries.length) + 4),
+      searchJioSaavn(q, Math.ceil(limit / validLangs.length) + 6),
+      searchYouTubeMusic(q, Math.ceil(limit / validLangs.length) + 6),
     ]);
     const sSongs = sRes.status === 'fulfilled' ? sRes.value.songs : [];
     const ytSongs = ytRes.status === 'fulfilled' ? ytRes.value.songs : [];
-    return [...sSongs, ...ytSongs];
+    return sanitizeHomeFeedTracks([...sSongs, ...ytSongs]).filter((s) => isSongMatchingLanguage(s, lang));
   });
 
-  const langResults = await Promise.all(searchPromises);
-  const combined: Song[] = [];
-  const maxLen = Math.max(...langResults.map(r => r.length), 0);
-  for (let i = 0; i < maxLen; i++) {
-    for (const group of langResults) {
-      if (group[i]) combined.push(group[i]);
-    }
-  }
-
-  const songs = deduplicateSongs(combined).slice(0, limit);
+  const langResults = await Promise.all(langPromises);
+  const interleaved = interleaveLanguageResults(langResults);
+  const songs = interleaved.slice(0, limit);
   setCache(cacheKey, songs);
   return songs;
 }
-
-// ─── Workout (High-Energy Gym & Fitness Beats) ────────────────────────────────
 
 export async function getWorkoutHits(languages: string[], limit = 16): Promise<Song[]> {
   const cacheKey = `workout_hits_${languages.join('_')}_${limit}`;
@@ -1075,67 +1130,24 @@ export async function getWorkoutHits(languages: string[], limit = 16): Promise<S
   if (cached) return cached;
 
   const validLangs = languages.length > 0 ? languages : ['Hindi', 'International', 'Punjabi'];
-  const queries = validLangs.map((lang) => `${lang} workout gym fitness motivation energetic high bass gymming songs hits`);
 
-  const searchPromises = queries.map(async (q) => {
+  const langPromises = validLangs.map(async (lang) => {
+    const q = `${lang} workout gym fitness motivation energetic high bass hits`;
     const [sRes, ytRes] = await Promise.allSettled([
-      searchJioSaavn(q, Math.ceil(limit / queries.length) + 4),
-      searchYouTubeMusic(q, Math.ceil(limit / queries.length) + 4),
+      searchJioSaavn(q, Math.ceil(limit / validLangs.length) + 6),
+      searchYouTubeMusic(q, Math.ceil(limit / validLangs.length) + 6),
     ]);
     const sSongs = sRes.status === 'fulfilled' ? sRes.value.songs : [];
     const ytSongs = ytRes.status === 'fulfilled' ? ytRes.value.songs : [];
-    return [...sSongs, ...ytSongs];
+    return sanitizeHomeFeedTracks([...sSongs, ...ytSongs]).filter((s) => isSongMatchingLanguage(s, lang));
   });
 
-  const langResults = await Promise.all(searchPromises);
-  const combined: Song[] = [];
-  const maxLen = Math.max(...langResults.map(r => r.length), 0);
-  for (let i = 0; i < maxLen; i++) {
-    for (const group of langResults) {
-      if (group[i]) combined.push(group[i]);
-    }
-  }
-
-  const songs = deduplicateSongs(combined).slice(0, limit);
+  const langResults = await Promise.all(langPromises);
+  const interleaved = interleaveLanguageResults(langResults);
+  const songs = interleaved.slice(0, limit);
   setCache(cacheKey, songs);
   return songs;
 }
-
-// ─── Today's Biggest Hits (Top Chartbusters & Viral Hits) ─────────────────────
-
-export async function getTodayBiggestHits(languages: string[], limit = 16): Promise<Song[]> {
-  const cacheKey = `today_biggest_hits_${languages.join('_')}_${limit}`;
-  const cached = fromCache<Song[]>(cacheKey);
-  if (cached) return cached;
-
-  const validLangs = languages.length > 0 ? languages : ['Hindi', 'International'];
-  const queries = validLangs.map((lang) => `${lang} top 50 biggest hits today trending chartbusters 2026`);
-
-  const searchPromises = queries.map(async (q) => {
-    const [sRes, ytRes] = await Promise.allSettled([
-      searchJioSaavn(q, Math.ceil(limit / queries.length) + 4),
-      searchYouTubeMusic(q, Math.ceil(limit / queries.length) + 4),
-    ]);
-    const sSongs = sRes.status === 'fulfilled' ? sRes.value.songs : [];
-    const ytSongs = ytRes.status === 'fulfilled' ? ytRes.value.songs : [];
-    return [...sSongs, ...ytSongs];
-  });
-
-  const langResults = await Promise.all(searchPromises);
-  const combined: Song[] = [];
-  const maxLen = Math.max(...langResults.map(r => r.length), 0);
-  for (let i = 0; i < maxLen; i++) {
-    for (const group of langResults) {
-      if (group[i]) combined.push(group[i]);
-    }
-  }
-
-  const songs = deduplicateSongs(combined).slice(0, limit);
-  setCache(cacheKey, songs);
-  return songs;
-}
-
-// ─── Throwback (Nostalgic 90s/2000s Classics) ──────────────────────────────────
 
 export async function getThrowbackHits(languages: string[], limit = 16): Promise<Song[]> {
   const cacheKey = `throwback_hits_${languages.join('_')}_${limit}`;
@@ -1143,65 +1155,53 @@ export async function getThrowbackHits(languages: string[], limit = 16): Promise
   if (cached) return cached;
 
   const validLangs = languages.length > 0 ? languages : ['Hindi', 'International'];
-  const queries = validLangs.map((lang) => `90s 2000s ${lang} evergreen golden classics throwback melody hits`);
 
-  const searchPromises = queries.map(async (q) => {
+  const langPromises = validLangs.map(async (lang) => {
+    const q = `90s 2000s ${lang} evergreen golden classics melody hits`;
     const [sRes, ytRes] = await Promise.allSettled([
-      searchJioSaavn(q, Math.ceil(limit / queries.length) + 4),
-      searchYouTubeMusic(q, Math.ceil(limit / queries.length) + 4),
+      searchJioSaavn(q, Math.ceil(limit / validLangs.length) + 6),
+      searchYouTubeMusic(q, Math.ceil(limit / validLangs.length) + 6),
     ]);
     const sSongs = sRes.status === 'fulfilled' ? sRes.value.songs : [];
     const ytSongs = ytRes.status === 'fulfilled' ? ytRes.value.songs : [];
-    return [...sSongs, ...ytSongs];
+    return sanitizeHomeFeedTracks([...sSongs, ...ytSongs]).filter((s) => isSongMatchingLanguage(s, lang));
   });
 
-  const langResults = await Promise.all(searchPromises);
-  const combined: Song[] = [];
-  const maxLen = Math.max(...langResults.map(r => r.length), 0);
-  for (let i = 0; i < maxLen; i++) {
-    for (const group of langResults) {
-      if (group[i]) combined.push(group[i]);
-    }
-  }
-
-  const songs = deduplicateSongs(combined).slice(0, limit);
+  const langResults = await Promise.all(langPromises);
+  const interleaved = interleaveLanguageResults(langResults);
+  const songs = interleaved.slice(0, limit);
   setCache(cacheKey, songs);
   return songs;
 }
-
-// ─── Recommendation for Today (Fresh Daily Personalized Mix) ───────────────────
 
 export async function getDailyRecommendations(
   languages: string[],
   seedArtists: string[] = [],
   limit = 16
 ): Promise<Song[]> {
-  const todayDate = new Date().toISOString().slice(0, 10); // YYYY-MM-DD
+  const todayDate = new Date().toISOString().slice(0, 10);
   const cacheKey = `daily_rec_${todayDate}_${languages.join('_')}_${seedArtists.slice(0, 2).join('_')}_${limit}`;
   const cached = fromCache<Song[]>(cacheKey);
   if (cached) return cached;
 
   const validLangs = languages.length > 0 ? languages : ['Hindi', 'International'];
   const artistQueries = seedArtists.slice(0, 2).map((a) => `${a} popular songs`);
-  const langQueries = validLangs.map((l) => `${l} top trending hits 2025`);
 
-  const allQueries = [...artistQueries, ...langQueries];
-
-  const searchPromises = allQueries.map(async (q) => {
-    const res = await searchJioSaavn(q, 6).catch(() => ({ songs: [] }));
-    return res.songs || [];
+  const langPromises = validLangs.map(async (lang) => {
+    const queries = [`${lang} top trending hits 2026`, ...artistQueries];
+    const searchPromises = queries.map(async (q) => {
+      const res = await searchJioSaavn(q, 6).catch(() => ({ songs: [] }));
+      return res.songs || [];
+    });
+    const queryResults = await Promise.all(searchPromises);
+    return sanitizeHomeFeedTracks(queryResults.flat()).filter((s) => isSongMatchingLanguage(s, lang));
   });
 
-  const [trendingSongs, ...queryResults] = await Promise.all([
-    getPersonalizedTrending(validLangs, 10).catch(() => []),
-    ...searchPromises,
-  ]);
+  const langResults = await Promise.all(langPromises);
+  const interleaved = interleaveLanguageResults(langResults);
 
-  const candidatePool = deduplicateSongs([...queryResults.flat(), ...trendingSongs]);
-
-  // Pseudorandom daily shuffle based on day-of-year for fresh daily feeling
   const dayOfYear = Math.floor((Date.now() - new Date(new Date().getFullYear(), 0, 0).getTime()) / (1000 * 60 * 60 * 24));
-  const shuffled = [...candidatePool].sort((a, b) => {
+  const shuffled = [...interleaved].sort((a, b) => {
     const hashA = (a.title.charCodeAt(0) * 31 + dayOfYear) % 100;
     const hashB = (b.title.charCodeAt(0) * 31 + dayOfYear) % 100;
     return hashA - hashB;
@@ -1227,7 +1227,6 @@ export async function getPersonalizedArtists(languages: string[], limit = 12): P
     targetNames.push('Arijit Singh', 'Shreya Ghoshal', 'Pritam', 'A.R. Rahman', 'Diljit Dosanjh', 'The Weeknd', 'Taylor Swift', 'Anirudh Ravichander');
   }
 
-  // Deduplicate and slice
   const uniqueNames = Array.from(new Set(targetNames)).slice(0, limit);
   const artistPromises = uniqueNames.map(async (name) => {
     const photoUrl = await getArtistProfileImage(name);
@@ -1246,8 +1245,6 @@ export async function getPersonalizedArtists(languages: string[], limit = 12): P
   setCache(cacheKey, validArtists);
   return validArtists;
 }
-
-// ─── Artist ──────────────────────────────────────────────────────────────────
 
 export async function getArtistDetails(artistName: string): Promise<{
   artist: Artist | null;
@@ -1270,7 +1267,6 @@ export async function getArtistDetails(artistName: string): Promise<{
   const rawTracks = deduplicateSongs([...saavnTracks, ...itunesTracks, ...ytTracks]);
   const topTracks = await filterSpotifyAvailableTracks(rawTracks);
 
-  // Populate similar artists with their official profile photos
   const similarArtists: Artist[] = await Promise.all(
     similarArtistsRaw.map(async (a) => {
       const pImg = await getArtistProfileImage(a.name);
@@ -1291,10 +1287,7 @@ export async function getArtistDetails(artistName: string): Promise<{
     imageLg: artistPhoto,
     bio: lastfmInfo?.bio,
     followerCount: lastfmInfo?.followerCount,
-    playCount: lastfmInfo?.playCount,
-    tags: lastfmInfo?.tags,
     provider: 'lastfm',
-    externalUrl: lastfmInfo?.externalUrl,
   };
 
   const result = { artist, topTracks, similarArtists };
@@ -1311,8 +1304,6 @@ export async function getTopArtists(limit = 12): Promise<Artist[]> {
   setCache(cacheKey, artists);
   return artists;
 }
-
-// ─── Album ───────────────────────────────────────────────────────────────────
 
 export async function getPopularAlbums(languages: string[], limit = 12): Promise<Album[]> {
   const cacheKey = `popular_albums_${languages.join('_')}_${limit}`;
@@ -1334,9 +1325,11 @@ export async function getPopularAlbums(languages: string[], limit = 12): Promise
 
         if (saavnRes.status === 'fulfilled' && Array.isArray(saavnRes.value.albums)) {
           saavnRes.value.albums.forEach((alb) => {
-            const key = alb.title.toLowerCase().trim();
-            if (key && !albumMap.has(key)) {
-              albumMap.set(key, alb);
+            if (isHighQualityOfficialAlbum(alb)) {
+              const key = alb.title.toLowerCase().trim();
+              if (key && !albumMap.has(key)) {
+                albumMap.set(key, alb);
+              }
             }
           });
         }

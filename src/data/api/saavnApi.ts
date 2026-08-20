@@ -264,33 +264,29 @@ export async function searchJioSaavn(query: string, limit = 20): Promise<SearchR
 }
 
 /**
- * Fetches top charts & trending tracks with full 320kbps decrypted audio.
+ * Fetches tracks from an official JioSaavn chart or playlist by ID.
  */
-export async function getJioSaavnTrending(limit = 20): Promise<Song[]> {
+export async function fetchJioSaavnChartTracks(chartListId: string, limit = 50): Promise<Song[]> {
   try {
-    const url = `${BASE_URL}?__call=content.getCharts&api_version=4&_format=json&_marker=0&ctx=web6dot0`;
-    const charts = await universalGet(url);
-
-    if (!Array.isArray(charts) || charts.length === 0) return [];
-
-    const firstChartId = charts[0]?.id || '1134543272';
-    const playlistUrl = `${BASE_URL}?__call=playlist.getDetails&listid=${firstChartId}&_format=json&_marker=0&api_version=4&ctx=web6dot0`;
+    const playlistUrl = `${BASE_URL}?__call=playlist.getDetails&listid=${chartListId}&_format=json&_marker=0&api_version=4&ctx=web6dot0`;
     const plData = await universalGet(playlistUrl);
+    const rawList = Array.isArray(plData?.songs) ? plData.songs : Array.isArray(plData?.list) ? plData.list : [];
 
-    const songs: Song[] = (plData.list || []).map((item: any) => {
+    const songs: Song[] = rawList.map((item: any) => {
       const fullAudioUrl = decryptMediaUrl(item.more_info?.encrypted_media_url || item.encrypted_media_url)
         || item.more_info?.vlink
         || item.vlink
         || null;
       
       const durationSec = parseInt(item.more_info?.duration || item.duration, 10) || 0;
-
       const rawPlayCount = item.more_info?.play_count || item.play_count;
       const playCount = rawPlayCount ? parseInt(String(rawPlayCount), 10) : undefined;
+      const primaryArtist = decodeHtmlEntities(item.more_info?.primary_artists || item.primary_artists || item.singers || item.subtitle || 'Top Artist');
+
       return {
         id: `saavn_${item.id}`,
-        title: decodeHtmlEntities(item.title || item.song || ''),
-        artist: decodeHtmlEntities(item.subtitle || item.more_info?.music || item.more_info?.primary_artists?.[0]?.name || 'Top Artist'),
+        title: decodeHtmlEntities(item.song || item.title || ''),
+        artist: primaryArtist,
         album: decodeHtmlEntities(item.more_info?.album || item.album || ''),
         artwork: getHighResImage(item.image),
         artworkLg: getHighResImage(item.image),
@@ -301,13 +297,85 @@ export async function getJioSaavnTrending(limit = 20): Promise<Song[]> {
         isDownloaded: false,
         year: item.year ? parseInt(item.year, 10) : undefined,
         playCount,
-        popularity: 95, // High trending rank
+        popularity: 95,
         genre: item.language || 'Trending',
         language: (item.language || item.more_info?.language || '').toLowerCase(),
       };
     });
 
     return songs.slice(0, limit);
+  } catch (error) {
+    console.warn('JioSaavn chart fetch error:', error);
+    return [];
+  }
+}
+
+/**
+ * Fetches official trending content (songs & albums) from JioSaavn.
+ */
+export async function fetchJioSaavnTrendingContent(): Promise<{ songs: Song[]; albums: Album[] }> {
+  try {
+    const url = `${BASE_URL}?__call=content.getTrending&_format=json&_marker=0&ctx=web6dot0&api_version=4`;
+    const res = await universalGet(url);
+    const items = Array.isArray(res) ? res : Object.values(res || {});
+
+    const songs: Song[] = [];
+    const albums: Album[] = [];
+
+    for (const item of items) {
+      if (!item || typeof item !== 'object') continue;
+      const itemType = (item.type || '').toLowerCase();
+
+      if (itemType === 'album') {
+        const artists = item.more_info?.artistMap?.artists?.map((a: any) => a.name).join(', ') || item.subtitle || 'Official Album';
+        albums.push({
+          id: `saavn_album_${item.id}`,
+          title: decodeHtmlEntities(item.title || ''),
+          artist: decodeHtmlEntities(artists),
+          artwork: getHighResImage(item.image),
+          year: item.year || item.more_info?.release_date?.slice(0, 4) || undefined,
+          provider: 'saavn',
+        });
+      } else if (itemType === 'song') {
+        const fullAudioUrl = decryptMediaUrl(item.more_info?.encrypted_media_url || item.encrypted_media_url)
+          || item.more_info?.vlink
+          || item.vlink
+          || null;
+        songs.push({
+          id: `saavn_${item.id}`,
+          title: decodeHtmlEntities(item.title || item.song || ''),
+          artist: decodeHtmlEntities(item.subtitle || item.more_info?.primary_artists || 'Top Artist'),
+          album: decodeHtmlEntities(item.more_info?.album || item.album || ''),
+          artwork: getHighResImage(item.image),
+          artworkLg: getHighResImage(item.image),
+          duration: parseInt(item.more_info?.duration || item.duration, 10) || 0,
+          previewUrl: fullAudioUrl,
+          provider: 'saavn',
+          isLiked: false,
+          isDownloaded: false,
+          year: item.year ? parseInt(item.year, 10) : undefined,
+          popularity: 90,
+          genre: item.language || 'Music',
+          language: (item.language || item.more_info?.language || '').toLowerCase(),
+        });
+      }
+    }
+
+    return { songs, albums };
+  } catch (error) {
+    console.warn('JioSaavn trending content error:', error);
+    return { songs: [], albums: [] };
+  }
+}
+
+/**
+ * Fetches top charts & trending tracks with full 320kbps decrypted audio.
+ */
+export async function getJioSaavnTrending(limit = 20): Promise<Song[]> {
+  try {
+    const songs = await fetchJioSaavnChartTracks('1134543272', limit);
+    if (songs.length > 0) return songs;
+    return await fetchJioSaavnChartTracks('1134548194', limit);
   } catch (error) {
     console.error('JioSaavn trending failed:', error);
     return [];
