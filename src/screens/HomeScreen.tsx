@@ -2,6 +2,7 @@
 //  HomeScreen — Soundwave Personalized Music Home Interface
 //
 //  Sections (Content Area):
+//  🌟 CONTINUE LISTENING (Top Hero Card & Quick-Access Grid)
 //  1️⃣ Jump back in
 //  2️⃣ Your top mixes
 //  3️⃣ Recently played
@@ -50,6 +51,13 @@ export function resetHomeScrollPosition() {
 
 export function getHomeScrollPosition() {
   return persistentHomeScrollTop;
+}
+
+function formatTime(seconds: number): string {
+  if (!seconds || isNaN(seconds)) return '0:00';
+  const mins = Math.floor(seconds / 60);
+  const secs = Math.floor(seconds % 60);
+  return `${mins}:${secs < 10 ? '0' : ''}${secs}`;
 }
 
 // ── Icons ───────────────────────────────────────────────────────────────────
@@ -186,30 +194,29 @@ function SectionHeader({
 
 export function HomeScreen({ isVisible = true }: { isVisible?: boolean }) {
   const { state: appState, nav: { navigate } } = useApp();
-  const { playSong, state: playerState } = usePlayer();
+  const { playSong, togglePlay, state: playerState } = usePlayer();
   const ytViewModel = useHomeViewModelAutoLoad();
 
   const scrollRef = useRef<HTMLDivElement>(null);
   const isRestoringScroll = useRef<boolean>(false);
 
   // ── 1. User Preferences & Dynamic Language Adaptation ─────────────────────
-  // Baseline: Onboarding language selections
   const onboardingLanguages = useMemo(() => {
     return appState.musicLanguages && appState.musicLanguages.length > 0
       ? appState.musicLanguages
       : ['Hindi', 'International'];
   }, [appState.musicLanguages]);
 
-  // Compute live listening shifts from recent history (last 50 plays + favorites)
+  // Compute live listening shifts from recent history
   const dynamicLanguages = useMemo(() => {
     const langScores: Record<string, number> = {};
 
-    // 1. Give strong initial baseline weight to user's onboarding choices
+    // 1. Onboarding baseline
     onboardingLanguages.forEach((lang) => {
       langScores[lang] = 50;
     });
 
-    // 2. Score recently played tracks (recent plays weighted 3x, 2x, 1x)
+    // 2. Score recently played tracks
     const recents = appState.recentlyPlayed || [];
     recents.forEach((song, idx) => {
       const ctx = classifySongContext(song);
@@ -224,7 +231,6 @@ export function HomeScreen({ isVisible = true }: { isVisible?: boolean }) {
       langScores[ctx.language] = (langScores[ctx.language] || 0) + 4;
     });
 
-    // Sort languages by highest total active affinity
     const sorted = Object.entries(langScores)
       .sort(([, a], [, b]) => b - a)
       .map(([lang]) => lang);
@@ -232,13 +238,35 @@ export function HomeScreen({ isVisible = true }: { isVisible?: boolean }) {
     return sorted.length > 0 ? sorted : onboardingLanguages;
   }, [onboardingLanguages, appState.recentlyPlayed.length, appState.favorites.length]);
 
-  // Primary active language
   const primaryLanguage = dynamicLanguages[0] || 'Hindi';
 
   // Context Bottom Sheet state for long-press
   const [selectedSongForMenu, setSelectedSongForMenu] = useState<Song | null>(null);
 
-  // ── 2. Data States for the 10 Sections ─────────────────────────────────────
+  // ── 2. Top "Continue Listening" State ─────────────────────────────────────
+  const continueListeningSong = useMemo(() => {
+    if (playerState.currentSong) return playerState.currentSong;
+    if (appState.recentlyPlayed && appState.recentlyPlayed.length > 0) return appState.recentlyPlayed[0];
+    if (appState.favorites && appState.favorites.length > 0) return appState.favorites[0];
+    return null;
+  }, [playerState.currentSong, appState.recentlyPlayed, appState.favorites]);
+
+  const isContinueActive = playerState.currentSong?.id === continueListeningSong?.id;
+  const isContinuePlaying = isContinueActive && playerState.isPlaying;
+  const playerProgress = isContinueActive ? playerState.progress : 0;
+
+  const quickAccessItems = useMemo(() => {
+    const list = deduplicateSongs([
+      ...(appState.recentlyPlayed || []),
+      ...(appState.favorites || []),
+    ]);
+    const filtered = continueListeningSong
+      ? list.filter((s) => s.id !== continueListeningSong.id)
+      : list;
+    return filtered.slice(0, 6);
+  }, [appState.recentlyPlayed, appState.favorites, continueListeningSong]);
+
+  // ── 3. Data States for the 10 Sections ─────────────────────────────────────
   const [jumpBackInTracks, setJumpBackInTracks] = useState<Song[]>([]);
   const [topMixPlaylists, setTopMixPlaylists] = useState<Playlist[]>([]);
   const [madeForYouPlaylists, setMadeForYouPlaylists] = useState<Playlist[]>([]);
@@ -272,7 +300,7 @@ export function HomeScreen({ isVisible = true }: { isVisible?: boolean }) {
     setSelectedSongForMenu(song);
   }, []);
 
-  // ── 3. Scroll Memory Restoration ──────────────────────────────────────────
+  // ── 4. Scroll Memory Restoration ──────────────────────────────────────────
   const restoreScrollPosition = useCallback(() => {
     if (!scrollRef.current || persistentHomeScrollTop <= 0) return;
     const el = scrollRef.current;
@@ -301,7 +329,7 @@ export function HomeScreen({ isVisible = true }: { isVisible?: boolean }) {
     if (top >= 0) persistentHomeScrollTop = top;
   };
 
-  // ── 4. Comprehensive Section Data Pipeline ────────────────────────────────
+  // ── 5. Comprehensive Section Data Pipeline ────────────────────────────────
   const loadHomePipeline = useCallback(async () => {
     const favorites = appState.favorites || [];
     const recentlyPlayed = appState.recentlyPlayed || [];
@@ -428,7 +456,6 @@ export function HomeScreen({ isVisible = true }: { isVisible?: boolean }) {
 
   const greeting = getGreeting();
 
-  // Helper to open a playlist
   const handleOpenPlaylist = (playlist: Playlist) => {
     if (scrollRef.current) {
       persistentHomeScrollTop = scrollRef.current.scrollTop;
@@ -523,6 +550,282 @@ export function HomeScreen({ isVisible = true }: { isVisible?: boolean }) {
       </header>
 
       {/* ═════════════════════════════════════════════════════════════════════
+          🌟 TOP HERO: CONTINUE LISTENING
+          Featured resume hero card & 6-item quick-access grid
+      ═════════════════════════════════════════════════════════════════════ */}
+      {continueListeningSong && (
+        <section style={{ padding: '0 20px 16px' }}>
+          {/* Main Continue Listening Hero Card */}
+          <div
+            onClick={() => {
+              if (playerState.currentSong?.id === continueListeningSong.id) {
+                togglePlay();
+              } else {
+                playSong(continueListeningSong, appState.recentlyPlayed, 0);
+              }
+            }}
+            onContextMenu={(e) => {
+              e.preventDefault();
+              triggerLongPress(continueListeningSong);
+            }}
+            style={{
+              display: 'flex',
+              alignItems: 'center',
+              gap: 14,
+              padding: '12px 14px',
+              background: 'linear-gradient(135deg, var(--color-surface) 0%, var(--color-surface-2, rgba(255,255,255,0.06)) 100%)',
+              border: isContinueActive ? '1.5px solid var(--color-accent)' : '1px solid var(--color-border)',
+              borderRadius: 'var(--radius-lg, 16px)',
+              cursor: 'pointer',
+              position: 'relative',
+              overflow: 'hidden',
+              boxShadow: '0 6px 20px rgba(0, 0, 0, 0.35)',
+              transition: 'transform 120ms ease, border-color 150ms ease',
+            }}
+            onMouseDown={(e) => (e.currentTarget.style.transform = 'scale(0.985)')}
+            onMouseUp={(e) => (e.currentTarget.style.transform = 'scale(1)')}
+          >
+            {/* Ambient artwork backdrop glow */}
+            <div
+              style={{
+                position: 'absolute',
+                top: 0,
+                right: 0,
+                width: '60%',
+                height: '100%',
+                backgroundImage: `url(${resizeImageUrl(continueListeningSong.artwork, 160, 160)})`,
+                backgroundSize: 'cover',
+                backgroundPosition: 'center',
+                filter: 'blur(30px) opacity(0.18)',
+                pointerEvents: 'none',
+              }}
+            />
+
+            <div style={{ position: 'relative', flexShrink: 0 }}>
+              <img
+                src={resizeImageUrl(continueListeningSong.artworkLg || continueListeningSong.artwork, 256, 256)}
+                alt={continueListeningSong.title}
+                width={62}
+                height={62}
+                style={{
+                  borderRadius: 'var(--radius-md, 10px)',
+                  objectFit: 'cover',
+                  display: 'block',
+                  boxShadow: '0 4px 12px rgba(0,0,0,0.4)',
+                }}
+                onError={(e) => {
+                  (e.target as HTMLImageElement).src = CONFIG.ARTWORK_PLACEHOLDER;
+                }}
+              />
+            </div>
+
+            <div style={{ flex: 1, minWidth: 0, position: 'relative' }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginBottom: 3 }}>
+                <span
+                  style={{
+                    fontSize: 9.5,
+                    fontWeight: 700,
+                    textTransform: 'uppercase',
+                    letterSpacing: '0.08em',
+                    color: 'var(--color-accent)',
+                  }}
+                >
+                  Continue Listening
+                </span>
+                {isContinuePlaying && (
+                  <span
+                    style={{
+                      fontSize: 9,
+                      fontWeight: 700,
+                      padding: '1px 5px',
+                      borderRadius: 4,
+                      background: 'var(--color-accent-subtle, rgba(249, 115, 22, 0.16))',
+                      color: 'var(--color-accent)',
+                    }}
+                  >
+                    NOW PLAYING
+                  </span>
+                )}
+              </div>
+
+              <p
+                style={{
+                  margin: 0,
+                  fontSize: '14px',
+                  fontWeight: 700,
+                  color: isContinueActive ? 'var(--color-accent)' : 'var(--color-text-primary)',
+                  overflow: 'hidden',
+                  textOverflow: 'ellipsis',
+                  whiteSpace: 'nowrap',
+                  lineHeight: 1.25,
+                }}
+              >
+                {continueListeningSong.title}
+              </p>
+
+              <p
+                style={{
+                  margin: '2px 0 6px',
+                  fontSize: '11.5px',
+                  color: 'var(--color-text-secondary)',
+                  overflow: 'hidden',
+                  textOverflow: 'ellipsis',
+                  whiteSpace: 'nowrap',
+                }}
+              >
+                {continueListeningSong.artist}
+              </p>
+
+              {/* Progress bar */}
+              <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                <div
+                  style={{
+                    flex: 1,
+                    height: 3,
+                    borderRadius: 2,
+                    background: 'rgba(255, 255, 255, 0.12)',
+                    overflow: 'hidden',
+                  }}
+                >
+                  <div
+                    style={{
+                      width: `${Math.min(100, Math.max(0, (playerProgress || 0) * 100))}%`,
+                      height: '100%',
+                      background: 'var(--color-accent)',
+                      borderRadius: 2,
+                    }}
+                  />
+                </div>
+                {playerState.currentTime > 0 && (
+                  <span style={{ fontSize: 10, color: 'var(--color-text-secondary)', fontWeight: 500 }}>
+                    {formatTime(playerState.currentTime)}
+                  </span>
+                )}
+              </div>
+            </div>
+
+            {/* Circular Play / Resume Button */}
+            <div
+              style={{
+                width: 42,
+                height: 42,
+                borderRadius: '50%',
+                background: 'var(--color-accent)',
+                color: 'var(--color-accent-on, #FFFFFF)',
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+                flexShrink: 0,
+                boxShadow: '0 4px 14px rgba(249, 115, 22, 0.4)',
+                position: 'relative',
+              }}
+            >
+              {isContinuePlaying ? (
+                <EqBars />
+              ) : (
+                <PlayIcon size={18} color="var(--color-accent-on, #FFFFFF)" />
+              )}
+            </div>
+          </div>
+
+          {/* Quick-Access 2-Column Grid (6 items) */}
+          {quickAccessItems.length > 0 && (
+            <div
+              style={{
+                display: 'grid',
+                gridTemplateColumns: 'repeat(2, 1fr)',
+                gap: 8,
+                marginTop: 10,
+              }}
+            >
+              {quickAccessItems.map((song, i) => {
+                const isCurrent = playerState.currentSong?.id === song.id;
+                const isPlaying = isCurrent && playerState.isPlaying;
+
+                return (
+                  <div
+                    key={song.id}
+                    onClick={() => playSong(song, quickAccessItems, i)}
+                    onContextMenu={(e) => {
+                      e.preventDefault();
+                      triggerLongPress(song);
+                    }}
+                    style={{
+                      display: 'flex',
+                      alignItems: 'center',
+                      gap: 8,
+                      padding: '6px 8px',
+                      background: isCurrent
+                        ? 'var(--color-accent-subtle, rgba(249, 115, 22, 0.12))'
+                        : 'var(--color-surface)',
+                      border: isCurrent
+                        ? '1px solid var(--color-accent)'
+                        : '1px solid var(--color-border)',
+                      borderRadius: 'var(--radius-md, 10px)',
+                      cursor: 'pointer',
+                      overflow: 'hidden',
+                      minHeight: 48,
+                      transition: 'transform 120ms ease, background 150ms ease',
+                    }}
+                    onMouseDown={(e) => (e.currentTarget.style.transform = 'scale(0.97)')}
+                    onMouseUp={(e) => (e.currentTarget.style.transform = 'scale(1)')}
+                  >
+                    <img
+                      src={resizeImageUrl(song.artwork, 96, 96)}
+                      alt={song.title}
+                      width={36}
+                      height={36}
+                      loading="lazy"
+                      style={{
+                        borderRadius: 'var(--radius-sm, 6px)',
+                        objectFit: 'cover',
+                        flexShrink: 0,
+                      }}
+                      onError={(e) => {
+                        (e.target as HTMLImageElement).src = CONFIG.ARTWORK_PLACEHOLDER;
+                      }}
+                    />
+                    <div style={{ flex: 1, minWidth: 0 }}>
+                      <p
+                        style={{
+                          margin: 0,
+                          fontSize: '12px',
+                          fontWeight: 600,
+                          color: isCurrent ? 'var(--color-accent)' : 'var(--color-text-primary)',
+                          overflow: 'hidden',
+                          textOverflow: 'ellipsis',
+                          whiteSpace: 'nowrap',
+                        }}
+                      >
+                        {song.title}
+                      </p>
+                      <p
+                        style={{
+                          margin: '1px 0 0',
+                          fontSize: '10px',
+                          color: 'var(--color-text-secondary)',
+                          overflow: 'hidden',
+                          textOverflow: 'ellipsis',
+                          whiteSpace: 'nowrap',
+                        }}
+                      >
+                        {song.artist}
+                      </p>
+                    </div>
+                    {isPlaying && (
+                      <div style={{ marginRight: 2 }}>
+                        <EqBars />
+                      </div>
+                    )}
+                  </div>
+                );
+              })}
+            </div>
+          )}
+        </section>
+      )}
+
+      {/* ═════════════════════════════════════════════════════════════════════
           1️⃣ SECTION: JUMP BACK IN
           Horizontal snap carousel of user's active rotations & quick-resumes
       ═════════════════════════════════════════════════════════════════════ */}
@@ -595,7 +898,6 @@ export function HomeScreen({ isVisible = true }: { isVisible?: boolean }) {
                       }}
                     />
 
-                    {/* Gradient shadow overlay */}
                     <div
                       style={{
                         position: 'absolute',
@@ -605,7 +907,6 @@ export function HomeScreen({ isVisible = true }: { isVisible?: boolean }) {
                       }}
                     />
 
-                    {/* Play Badge */}
                     <div
                       style={{
                         position: 'absolute',
@@ -717,7 +1018,6 @@ export function HomeScreen({ isVisible = true }: { isVisible?: boolean }) {
                       }}
                     />
 
-                    {/* Gradient label overlay */}
                     <div
                       style={{
                         position: 'absolute',
@@ -727,7 +1027,6 @@ export function HomeScreen({ isVisible = true }: { isVisible?: boolean }) {
                       }}
                     />
 
-                    {/* Bottom Play Badge */}
                     <div
                       style={{
                         position: 'absolute',
@@ -1132,7 +1431,7 @@ export function HomeScreen({ isVisible = true }: { isVisible?: boolean }) {
       {/* ═════════════════════════════════════════════════════════════════════
           6️⃣ SECTION: NEW RELEASES FOR YOU
           Freshly dropped songs & albums in user's favorite language
-      ═════════════════════════════════════════════════════════════════════ */}
+      ═════════════════════════════════════════════ */}
       {newReleasesList.length > 0 && (
         <section>
           <SectionHeader
