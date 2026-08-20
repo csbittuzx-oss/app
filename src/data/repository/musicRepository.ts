@@ -1223,6 +1223,8 @@ export async function getArtistDetails(artistName: string): Promise<{
     imageLg: artistPhoto,
     bio: lastfmInfo?.bio,
     followerCount: lastfmInfo?.followerCount,
+    playCount: lastfmInfo?.playCount,
+    tags: lastfmInfo?.tags,
     provider: 'lastfm',
     externalUrl: lastfmInfo?.externalUrl,
   };

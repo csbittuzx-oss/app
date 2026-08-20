@@ -133,11 +133,29 @@ export function ArtistScreen() {
                 )}
               </div>
 
+              {/* Tags */}
+              {artist?.tags && artist.tags.length > 0 && (
+                <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6, marginBottom: 14 }}>
+                  {artist.tags.slice(0, 6).map((t) => (
+                    <span key={t} style={{
+                      fontSize: '11px',
+                      padding: '3px 10px',
+                      borderRadius: 999,
+                      background: 'rgba(255,255,255,0.06)',
+                      color: 'var(--color-text-secondary)',
+                      border: '1px solid var(--color-border)',
+                    }}>
+                      #{t}
+                    </span>
+                  ))}
+                </div>
+              )}
+
               {/* Bio */}
               {artist?.bio && (
                 <div style={{ marginBottom: 20 }}>
                   <p style={{ margin: 0, fontSize: 'var(--text-sm)', color: 'var(--color-text-secondary)', lineHeight: 1.6 }}>
-                    {artist.bio.slice(0, 300)}{artist.bio.length > 300 ? '…' : ''}
+                    {artist.bio}
                   </p>
                 </div>
               )}

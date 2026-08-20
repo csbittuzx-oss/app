@@ -2,6 +2,8 @@ import { useEffect, useState } from 'react';
 import { useApp } from '../state/AppContext';
 import { usePlayer } from '../state/PlayerContext';
 import { getAlbumTracks } from '../data/repository/musicRepository';
+import { lastFmRepository } from '../data/repository/lastfmRepository';
+import type { LastFmAlbumInfo } from '../data/api/lastfmApi';
 import type { Song } from '../data/models';
 import { SongCard } from '../components/cards/SongCard';
 import { SkeletonList } from '../components/shared/SkeletonCard';
@@ -19,6 +21,7 @@ export function AlbumScreen() {
   const albumArtist = String(nav.params?.albumArtist || '');
 
   const [tracks, setTracks] = useState<Song[]>([]);
+  const [albumWiki, setAlbumWiki] = useState<LastFmAlbumInfo | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(false);
 
@@ -34,7 +37,13 @@ export function AlbumScreen() {
     getAlbumTracks(albumId)
       .then(t => { setTracks(t); setLoading(false); })
       .catch(() => { setError(true); setLoading(false); });
-  }, [albumId]);
+
+    if (albumArtist && albumTitle) {
+      lastFmRepository.getAlbumInfo(albumArtist, albumTitle).then(info => {
+        if (info) setAlbumWiki(info);
+      }).catch(() => {});
+    }
+  }, [albumId, albumArtist, albumTitle]);
 
   const handlePlay = () => { if (tracks.length) playSong(tracks[0], tracks, 0); };
   const handleShuffle = () => {
@@ -109,6 +118,34 @@ export function AlbumScreen() {
             </button>
           </div>
         </div>
+
+        {/* Album Backstory / Wiki (Last.fm) */}
+        {albumWiki?.summary && (
+          <div style={{ margin: '0 20px 20px', padding: '14px 16px', background: 'var(--color-surface)', borderRadius: 'var(--radius-lg)', border: '1px solid var(--color-border)' }}>
+            <h3 style={{ margin: '0 0 6px', fontSize: 'var(--text-sm)', fontWeight: 700, color: 'var(--color-text-primary)' }}>
+              About this Album
+            </h3>
+            <p style={{ margin: 0, fontSize: 'var(--text-xs)', color: 'var(--color-text-secondary)', lineHeight: 1.6 }}>
+              {albumWiki.summary}
+            </p>
+            {albumWiki.tags && albumWiki.tags.length > 0 && (
+              <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6, marginTop: 10 }}>
+                {albumWiki.tags.slice(0, 5).map(tag => (
+                  <span key={tag} style={{
+                    fontSize: '11px',
+                    padding: '2px 8px',
+                    borderRadius: 999,
+                    background: 'rgba(255,255,255,0.06)',
+                    color: 'var(--color-text-muted)',
+                    border: '1px solid var(--color-border)'
+                  }}>
+                    #{tag}
+                  </span>
+                ))}
+              </div>
+            )}
+          </div>
+        )}
 
         {/* Track list */}
         <div style={{ padding: '0 20px' }}>

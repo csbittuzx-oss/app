@@ -35,6 +35,8 @@ export interface Artist {
   genre?: string;
   bio?: string;
   followerCount?: number;
+  playCount?: number;
+  tags?: string[];
   isVerified?: boolean;
   provider: MusicProvider;
   externalUrl?: string;

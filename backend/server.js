@@ -910,6 +910,97 @@ app.get('/api/lastfm/track/info', async (req, res) => {
   }
 });
 
+// 4b. Get Similar Tracks (Musically / Acoustically Similar Songs)
+app.get('/api/lastfm/track/similar', async (req, res) => {
+  const artist = req.query.artist?.trim();
+  const track = req.query.track?.trim();
+  const limit = parseInt(req.query.limit) || 10;
+  if (!artist || !track) {
+    return res.status(400).json({ success: false, message: 'Both artist and track params are required' });
+  }
+
+  const cacheKey = `track_similar_${artist.toLowerCase()}_${track.toLowerCase()}_${limit}`;
+  const cached = getCached(cacheKey);
+  if (cached) return res.json({ success: true, cached: true, ...cached });
+
+  try {
+    const url = buildLastfmUrl('track.getSimilar', { artist, track, limit: String(limit) });
+    const response = await fetch(url);
+    if (!response.ok) throw new Error(`Last.fm returned HTTP ${response.status}`);
+
+    const data = await response.json();
+    const rawTracks = data?.similartracks?.track || [];
+    const tracks = (Array.isArray(rawTracks) ? rawTracks : [rawTracks]).map(t => ({
+      title: t.name,
+      artist: t.artist?.name || '',
+      match: parseFloat(t.match || '0'),
+      duration: parseInt(t.duration || '0'),
+      playcount: parseInt(t.playcount || '0'),
+      image: extractLastfmImage(t.image),
+      url: t.url
+    }));
+
+    const payload = { tracks };
+    setCached(cacheKey, payload);
+    return res.json({ success: true, ...payload });
+  } catch (error) {
+    console.error(`Last.fm track similar error:`, error.message);
+    return res.status(500).json({ success: false, message: 'Could not fetch similar tracks' });
+  }
+});
+
+// 4c. Get Album Information & Summary (Wiki, Release Date, Tracklist)
+app.get('/api/lastfm/album/info', async (req, res) => {
+  const artist = req.query.artist?.trim();
+  const album = req.query.album?.trim();
+  if (!artist || !album) {
+    return res.status(400).json({ success: false, message: 'Both artist and album params are required' });
+  }
+
+  const cacheKey = `album_${artist.toLowerCase()}_${album.toLowerCase()}`;
+  const cached = getCached(cacheKey);
+  if (cached) return res.json({ success: true, cached: true, ...cached });
+
+  try {
+    const url = buildLastfmUrl('album.getInfo', { artist, album });
+    const response = await fetch(url);
+    if (!response.ok) throw new Error(`Last.fm returned HTTP ${response.status}`);
+
+    const data = await response.json();
+    const alb = data?.album;
+    if (!alb) return res.status(404).json({ success: false, message: 'Album not found' });
+
+    const rawTracks = alb.tracks?.track || [];
+    const tracks = (Array.isArray(rawTracks) ? rawTracks : [rawTracks]).map(t => ({
+      title: t.name,
+      duration: parseInt(t.duration || '0'),
+      rank: parseInt(t['@attr']?.rank || '0'),
+      url: t.url
+    }));
+
+    const payload = {
+      album: {
+        title: alb.name,
+        artist: alb.artist,
+        listeners: parseInt(alb.listeners || '0'),
+        playcount: parseInt(alb.playcount || '0'),
+        image: extractLastfmImage(alb.image),
+        releasedate: alb.wiki?.published || '',
+        summary: stripHtml(alb.wiki?.summary || ''),
+        tags: Array.isArray(alb.tags?.tag) ? alb.tags.tag.map(tag => tag.name) : [],
+        tracks,
+        url: alb.url
+      }
+    };
+
+    setCached(cacheKey, payload);
+    return res.json({ success: true, ...payload });
+  } catch (error) {
+    console.error(`Last.fm album info error:`, error.message);
+    return res.status(500).json({ success: false, message: 'Could not fetch album info' });
+  }
+});
+
 // 5. Global Charts: Top Artists
 app.get('/api/lastfm/chart/top-artists', async (req, res) => {
   const limit = parseInt(req.query.limit) || 20;
