@@ -683,6 +683,332 @@ app.get(['/', '/admin'], async (req, res) => {
   res.send(html);
 });
 
+// ═════════════════════════════════════════════════════════════════════
+//  LAST.FM METADATA API PROXY & CACHE SYSTEM
+// ═════════════════════════════════════════════════════════════════════
+
+const LASTFM_API_KEY = process.env.LASTFM_API_KEY || 'b25b959554ed76058ac220b7b2e0a026';
+const LASTFM_BASE_URL = 'https://ws.audioscrobbler.com/2.0';
+
+// In-Memory TTL Cache (15-minute expiration)
+const lastfmCache = new Map();
+const CACHE_TTL_MS = 15 * 60 * 1000;
+
+function getCached(key) {
+  const item = lastfmCache.get(key);
+  if (!item) return null;
+  if (Date.now() > item.expiry) {
+    lastfmCache.delete(key);
+    return null;
+  }
+  return item.data;
+}
+
+function setCached(key, data) {
+  if (lastfmCache.size > 1000) {
+    const firstKey = lastfmCache.keys().next().value;
+    lastfmCache.delete(firstKey);
+  }
+  lastfmCache.set(key, { data, expiry: Date.now() + CACHE_TTL_MS });
+}
+
+function buildLastfmUrl(method, params = {}) {
+  const p = new URLSearchParams({
+    method,
+    api_key: LASTFM_API_KEY,
+    format: 'json',
+    autocorrect: '1',
+    ...params
+  });
+  return `${LASTFM_BASE_URL}/?${p.toString()}`;
+}
+
+function stripHtml(html) {
+  if (!html) return '';
+  return html
+    .replace(/<[^>]*>/g, '')
+    .replace(/&amp;/g, '&')
+    .replace(/&lt;/g, '<')
+    .replace(/&gt;/g, '>')
+    .replace(/&quot;/g, '"')
+    .replace(/&#039;/g, "'")
+    .trim()
+    .split('Read more')[0]
+    .trim();
+}
+
+function extractLastfmImage(images) {
+  if (!Array.isArray(images)) return '';
+  const mega = images.find(i => i.size === 'mega')?.['#text'];
+  const xl = images.find(i => i.size === 'extralarge')?.['#text'];
+  const lg = images.find(i => i.size === 'large')?.['#text'];
+  const med = images.find(i => i.size === 'medium')?.['#text'];
+  return mega || xl || lg || med || '';
+}
+
+// 1. Get Artist Information (Bio, Listeners, Playcount, Tags, Image)
+app.get('/api/lastfm/artist/:name', async (req, res) => {
+  const artistName = req.params.name?.trim();
+  if (!artistName) {
+    return res.status(400).json({ success: false, message: 'Artist name is required' });
+  }
+
+  const cacheKey = `artist_${artistName.toLowerCase()}`;
+  const cached = getCached(cacheKey);
+  if (cached) return res.json({ success: true, cached: true, ...cached });
+
+  try {
+    const url = buildLastfmUrl('artist.getInfo', { artist: artistName });
+    const response = await fetch(url);
+    if (!response.ok) throw new Error(`Last.fm returned HTTP ${response.status}`);
+    
+    const data = await response.json();
+    const a = data?.artist;
+    if (!a) {
+      return res.status(404).json({ success: false, message: 'Artist not found' });
+    }
+
+    const payload = {
+      artist: {
+        id: `lastfm_${a.mbid || encodeURIComponent(a.name)}`,
+        name: a.name,
+        image: extractLastfmImage(a.image),
+        listeners: parseInt(a.stats?.listeners || '0'),
+        playcount: parseInt(a.stats?.playcount || '0'),
+        bio: stripHtml(a.bio?.summary || ''),
+        tags: Array.isArray(a.tags?.tag) ? a.tags.tag.map(t => t.name) : [],
+        similar: Array.isArray(a.similar?.artist) ? a.similar.artist.map(s => ({
+          name: s.name,
+          url: s.url,
+          image: extractLastfmImage(s.image)
+        })) : [],
+        url: a.url
+      }
+    };
+
+    setCached(cacheKey, payload);
+    return res.json({ success: true, ...payload });
+  } catch (error) {
+    console.error(`Last.fm artist error for "${artistName}":`, error.message);
+    return res.status(500).json({ success: false, message: 'Could not fetch artist from Last.fm' });
+  }
+});
+
+// 2. Get Similar Artists
+app.get('/api/lastfm/artist/:name/similar', async (req, res) => {
+  const artistName = req.params.name?.trim();
+  const limit = parseInt(req.query.limit) || 12;
+  if (!artistName) {
+    return res.status(400).json({ success: false, message: 'Artist name is required' });
+  }
+
+  const cacheKey = `similar_${artistName.toLowerCase()}_${limit}`;
+  const cached = getCached(cacheKey);
+  if (cached) return res.json({ success: true, cached: true, ...cached });
+
+  try {
+    const url = buildLastfmUrl('artist.getSimilar', { artist: artistName, limit: String(limit) });
+    const response = await fetch(url);
+    if (!response.ok) throw new Error(`Last.fm returned HTTP ${response.status}`);
+
+    const data = await response.json();
+    const rawArtists = data?.similarartists?.artist || [];
+    const artists = (Array.isArray(rawArtists) ? rawArtists : [rawArtists]).map(a => ({
+      name: a.name,
+      match: parseFloat(a.match || '0'),
+      image: extractLastfmImage(a.image),
+      url: a.url
+    }));
+
+    const payload = { artists };
+    setCached(cacheKey, payload);
+    return res.json({ success: true, ...payload });
+  } catch (error) {
+    console.error(`Last.fm similar error for "${artistName}":`, error.message);
+    return res.status(500).json({ success: false, message: 'Could not fetch similar artists' });
+  }
+});
+
+// 3. Get Artist Top Tracks
+app.get('/api/lastfm/artist/:name/top-tracks', async (req, res) => {
+  const artistName = req.params.name?.trim();
+  const limit = parseInt(req.query.limit) || 20;
+  if (!artistName) {
+    return res.status(400).json({ success: false, message: 'Artist name is required' });
+  }
+
+  const cacheKey = `toptracks_${artistName.toLowerCase()}_${limit}`;
+  const cached = getCached(cacheKey);
+  if (cached) return res.json({ success: true, cached: true, ...cached });
+
+  try {
+    const url = buildLastfmUrl('artist.getTopTracks', { artist: artistName, limit: String(limit) });
+    const response = await fetch(url);
+    if (!response.ok) throw new Error(`Last.fm returned HTTP ${response.status}`);
+
+    const data = await response.json();
+    const rawTracks = data?.toptracks?.track || [];
+    const tracks = (Array.isArray(rawTracks) ? rawTracks : [rawTracks]).map(t => ({
+      title: t.name,
+      artist: t.artist?.name || artistName,
+      listeners: parseInt(t.listeners || '0'),
+      playcount: parseInt(t.playcount || '0'),
+      image: extractLastfmImage(t.image),
+      url: t.url
+    }));
+
+    const payload = { tracks };
+    setCached(cacheKey, payload);
+    return res.json({ success: true, ...payload });
+  } catch (error) {
+    console.error(`Last.fm top tracks error for "${artistName}":`, error.message);
+    return res.status(500).json({ success: false, message: 'Could not fetch artist top tracks' });
+  }
+});
+
+// 4. Get Track Information (Album, Duration, Summary, Tags)
+app.get('/api/lastfm/track/info', async (req, res) => {
+  const artist = req.query.artist?.trim();
+  const track = req.query.track?.trim();
+  if (!artist || !track) {
+    return res.status(400).json({ success: false, message: 'Both artist and track params are required' });
+  }
+
+  const cacheKey = `track_${artist.toLowerCase()}_${track.toLowerCase()}`;
+  const cached = getCached(cacheKey);
+  if (cached) return res.json({ success: true, cached: true, ...cached });
+
+  try {
+    const url = buildLastfmUrl('track.getInfo', { artist, track });
+    const response = await fetch(url);
+    if (!response.ok) throw new Error(`Last.fm returned HTTP ${response.status}`);
+
+    const data = await response.json();
+    const t = data?.track;
+    if (!t) return res.status(404).json({ success: false, message: 'Track not found' });
+
+    const payload = {
+      track: {
+        title: t.name,
+        artist: t.artist?.name || artist,
+        album: t.album?.title || '',
+        image: extractLastfmImage(t.album?.image),
+        duration: parseInt(t.duration || '0') / 1000, // seconds
+        listeners: parseInt(t.listeners || '0'),
+        playcount: parseInt(t.playcount || '0'),
+        summary: stripHtml(t.wiki?.summary || ''),
+        tags: Array.isArray(t.toptags?.tag) ? t.toptags.tag.map(tag => tag.name) : [],
+        url: t.url
+      }
+    };
+
+    setCached(cacheKey, payload);
+    return res.json({ success: true, ...payload });
+  } catch (error) {
+    console.error(`Last.fm track info error:`, error.message);
+    return res.status(500).json({ success: false, message: 'Could not fetch track info' });
+  }
+});
+
+// 5. Global Charts: Top Artists
+app.get('/api/lastfm/chart/top-artists', async (req, res) => {
+  const limit = parseInt(req.query.limit) || 20;
+  const cacheKey = `chart_top_artists_${limit}`;
+  const cached = getCached(cacheKey);
+  if (cached) return res.json({ success: true, cached: true, ...cached });
+
+  try {
+    const url = buildLastfmUrl('chart.getTopArtists', { limit: String(limit) });
+    const response = await fetch(url);
+    if (!response.ok) throw new Error(`Last.fm returned HTTP ${response.status}`);
+
+    const data = await response.json();
+    const rawArtists = data?.artists?.artist || [];
+    const artists = (Array.isArray(rawArtists) ? rawArtists : [rawArtists]).map(a => ({
+      name: a.name,
+      listeners: parseInt(a.listeners || '0'),
+      playcount: parseInt(a.playcount || '0'),
+      image: extractLastfmImage(a.image),
+      url: a.url
+    }));
+
+    const payload = { artists };
+    setCached(cacheKey, payload);
+    return res.json({ success: true, ...payload });
+  } catch (error) {
+    console.error('Last.fm chart top artists error:', error.message);
+    return res.status(500).json({ success: false, message: 'Could not fetch top artists chart' });
+  }
+});
+
+// 6. Global Charts: Top Tracks
+app.get('/api/lastfm/chart/top-tracks', async (req, res) => {
+  const limit = parseInt(req.query.limit) || 20;
+  const cacheKey = `chart_top_tracks_${limit}`;
+  const cached = getCached(cacheKey);
+  if (cached) return res.json({ success: true, cached: true, ...cached });
+
+  try {
+    const url = buildLastfmUrl('chart.getTopTracks', { limit: String(limit) });
+    const response = await fetch(url);
+    if (!response.ok) throw new Error(`Last.fm returned HTTP ${response.status}`);
+
+    const data = await response.json();
+    const rawTracks = data?.tracks?.track || [];
+    const tracks = (Array.isArray(rawTracks) ? rawTracks : [rawTracks]).map(t => ({
+      title: t.name,
+      artist: t.artist?.name || '',
+      listeners: parseInt(t.listeners || '0'),
+      playcount: parseInt(t.playcount || '0'),
+      image: extractLastfmImage(t.image),
+      url: t.url
+    }));
+
+    const payload = { tracks };
+    setCached(cacheKey, payload);
+    return res.json({ success: true, ...payload });
+  } catch (error) {
+    console.error('Last.fm chart top tracks error:', error.message);
+    return res.status(500).json({ success: false, message: 'Could not fetch top tracks chart' });
+  }
+});
+
+// 7. Genre / Tag Top Tracks
+app.get('/api/lastfm/tag/:tag/top-tracks', async (req, res) => {
+  const tag = req.params.tag?.trim();
+  const limit = parseInt(req.query.limit) || 20;
+  if (!tag) {
+    return res.status(400).json({ success: false, message: 'Tag name is required' });
+  }
+
+  const cacheKey = `tag_toptracks_${tag.toLowerCase()}_${limit}`;
+  const cached = getCached(cacheKey);
+  if (cached) return res.json({ success: true, cached: true, ...cached });
+
+  try {
+    const url = buildLastfmUrl('tag.getTopTracks', { tag, limit: String(limit) });
+    const response = await fetch(url);
+    if (!response.ok) throw new Error(`Last.fm returned HTTP ${response.status}`);
+
+    const data = await response.json();
+    const rawTracks = data?.tracks?.track || [];
+    const tracks = (Array.isArray(rawTracks) ? rawTracks : [rawTracks]).map(t => ({
+      title: t.name,
+      artist: t.artist?.name || '',
+      rank: parseInt(t['@attr']?.rank || '0'),
+      image: extractLastfmImage(t.image),
+      url: t.url
+    }));
+
+    const payload = { tag, tracks };
+    setCached(cacheKey, payload);
+    return res.json({ success: true, ...payload });
+  } catch (error) {
+    console.error(`Last.fm tag top tracks error for "${tag}":`, error.message);
+    return res.status(500).json({ success: false, message: 'Could not fetch tag top tracks' });
+  }
+});
+
 // Helper: Semantic Version Comparator
 function compareVersions(v1, v2) {
   const p1 = (v1 || '0').split('.').map(Number);
