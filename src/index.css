@@ -1,4 +1,4 @@
-@import url('https://fonts.googleapis.com/css2?family=Anton&family=Bebas+Neue&family=Oswald:wght@500;600;700;800&family=Poppins:wght@300;400;500;600;700&family=Righteous&display=swap');
+@import url('https://fonts.googleapis.com/css2?family=Alfa+Slab+One&family=Ultra&family=Anton&family=Bebas+Neue&family=Oswald:wght@500;600;700;800&family=Poppins:wght@300;400;500;600;700&family=Righteous&display=swap');
 
 /* ═══════════════════════════════════════════
    SOUNDWAVE — Design Token System
@@ -44,7 +44,8 @@
 
   /* ── Typography ── */
   --font-display: 'Righteous', sans-serif;
-  --font-lyrics: 'Bebas Neue', 'Anton', 'Oswald', Impact, sans-serif;
+  --font-lyrics: 'Alfa Slab One', 'Ultra', 'Bebas Neue', 'Anton', 'Oswald', Impact, serif;
+  --font-bollywood: 'Alfa Slab One', 'Ultra', 'Impact', serif;
   --font-body: 'Poppins', sans-serif;
 
   /* ── Font Sizes ── */
@@ -444,37 +445,51 @@ body {
   100% { opacity: 1; }
 }
 
-/* ─── Heavy Condensed Display Lyrics System ─── */
+/* ─── Bollywood Poster Word-by-Word Assemble Lyrics System ─── */
 
-@keyframes lyricEntrance {
+@keyframes bollywoodDropInTop {
   0% {
     opacity: 0;
-    transform: translateY(24px) scale(0.94);
+    transform: translate3d(0, -50px, 0) rotate(-6deg) scale(1.15);
+  }
+  70% {
+    opacity: 1;
+    transform: translate3d(0, 4px, 0) rotate(1deg) scale(0.98);
   }
   100% {
     opacity: 1;
-    transform: translateY(0) scale(1);
+    transform: translate3d(0, 0, 0) rotate(0deg) scale(1);
   }
 }
 
-.lyric-line-active {
-  font-family: var(--font-lyrics);
-  text-transform: uppercase;
-  letter-spacing: 0.025em;
-  font-weight: 800;
-  line-height: 1.15;
-  color: var(--color-text-primary);
-  text-shadow: 0 4px 28px rgba(245, 158, 11, 0.4), 0 0 16px rgba(255, 255, 255, 0.15);
-  animation: lyricEntrance 380ms cubic-bezier(0.16, 1, 0.3, 1) forwards;
+@keyframes bollywoodRiseInBottom {
+  0% {
+    opacity: 0;
+    transform: translate3d(0, 50px, 0) rotate(6deg) scale(1.15);
+  }
+  70% {
+    opacity: 1;
+    transform: translate3d(0, -4px, 0) rotate(-1deg) scale(0.98);
+  }
+  100% {
+    opacity: 1;
+    transform: translate3d(0, 0, 0) rotate(0deg) scale(1);
+  }
 }
 
-.lyric-line-inactive {
-  font-family: var(--font-lyrics);
-  text-transform: uppercase;
-  letter-spacing: 0.025em;
-  font-weight: 700;
-  line-height: 1.2;
-  color: var(--color-text-secondary);
-  opacity: 0.28;
-  transition: all 400ms cubic-bezier(0.16, 1, 0.3, 1);
+@keyframes bollywoodLineAssemblePop {
+  0% {
+    transform: scale(0.98);
+  }
+  50% {
+    transform: scale(1.025);
+    filter: drop-shadow(0 0 14px rgba(178, 34, 34, 0.45));
+  }
+  100% {
+    transform: scale(1);
+  }
+}
+
+.bollywood-line-active-pulse {
+  animation: bollywoodLineAssemblePop 350ms cubic-bezier(0.34, 1.56, 0.64, 1) forwards;
 }
