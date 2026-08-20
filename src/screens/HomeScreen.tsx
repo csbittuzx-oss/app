@@ -439,57 +439,68 @@ export function HomeScreen({ isVisible = true }: { isVisible?: boolean }) {
           justifyContent: 'space-between',
         }}
       >
-        <div>
-          <p
+        <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
+          <img
+            src="/logo.png"
+            alt="Soundwave Logo"
+            width={40}
+            height={40}
             style={{
-              margin: 0,
-              fontSize: 'var(--text-xs, 12px)',
-              color: 'var(--color-text-secondary)',
-              fontWeight: 500,
+              borderRadius: 'var(--radius-md, 10px)',
+              objectFit: 'cover',
+              border: '1px solid var(--color-border)',
             }}
-          >
-            {greeting}
-          </p>
-          <h1
-            style={{
-              margin: 0,
-              fontFamily: 'var(--font-display)',
-              fontSize: 'var(--text-xl, 22px)',
-              color: 'var(--color-text-primary)',
-              lineHeight: 1.2,
-              fontWeight: 800,
-            }}
-          >
-            Soundwave
-          </h1>
+          />
+          <div>
+            <p
+              style={{
+                margin: 0,
+                fontSize: 'var(--text-xs, 12px)',
+                color: 'var(--color-text-secondary)',
+                fontWeight: 500,
+              }}
+            >
+              {greeting}
+            </p>
+            <h1
+              style={{
+                margin: 0,
+                fontFamily: 'var(--font-display)',
+                fontSize: 'var(--text-xl, 22px)',
+                color: 'var(--color-text-primary)',
+                lineHeight: 1.2,
+                fontWeight: 800,
+              }}
+            >
+              Soundwave
+            </h1>
+          </div>
         </div>
 
-        <button
-          onClick={() => navigate('search')}
-          className="btn-icon"
-          aria-label="Search"
-          style={{
-            width: 40,
-            height: 40,
-            borderRadius: '50%',
-            background: 'var(--color-surface)',
-            border: '1px solid var(--color-border)',
-            display: 'flex',
-            alignItems: 'center',
-            justifyContent: 'center',
-            color: 'var(--color-text-primary)',
-            cursor: 'pointer',
-            boxShadow: 'var(--shadow-sm)',
-            transition: 'transform 150ms var(--ease-spring)',
-          }}
-          onMouseDown={(e) => { (e.currentTarget as HTMLButtonElement).style.transform = 'scale(0.92)'; }}
-          onMouseUp={(e) => { (e.currentTarget as HTMLButtonElement).style.transform = 'scale(1)'; }}
-        >
-          <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round">
-            <circle cx="11" cy="11" r="8" />
-            <line x1="21" y1="21" x2="16.65" y2="16.65" />
-          </svg>
-        </button>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+          <button
+            onClick={() => navigate('search')}
+            className="btn-icon"
+            aria-label="Search"
+            style={{
+              width: 40,
+              height: 40,
+              borderRadius: '50%',
+              background: 'var(--color-surface)',
+              border: '1px solid var(--color-border)',
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+              color: 'var(--color-text-primary)',
+              cursor: 'pointer',
+            }}
+          >
+            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round">
+              <circle cx="11" cy="11" r="8" />
+              <line x1="21" y1="21" x2="16.65" y2="16.65" />
+            </svg>
+          </button>
+        </div>
       </header>
 
       {/* ═════════════════════════════════════════════════════════════════════
