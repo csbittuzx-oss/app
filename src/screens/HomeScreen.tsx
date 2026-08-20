@@ -13,11 +13,6 @@
 //  8️⃣ Based on your recent listening
 //  9️⃣ More like [artist name]
 //  🔟 Albums featuring songs you like
-//
-//  Personalization & Adaptation Engine:
-//  • Prioritizes onboarding language/genre selections first
-//  • Real-time listening history tracking (plays, skips, completions, likes)
-//  • Dynamic section re-ordering and content shifting as user taste evolves
 // =============================================================================
 
 import React, { useEffect, useState, useMemo, useCallback, useRef, useLayoutEffect } from 'react';
@@ -211,12 +206,10 @@ export function HomeScreen({ isVisible = true }: { isVisible?: boolean }) {
   const dynamicLanguages = useMemo(() => {
     const langScores: Record<string, number> = {};
 
-    // 1. Onboarding baseline
     onboardingLanguages.forEach((lang) => {
       langScores[lang] = 50;
     });
 
-    // 2. Score recently played tracks
     const recents = appState.recentlyPlayed || [];
     recents.forEach((song, idx) => {
       const ctx = classifySongContext(song);
@@ -224,7 +217,6 @@ export function HomeScreen({ isVisible = true }: { isVisible?: boolean }) {
       langScores[ctx.language] = (langScores[ctx.language] || 0) + weight;
     });
 
-    // 3. Score favorites
     const favs = appState.favorites || [];
     favs.forEach((song) => {
       const ctx = classifySongContext(song);
@@ -277,7 +269,6 @@ export function HomeScreen({ isVisible = true }: { isVisible?: boolean }) {
   const [moreLikeArtistData, setMoreLikeArtistData] = useState<{ artistName: string; songs: Song[] } | null>(null);
   const [albumsFeaturingLiked, setAlbumsFeaturingLiked] = useState<Album[]>([]);
 
-  // User's top artist from listening intelligence
   const topArtistName = useMemo(() => {
     const profileArtists = userProfileTracker.getTopArtists(3);
     if (profileArtists && profileArtists.length > 0) return profileArtists[0];
@@ -292,7 +283,6 @@ export function HomeScreen({ isVisible = true }: { isVisible?: boolean }) {
       : 'Arijit Singh';
   }, [appState.recentlyPlayed.length, appState.favorites.length, primaryLanguage]);
 
-  // Long-press Haptic Handler
   const triggerLongPress = useCallback((song: Song) => {
     if ('vibrate' in navigator) {
       try { navigator.vibrate(30); } catch {}
@@ -334,14 +324,14 @@ export function HomeScreen({ isVisible = true }: { isVisible?: boolean }) {
     const favorites = appState.favorites || [];
     const recentlyPlayed = appState.recentlyPlayed || [];
 
-    // ── SECTION 1: JUMP BACK IN ──
+    // SECTION 1: JUMP BACK IN
     const localJump = deduplicateSongs([
       ...recentlyPlayed.slice(0, 10),
       ...favorites.slice(0, 10),
     ]);
     setJumpBackInTracks(localJump);
 
-    // ── SECTION 10: ALBUMS FEATURING SONGS YOU LIKE ──
+    // SECTION 10: ALBUMS FEATURING SONGS YOU LIKE
     const albumMap = new Map<string, Album>();
     [...favorites, ...recentlyPlayed].forEach((s) => {
       if (s.album && !albumMap.has(s.album)) {
@@ -357,11 +347,9 @@ export function HomeScreen({ isVisible = true }: { isVisible?: boolean }) {
     });
     setAlbumsFeaturingLiked(Array.from(albumMap.values()).slice(0, 12));
 
-    // ── ASYNC NETWORK PIPELINE ──
     if (!navigator.onLine) return;
 
     try {
-      // ── SECTION 2: YOUR TOP MIXES & SECTION 4: MADE FOR YOU ──
       generateSpotifyStyleShelves({
         languages: dynamicLanguages,
         favorites,
@@ -386,7 +374,6 @@ export function HomeScreen({ isVisible = true }: { isVisible?: boolean }) {
         })
         .catch(() => {});
 
-      // ── SECTION 5: CHARTS ──
       getPersonalizedTrending(dynamicLanguages, 20)
         .then((tracks) => {
           if (tracks && tracks.length > 0) {
@@ -395,7 +382,6 @@ export function HomeScreen({ isVisible = true }: { isVisible?: boolean }) {
         })
         .catch(() => {});
 
-      // ── SECTION 6: NEW RELEASES FOR YOU ──
       getPersonalizedNewReleases(dynamicLanguages, 16)
         .then((tracks) => {
           if (tracks && tracks.length > 0) {
@@ -404,7 +390,6 @@ export function HomeScreen({ isVisible = true }: { isVisible?: boolean }) {
         })
         .catch(() => {});
 
-      // ── SECTION 7: RECOMMENDED FOR TODAY ──
       getDailyRecommendations(dynamicLanguages, [topArtistName], 16)
         .then((tracks) => {
           if (tracks && tracks.length > 0) {
@@ -413,7 +398,6 @@ export function HomeScreen({ isVisible = true }: { isVisible?: boolean }) {
         })
         .catch(() => {});
 
-      // ── SECTION 8: BASED ON YOUR RECENT LISTENING ──
       if (recentlyPlayed.length > 0 || favorites.length > 0) {
         smartRecommendationEngine
           .getBecauseYouListenedTo({
@@ -432,7 +416,6 @@ export function HomeScreen({ isVisible = true }: { isVisible?: boolean }) {
           .catch(() => {});
       }
 
-      // ── SECTION 9: MORE LIKE [ARTIST NAME] ──
       if (topArtistName) {
         searchJioSaavn(`${topArtistName} songs`, 15)
           .then((res) => {
@@ -474,15 +457,17 @@ export function HomeScreen({ isVisible = true }: { isVisible?: boolean }) {
         overflowY: 'auto',
         overflowX: 'hidden',
         WebkitOverflowScrolling: 'touch',
+        background: 'var(--color-bg)',
       }}
     >
-      {/* ── App Top Header (Preserved Exactly) ── */}
+      {/* ── App Top Header ── */}
       <header
         style={{
           padding: '20px 20px 12px',
           display: 'flex',
           alignItems: 'center',
           justifyContent: 'space-between',
+          background: 'var(--color-bg)',
         }}
       >
         <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
@@ -572,34 +557,17 @@ export function HomeScreen({ isVisible = true }: { isVisible?: boolean }) {
               alignItems: 'center',
               gap: 12,
               padding: '12px 14px',
-              background: 'linear-gradient(135deg, var(--color-surface) 0%, var(--color-surface-2, rgba(255,255,255,0.05)) 100%)',
+              background: 'var(--color-surface)',
               border: isContinueActive ? '1.5px solid var(--color-accent)' : '1px solid var(--color-border)',
               borderRadius: 'var(--radius-lg, 16px)',
               cursor: 'pointer',
               position: 'relative',
-              overflow: 'hidden',
-              boxShadow: '0 4px 16px rgba(0, 0, 0, 0.25)',
+              boxShadow: 'var(--shadow-sm)',
               transition: 'transform 120ms ease, border-color 150ms ease',
             }}
             onMouseDown={(e) => (e.currentTarget.style.transform = 'scale(0.985)')}
             onMouseUp={(e) => (e.currentTarget.style.transform = 'scale(1)')}
           >
-            {/* Ambient artwork backdrop glow */}
-            <div
-              style={{
-                position: 'absolute',
-                top: 0,
-                right: 0,
-                width: '50%',
-                height: '100%',
-                backgroundImage: `url(${resizeImageUrl(continueListeningSong.artwork, 160, 160)})`,
-                backgroundSize: 'cover',
-                backgroundPosition: 'center',
-                filter: 'blur(32px) opacity(0.18)',
-                pointerEvents: 'none',
-              }}
-            />
-
             {/* Album Artwork */}
             <div style={{ position: 'relative', flexShrink: 0 }}>
               <img
@@ -611,7 +579,7 @@ export function HomeScreen({ isVisible = true }: { isVisible?: boolean }) {
                   borderRadius: 'var(--radius-md, 10px)',
                   objectFit: 'cover',
                   display: 'block',
-                  boxShadow: '0 2px 8px rgba(0,0,0,0.3)',
+                  border: '1px solid var(--color-border)',
                 }}
                 onError={(e) => {
                   (e.target as HTMLImageElement).src = CONFIG.ARTWORK_PLACEHOLDER;
@@ -657,7 +625,7 @@ export function HomeScreen({ isVisible = true }: { isVisible?: boolean }) {
                     flex: 1,
                     height: 3.5,
                     borderRadius: 2,
-                    background: 'rgba(255, 255, 255, 0.12)',
+                    background: 'var(--color-border)',
                     overflow: 'hidden',
                   }}
                 >
@@ -689,8 +657,8 @@ export function HomeScreen({ isVisible = true }: { isVisible?: boolean }) {
                 }
               }}
               style={{
-                width: 42,
-                height: 42,
+                width: 40,
+                height: 40,
                 borderRadius: '50%',
                 background: 'var(--color-accent)',
                 color: '#FFFFFF',
@@ -698,7 +666,7 @@ export function HomeScreen({ isVisible = true }: { isVisible?: boolean }) {
                 alignItems: 'center',
                 justifyContent: 'center',
                 flexShrink: 0,
-                boxShadow: '0 4px 12px rgba(249, 115, 22, 0.4)',
+                boxShadow: 'var(--shadow-sm)',
                 cursor: 'pointer',
                 marginLeft: 4,
               }}
@@ -750,6 +718,7 @@ export function HomeScreen({ isVisible = true }: { isVisible?: boolean }) {
                       cursor: 'pointer',
                       overflow: 'hidden',
                       minHeight: 48,
+                      boxShadow: 'var(--shadow-sm)',
                       transition: 'transform 120ms ease, background 150ms ease',
                     }}
                     onMouseDown={(e) => (e.currentTarget.style.transform = 'scale(0.97)')}
@@ -812,7 +781,6 @@ export function HomeScreen({ isVisible = true }: { isVisible?: boolean }) {
 
       {/* ═════════════════════════════════════════════════════════════════════
           1️⃣ SECTION: JUMP BACK IN
-          Horizontal scrolling carousel with proper edge spacing & contrast
       ═════════════════════════════════════════════════════════════════════ */}
       {jumpBackInTracks.length > 0 && (
         <section style={{ marginBottom: 8 }}>
@@ -867,7 +835,7 @@ export function HomeScreen({ isVisible = true }: { isVisible?: boolean }) {
                       border: isCurrent
                         ? '2px solid var(--color-accent)'
                         : '1px solid var(--color-border)',
-                      boxShadow: '0 6px 18px rgba(0, 0, 0, 0.35)',
+                      boxShadow: 'var(--shadow-sm)',
                     }}
                   >
                     <img
@@ -887,25 +855,16 @@ export function HomeScreen({ isVisible = true }: { isVisible?: boolean }) {
                     <div
                       style={{
                         position: 'absolute',
-                        inset: 0,
-                        background: 'linear-gradient(to top, rgba(0,0,0,0.7) 0%, transparent 50%)',
-                        pointerEvents: 'none',
-                      }}
-                    />
-
-                    <div
-                      style={{
-                        position: 'absolute',
                         right: 8,
                         bottom: 8,
                         width: 36,
                         height: 36,
                         borderRadius: '50%',
-                        background: isCurrent ? 'var(--color-accent)' : 'rgba(255, 255, 255, 0.88)',
+                        background: isCurrent ? 'var(--color-accent)' : 'rgba(255, 255, 255, 0.92)',
                         display: 'flex',
                         alignItems: 'center',
                         justifyContent: 'center',
-                        boxShadow: '0 4px 12px rgba(0, 0, 0, 0.35)',
+                        boxShadow: 'var(--shadow-md)',
                       }}
                     >
                       {isPlaying ? (
@@ -960,7 +919,6 @@ export function HomeScreen({ isVisible = true }: { isVisible?: boolean }) {
 
       {/* ═════════════════════════════════════════════════════════════════════
           2️⃣ SECTION: YOUR TOP MIXES
-          Spotify-style daily and genre mix capsules based on listening patterns
       ═════════════════════════════════════════════════════════════════════ */}
       {topMixPlaylists.length > 0 && (
         <section>
@@ -1006,7 +964,7 @@ export function HomeScreen({ isVisible = true }: { isVisible?: boolean }) {
                       position: 'relative',
                       background: 'var(--color-surface)',
                       border: '1px solid var(--color-border)',
-                      boxShadow: '0 6px 18px rgba(0, 0, 0, 0.35)',
+                      boxShadow: 'var(--shadow-sm)',
                     }}
                   >
                     <img
@@ -1015,15 +973,6 @@ export function HomeScreen({ isVisible = true }: { isVisible?: boolean }) {
                       style={{ width: '100%', height: '100%', objectFit: 'cover' }}
                       onError={(e) => {
                         (e.target as HTMLImageElement).src = CONFIG.ARTWORK_PLACEHOLDER;
-                      }}
-                    />
-
-                    <div
-                      style={{
-                        position: 'absolute',
-                        inset: 0,
-                        background: 'linear-gradient(to top, rgba(0,0,0,0.85) 0%, rgba(0,0,0,0.2) 50%, transparent 100%)',
-                        pointerEvents: 'none',
                       }}
                     />
 
@@ -1039,7 +988,7 @@ export function HomeScreen({ isVisible = true }: { isVisible?: boolean }) {
                         display: 'flex',
                         alignItems: 'center',
                         justifyContent: 'center',
-                        boxShadow: '0 4px 12px rgba(0, 0, 0, 0.4)',
+                        boxShadow: 'var(--shadow-md)',
                         color: '#FFFFFF',
                       }}
                     >
@@ -1083,7 +1032,6 @@ export function HomeScreen({ isVisible = true }: { isVisible?: boolean }) {
 
       {/* ═════════════════════════════════════════════════════════════════════
           3️⃣ SECTION: RECENTLY PLAYED
-          2-Row Horizontal Snapping Grid of recent tracks
       ═════════════════════════════════════════════════════════════════════ */}
       {appState.recentlyPlayed && appState.recentlyPlayed.length > 0 && (
         <section>
@@ -1132,6 +1080,7 @@ export function HomeScreen({ isVisible = true }: { isVisible?: boolean }) {
                     borderRadius: 'var(--radius-md, 10px)',
                     cursor: 'pointer',
                     overflow: 'hidden',
+                    boxShadow: 'var(--shadow-sm)',
                   }}
                 >
                   <img
@@ -1186,7 +1135,6 @@ export function HomeScreen({ isVisible = true }: { isVisible?: boolean }) {
 
       {/* ═════════════════════════════════════════════════════════════════════
           4️⃣ SECTION: MADE FOR YOU
-          AI-curated customized playlists and listening capsules
       ═════════════════════════════════════════════════════════════════════ */}
       {madeForYouPlaylists.length > 0 && (
         <section>
@@ -1233,7 +1181,7 @@ export function HomeScreen({ isVisible = true }: { isVisible?: boolean }) {
                       position: 'relative',
                       background: 'var(--color-surface)',
                       border: '1px solid var(--color-border)',
-                      boxShadow: '0 4px 16px rgba(0, 0, 0, 0.35)',
+                      boxShadow: 'var(--shadow-sm)',
                     }}
                   >
                     {thumbs.length >= 4 ? (
@@ -1277,7 +1225,7 @@ export function HomeScreen({ isVisible = true }: { isVisible?: boolean }) {
                         display: 'flex',
                         alignItems: 'center',
                         justifyContent: 'center',
-                        boxShadow: '0 4px 12px rgba(0, 0, 0, 0.4)',
+                        boxShadow: 'var(--shadow-md)',
                         color: '#FFFFFF',
                       }}
                     >
@@ -1321,7 +1269,6 @@ export function HomeScreen({ isVisible = true }: { isVisible?: boolean }) {
 
       {/* ═════════════════════════════════════════════════════════════════════
           5️⃣ SECTION: CHARTS
-          Top 100 / Trending Charts with numbered rankings & "Play All"
       ═════════════════════════════════════════════════════════════════════ */}
       {(chartsTracks.length > 0 || (ytViewModel.chartsPage?.topSongs && ytViewModel.chartsPage.topSongs.length > 0)) && (
         <section>
@@ -1374,6 +1321,7 @@ export function HomeScreen({ isVisible = true }: { isVisible?: boolean }) {
                       : '1px solid var(--color-border)',
                     borderRadius: 'var(--radius-md, 10px)',
                     cursor: 'pointer',
+                    boxShadow: 'var(--shadow-sm)',
                   }}
                 >
                   <span
@@ -1439,7 +1387,6 @@ export function HomeScreen({ isVisible = true }: { isVisible?: boolean }) {
 
       {/* ═════════════════════════════════════════════════════════════════════
           6️⃣ SECTION: NEW RELEASES FOR YOU
-          Freshly dropped songs & albums in user's favorite language
       ═════════════════════════════════════════════════════════════════════ */}
       {newReleasesList.length > 0 && (
         <section>
@@ -1484,7 +1431,6 @@ export function HomeScreen({ isVisible = true }: { isVisible?: boolean }) {
 
       {/* ═════════════════════════════════════════════════════════════════════
           7️⃣ SECTION: RECOMMENDED FOR TODAY
-          Contextual day-and-time personalized track picks
       ═════════════════════════════════════════════════════════════════════ */}
       {recommendedTodayTracks.length > 0 && (
         <section>
@@ -1529,7 +1475,6 @@ export function HomeScreen({ isVisible = true }: { isVisible?: boolean }) {
 
       {/* ═════════════════════════════════════════════════════════════════════
           8️⃣ SECTION: BASED ON YOUR RECENT LISTENING
-          Dynamic recommendations connected to a recent track/artist seed
       ═════════════════════════════════════════════════════════════════════ */}
       {basedOnRecentTracks && basedOnRecentTracks.songs.length > 0 && (
         <section>
@@ -1574,7 +1519,6 @@ export function HomeScreen({ isVisible = true }: { isVisible?: boolean }) {
 
       {/* ═════════════════════════════════════════════════════════════════════
           9️⃣ SECTION: MORE LIKE [ARTIST NAME]
-          Artist-specific recommendation shelf for the user's #1 favorite artist
       ═════════════════════════════════════════════════════════════════════ */}
       {moreLikeArtistData && moreLikeArtistData.songs.length > 0 && (
         <section>
@@ -1619,8 +1563,7 @@ export function HomeScreen({ isVisible = true }: { isVisible?: boolean }) {
 
       {/* ═════════════════════════════════════════════════════════════════════
           🔟 SECTION: ALBUMS FEATURING SONGS YOU LIKE
-          Full albums containing user's favorited / most-replayed songs
-      ═════════════════════════════════════════════ */}
+      ═════════════════════════════════════════════════════════════════════ */}
       {albumsFeaturingLiked.length > 0 && (
         <section style={{ marginBottom: 16 }}>
           <SectionHeader
@@ -1648,7 +1591,7 @@ export function HomeScreen({ isVisible = true }: { isVisible?: boolean }) {
         </section>
       )}
 
-      {/* ── Context Menu Bottom Sheet (Long Press on track) ── */}
+      {/* ── Context Menu Bottom Sheet ── */}
       {selectedSongForMenu && (
         <SongOptionsBottomSheet
           song={selectedSongForMenu}
