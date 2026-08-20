@@ -1,16 +1,22 @@
 // =============================================================================
-//  HomeScreen — Soundwave Android Music Streaming Home Interface
+//  HomeScreen — Soundwave Personalized Music Home Interface
 //
-//  Sections & Layout Hierarchy (in strict order):
-//  1️⃣ SPEED DIAL & SMART RANDOMIZER (Top Section - 3x3 Paged Grid + Shuffle)
-//  2️⃣ HERO "QUICK PICKS" CAROUSEL (Full-bleed 250x290dp cards + glass play + EqBars)
-//  3️⃣ "DAILY DISCOVER" CAROUSEL (5 seed songs + fresh matches + "Play All")
-//  4️⃣ "KEEP LISTENING" (Recent Favorites - 2-Row Horizontal Scrolling Grid)
-//  5️⃣ "FROM THE COMMUNITY" (160dp cards with 2x2 collage artwork)
-//  6️⃣ "FORGOTTEN FAVORITES" (4-Row Snapping Horizontal Grid + "Play All")
-//  7️⃣ "SIMILAR TO..." PERSONALIZED SHELVES (Dynamic top artist/album seeds)
-//  8️⃣ DYNAMIC YOUTUBE MUSIC & TRENDING SHELVES (Charts 4-Row + New Releases 1-Row)
-//  9️⃣ SHIMMER SKELETON LOADING (Animated placeholders during loading)
+//  Sections (Content Area):
+//  1️⃣ Jump back in
+//  2️⃣ Your top mixes
+//  3️⃣ Recently played
+//  4️⃣ Made for you
+//  5️⃣ Charts
+//  6️⃣ New releases for you
+//  7️⃣ Recommended for today
+//  8️⃣ Based on your recent listening
+//  9️⃣ More like [artist name]
+//  🔟 Albums featuring songs you like
+//
+//  Personalization & Adaptation Engine:
+//  • Prioritizes onboarding language/genre selections first
+//  • Real-time listening history tracking (plays, skips, completions, likes)
+//  • Dynamic section re-ordering and content shifting as user taste evolves
 // =============================================================================
 
 import React, { useEffect, useState, useMemo, useCallback, useRef, useLayoutEffect } from 'react';
@@ -18,21 +24,22 @@ import { useApp } from '../state/AppContext';
 import { usePlayer } from '../state/PlayerContext';
 import { useHomeViewModelAutoLoad } from '../domain/viewmodels/useHomeViewModel';
 import {
-  getPersonalizedRecommendForYou,
+  getPersonalizedTrending,
+  getPersonalizedNewReleases,
+  getDailyRecommendations,
   deduplicateSongs,
 } from '../data/repository/musicRepository';
 import { generateSpotifyStyleShelves } from '../services/CuratedPlaylistsService';
 import { userProfileTracker } from '../domain/recommendation/UserProfileTracker';
-import { smartRecommendationEngine } from '../domain/recommendation/SmartRecommendationEngine';
-import type { Song, Playlist } from '../data/models';
+import { smartRecommendationEngine, classifySongContext } from '../domain/recommendation/SmartRecommendationEngine';
+import type { Song, Playlist, Album } from '../data/models';
 import { SongSquareCard } from '../components/cards/SongCard';
-import { ArtistCard } from '../components/cards/ArtistCard';
 import { AlbumCard } from '../components/cards/AlbumCard';
 import { SongOptionsBottomSheet } from '../components/shared/SongOptionsBottomSheet';
 import { getGreeting } from '../core/utils';
 import { CONFIG } from '../config';
 import { resizeImageUrl } from '../core/utils/imageUtils';
-import { showToast } from '../core/utils/toast';
+import { searchJioSaavn } from '../data/api/saavnApi';
 
 // ── Persistent Scroll Memory across tab switches ────────────────────────────
 let persistentHomeScrollTop = 0;
@@ -55,28 +62,16 @@ function PlayIcon({ size = 16, color = 'currentColor' }: { size?: number; color?
   );
 }
 
-function ShuffleIcon({ size = 18, color = 'currentColor' }: { size?: number; color?: string }) {
-  return (
-    <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke={color} strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
-      <polyline points="16 3 21 3 21 8" />
-      <line x1="4" y1="20" x2="21" y2="3" />
-      <polyline points="21 16 21 21 16 21" />
-      <line x1="15" y1="15" x2="21" y2="21" />
-      <line x1="4" y1="4" x2="9" y2="9" />
-    </svg>
-  );
-}
-
 function EqBars() {
   return (
-    <div style={{ display: 'flex', alignItems: 'flex-end', gap: 2.5, height: 16, width: 14 }} aria-hidden="true">
+    <div style={{ display: 'flex', alignItems: 'flex-end', gap: 2.5, height: 14, width: 12 }} aria-hidden="true">
       {[0, 150, 80].map((delay, i) => (
         <div
           key={i}
           style={{
-            width: 3,
+            width: 2.5,
             background: 'var(--color-accent)',
-            borderRadius: 2,
+            borderRadius: 1.5,
             height: '100%',
             animation: `playEq 0.8s ease-in-out ${delay}ms infinite alternate`,
             transformOrigin: 'bottom',
@@ -84,23 +79,6 @@ function EqBars() {
         />
       ))}
     </div>
-  );
-}
-
-// ── Shimmer Skeleton Components ─────────────────────────────────────────────
-
-function SkeletonBox({ width, height, borderRadius = 'var(--radius-md)' }: { width: string | number; height: string | number; borderRadius?: string }) {
-  return (
-    <div
-      style={{
-        width,
-        height,
-        borderRadius,
-        background: 'linear-gradient(90deg, var(--color-surface) 25%, var(--color-surface-2, rgba(255,255,255,0.06)) 50%, var(--color-surface) 75%)',
-        backgroundSize: '200% 100%',
-        animation: 'skeletonShimmer 1.5s infinite ease-in-out',
-      }}
-    />
   );
 }
 
@@ -214,30 +192,79 @@ export function HomeScreen({ isVisible = true }: { isVisible?: boolean }) {
   const scrollRef = useRef<HTMLDivElement>(null);
   const isRestoringScroll = useRef<boolean>(false);
 
-  const languages = useMemo(() => {
+  // ── 1. User Preferences & Dynamic Language Adaptation ─────────────────────
+  // Baseline: Onboarding language selections
+  const onboardingLanguages = useMemo(() => {
     return appState.musicLanguages && appState.musicLanguages.length > 0
       ? appState.musicLanguages
       : ['Hindi', 'International'];
   }, [appState.musicLanguages]);
 
-  // Context Bottom Sheet state
+  // Compute live listening shifts from recent history (last 50 plays + favorites)
+  const dynamicLanguages = useMemo(() => {
+    const langScores: Record<string, number> = {};
+
+    // 1. Give strong initial baseline weight to user's onboarding choices
+    onboardingLanguages.forEach((lang) => {
+      langScores[lang] = 50;
+    });
+
+    // 2. Score recently played tracks (recent plays weighted 3x, 2x, 1x)
+    const recents = appState.recentlyPlayed || [];
+    recents.forEach((song, idx) => {
+      const ctx = classifySongContext(song);
+      const weight = idx < 10 ? 6 : idx < 25 ? 3 : 1;
+      langScores[ctx.language] = (langScores[ctx.language] || 0) + weight;
+    });
+
+    // 3. Score favorites
+    const favs = appState.favorites || [];
+    favs.forEach((song) => {
+      const ctx = classifySongContext(song);
+      langScores[ctx.language] = (langScores[ctx.language] || 0) + 4;
+    });
+
+    // Sort languages by highest total active affinity
+    const sorted = Object.entries(langScores)
+      .sort(([, a], [, b]) => b - a)
+      .map(([lang]) => lang);
+
+    return sorted.length > 0 ? sorted : onboardingLanguages;
+  }, [onboardingLanguages, appState.recentlyPlayed.length, appState.favorites.length]);
+
+  // Primary active language
+  const primaryLanguage = dynamicLanguages[0] || 'Hindi';
+
+  // Context Bottom Sheet state for long-press
   const [selectedSongForMenu, setSelectedSongForMenu] = useState<Song | null>(null);
 
-  // ── Phase 1 & 2 Local / Remote Data States ────────────────────────────────
-  const [quickPicks, setQuickPicks] = useState<Song[]>([]);
-  const [dailyDiscover, setDailyDiscover] = useState<Song[]>([]);
-  const [keepListening, setKeepListening] = useState<Song[]>([]);
-  const [forgottenFavorites, setForgottenFavorites] = useState<Song[]>([]);
-  const [similarShelves, setSimilarShelves] = useState<Array<{ title: string; subtitle: string; songs: Song[] }>>([]);
-  const [communityPlaylists, setCommunityPlaylists] = useState<Playlist[]>([]);
-  const [isLocalLoading, setIsLocalLoading] = useState(true);
+  // ── 2. Data States for the 10 Sections ─────────────────────────────────────
+  const [jumpBackInTracks, setJumpBackInTracks] = useState<Song[]>([]);
+  const [topMixPlaylists, setTopMixPlaylists] = useState<Playlist[]>([]);
+  const [madeForYouPlaylists, setMadeForYouPlaylists] = useState<Playlist[]>([]);
+  const [chartsTracks, setChartsTracks] = useState<Song[]>([]);
+  const [newReleasesList, setNewReleasesList] = useState<Song[]>([]);
+  const [recommendedTodayTracks, setRecommendedTodayTracks] = useState<Song[]>([]);
+  const [basedOnRecentTracks, setBasedOnRecentTracks] = useState<{ seedTitle: string; songs: Song[] } | null>(null);
+  const [moreLikeArtistData, setMoreLikeArtistData] = useState<{ artistName: string; songs: Song[] } | null>(null);
+  const [albumsFeaturingLiked, setAlbumsFeaturingLiked] = useState<Album[]>([]);
 
-  // Top artists from user profile tracker
-  const userTopArtists = useMemo(() => {
-    return userProfileTracker.getTopArtists(6);
-  }, [appState.recentlyPlayed.length, appState.favorites.length]);
+  // User's top artist from listening intelligence
+  const topArtistName = useMemo(() => {
+    const profileArtists = userProfileTracker.getTopArtists(3);
+    if (profileArtists && profileArtists.length > 0) return profileArtists[0];
+    if (appState.recentlyPlayed.length > 0) return appState.recentlyPlayed[0].artist;
+    if (appState.favorites.length > 0) return appState.favorites[0].artist;
+    return primaryLanguage === 'Punjabi'
+      ? 'Diljit Dosanjh'
+      : primaryLanguage === 'International'
+      ? 'The Weeknd'
+      : primaryLanguage === 'Bhojpuri'
+      ? 'Pawan Singh'
+      : 'Arijit Singh';
+  }, [appState.recentlyPlayed.length, appState.favorites.length, primaryLanguage]);
 
-  // ── Long-press Haptic Handler ─────────────────────────────────────────────
+  // Long-press Haptic Handler
   const triggerLongPress = useCallback((song: Song) => {
     if ('vibrate' in navigator) {
       try { navigator.vibrate(30); } catch {}
@@ -245,7 +272,7 @@ export function HomeScreen({ isVisible = true }: { isVisible?: boolean }) {
     setSelectedSongForMenu(song);
   }, []);
 
-  // ── Scroll Restoration (instant layout effect) ────────────────────────────
+  // ── 3. Scroll Memory Restoration ──────────────────────────────────────────
   const restoreScrollPosition = useCallback(() => {
     if (!scrollRef.current || persistentHomeScrollTop <= 0) return;
     const el = scrollRef.current;
@@ -274,148 +301,140 @@ export function HomeScreen({ isVisible = true }: { isVisible?: boolean }) {
     if (top >= 0) persistentHomeScrollTop = top;
   };
 
-  // ── 2-Phase Data Loading Engine ───────────────────────────────────────────
+  // ── 4. Comprehensive Section Data Pipeline ────────────────────────────────
   const loadHomePipeline = useCallback(async () => {
-    // PHASE 1: INSTANT LOCAL DATA LOADING (Zero Network Delay)
     const favorites = appState.favorites || [];
     const recentlyPlayed = appState.recentlyPlayed || [];
 
-    // 1. Speed Dial & Quick Picks (From favorites + recently played)
-    const localQuick = deduplicateSongs([...recentlyPlayed.slice(0, 10), ...favorites.slice(0, 10)]);
-    setQuickPicks(localQuick.length > 0 ? localQuick : []);
+    // ── SECTION 1: JUMP BACK IN ──
+    const localJump = deduplicateSongs([
+      ...recentlyPlayed.slice(0, 10),
+      ...favorites.slice(0, 10),
+    ]);
+    setJumpBackInTracks(localJump);
 
-    // 2. Keep Listening (Most played recently)
-    const localKeep = deduplicateSongs([...recentlyPlayed, ...favorites]).slice(0, 12);
-    setKeepListening(localKeep);
+    // ── SECTION 10: ALBUMS FEATURING SONGS YOU LIKE ──
+    const albumMap = new Map<string, Album>();
+    [...favorites, ...recentlyPlayed].forEach((s) => {
+      if (s.album && !albumMap.has(s.album)) {
+        albumMap.set(s.album, {
+          id: `album_${s.album.toLowerCase().replace(/\s+/g, '_')}`,
+          title: s.album,
+          artist: s.artist,
+          artwork: s.artworkLg || s.artwork,
+          provider: s.provider || 'saavn',
+          year: s.year || undefined,
+        });
+      }
+    });
+    setAlbumsFeaturingLiked(Array.from(albumMap.values()).slice(0, 12));
 
-    // 3. Forgotten Favorites (Items played earlier in history)
-    const recentIds = new Set(recentlyPlayed.slice(0, 6).map((s) => s.id));
-    const forgotten = favorites.filter((s) => !recentIds.has(s.id));
-    setForgottenFavorites(forgotten.length > 0 ? forgotten : favorites.slice(4, 16));
-
-    setIsLocalLoading(false);
-
-    // PHASE 2: PARALLEL NETWORK DATA LOADING
+    // ── ASYNC NETWORK PIPELINE ──
     if (!navigator.onLine) return;
 
     try {
-      // 1. Daily Discover: Seed from 5 random liked songs + smart recommendation engine
-      const discoverSeeds = favorites.length > 0 ? favorites : recentlyPlayed;
-      if (discoverSeeds.length > 0) {
-        smartRecommendationEngine
-          .getDiscoverSomethingNew(languages)
-          .then((tracks) => {
-            if (tracks && tracks.length > 0) {
-              setDailyDiscover(deduplicateSongs(tracks).slice(0, 15));
-            }
-          })
-          .catch(() => {});
-      } else {
-        getPersonalizedRecommendForYou(languages, recentlyPlayed, favorites, 15)
-          .then((tracks) => setDailyDiscover(deduplicateSongs(tracks)))
-          .catch(() => {});
-      }
-
-      // 2. Community Playlists: Discovered through user's top played artists
+      // ── SECTION 2: YOUR TOP MIXES & SECTION 4: MADE FOR YOU ──
       generateSpotifyStyleShelves({
-        languages,
+        languages: dynamicLanguages,
         favorites,
         recentlyPlayed,
         searchRecentlyPlayed: appState.searchRecentlyPlayed,
         userPlaylists: appState.userPlaylists,
-        topArtists: userTopArtists,
+        topArtists: [topArtistName],
       })
         .then((shelves) => {
-          const allPlaylists: Playlist[] = [];
-          for (const sh of shelves) {
-            allPlaylists.push(...sh.playlists);
-          }
-          if (allPlaylists.length > 0) {
-            setCommunityPlaylists(allPlaylists.slice(0, 10));
+          if (shelves && shelves.length > 0) {
+            const mixes: Playlist[] = [];
+            if (shelves[0]) mixes.push(...shelves[0].playlists);
+            if (shelves[1]) mixes.push(...shelves[1].playlists.slice(0, 2));
+            setTopMixPlaylists(mixes.slice(0, 8));
+
+            const madeForYou: Playlist[] = [];
+            for (let i = 2; i < shelves.length; i++) {
+              madeForYou.push(...shelves[i].playlists);
+            }
+            setMadeForYouPlaylists(madeForYou.slice(0, 8));
           }
         })
         .catch(() => {});
 
-      // 3. Similar Recommendations: Artist & album seeds
+      // ── SECTION 5: CHARTS ──
+      getPersonalizedTrending(dynamicLanguages, 20)
+        .then((tracks) => {
+          if (tracks && tracks.length > 0) {
+            setChartsTracks(deduplicateSongs(tracks).slice(0, 16));
+          }
+        })
+        .catch(() => {});
+
+      // ── SECTION 6: NEW RELEASES FOR YOU ──
+      getPersonalizedNewReleases(dynamicLanguages, 16)
+        .then((tracks) => {
+          if (tracks && tracks.length > 0) {
+            setNewReleasesList(deduplicateSongs(tracks).slice(0, 14));
+          }
+        })
+        .catch(() => {});
+
+      // ── SECTION 7: RECOMMENDED FOR TODAY ──
+      getDailyRecommendations(dynamicLanguages, [topArtistName], 16)
+        .then((tracks) => {
+          if (tracks && tracks.length > 0) {
+            setRecommendedTodayTracks(deduplicateSongs(tracks).slice(0, 14));
+          }
+        })
+        .catch(() => {});
+
+      // ── SECTION 8: BASED ON YOUR RECENT LISTENING ──
       if (recentlyPlayed.length > 0 || favorites.length > 0) {
         smartRecommendationEngine
           .getBecauseYouListenedTo({
             recentlyPlayed,
             favorites,
-            languages,
+            languages: dynamicLanguages,
           })
           .then((shelf) => {
             if (shelf && shelf.songs.length > 0) {
-              setSimilarShelves([
-                {
-                  title: shelf.title,
-                  subtitle: shelf.subtitle,
-                  songs: deduplicateSongs(shelf.songs).slice(0, 10),
-                },
-              ]);
+              setBasedOnRecentTracks({
+                seedTitle: shelf.subtitle.replace(/^Because you (listened to|like)\s*/i, '') || recentlyPlayed[0]?.title || 'Recent Songs',
+                songs: deduplicateSongs(shelf.songs).slice(0, 12),
+              });
+            }
+          })
+          .catch(() => {});
+      }
+
+      // ── SECTION 9: MORE LIKE [ARTIST NAME] ──
+      if (topArtistName) {
+        searchJioSaavn(`${topArtistName} songs`, 15)
+          .then((res) => {
+            if (res?.songs && res.songs.length > 0) {
+              setMoreLikeArtistData({
+                artistName: topArtistName,
+                songs: deduplicateSongs(res.songs).slice(0, 12),
+              });
             }
           })
           .catch(() => {});
       }
     } catch (e) {
-      console.warn('[HomeScreen] Phase 2 network dispatch error:', e);
+      console.warn('[HomeScreen] Pipeline network fetch error:', e);
     }
-  }, [languages.join(','), appState.favorites.length, appState.recentlyPlayed.length, userTopArtists.join(',')]);
+  }, [dynamicLanguages.join(','), appState.favorites.length, appState.recentlyPlayed.length, topArtistName]);
 
   useEffect(() => {
     loadHomePipeline();
   }, [loadHomePipeline]);
 
-  // ── Smart Randomizer Action ───────────────────────────────────────────────
-  const [isRandomizing, setIsRandomizing] = useState(false);
-
-  const handleSmartRandomize = useCallback(() => {
-    setIsRandomizing(true);
-    if ('vibrate' in navigator) {
-      try { navigator.vibrate([20, 50, 20]); } catch {}
-    }
-
-    const pool = deduplicateSongs([
-      ...appState.favorites,
-      ...appState.recentlyPlayed,
-      ...quickPicks,
-      ...dailyDiscover,
-    ]);
-
-    if (pool.length === 0) {
-      showToast('No tracks found to randomize. Play some songs first!', 'info');
-      setIsRandomizing(false);
-      return;
-    }
-
-    const randomIndex = Math.floor(Math.random() * pool.length);
-    const chosenSong = pool[randomIndex];
-
-    setTimeout(() => {
-      playSong(chosenSong, pool, randomIndex);
-      setIsRandomizing(false);
-      showToast(`Playing "${chosenSong.title}"`, 'success');
-    }, 300);
-  }, [appState.favorites, appState.recentlyPlayed, quickPicks, dailyDiscover, playSong]);
-
-  // ── Speed Dial 3x3 Paged Grid Items ───────────────────────────────────────
-  const speedDialItems = useMemo(() => {
-    const rawList = deduplicateSongs([
-      ...appState.favorites,
-      ...appState.recentlyPlayed,
-      ...quickPicks,
-    ]);
-    return rawList.slice(0, 17);
-  }, [appState.favorites, appState.recentlyPlayed, quickPicks]);
-
-  const [speedDialPage, setSpeedDialPage] = useState(0);
-
-  const page1Items = speedDialItems.slice(0, 8);
-  const page2Items = speedDialItems.slice(8, 17);
-  const hasPage2 = page2Items.length > 0;
-
-  // ── Greeting Header ───────────────────────────────────────────────────────
   const greeting = getGreeting();
+
+  // Helper to open a playlist
+  const handleOpenPlaylist = (playlist: Playlist) => {
+    if (scrollRef.current) {
+      persistentHomeScrollTop = scrollRef.current.scrollTop;
+    }
+    navigate('playlist', { playlistId: playlist.id, playlist });
+  };
 
   return (
     <div
@@ -430,7 +449,7 @@ export function HomeScreen({ isVisible = true }: { isVisible?: boolean }) {
         WebkitOverflowScrolling: 'touch',
       }}
     >
-      {/* ── App Top Header ── */}
+      {/* ── App Top Header (Preserved Exactly) ── */}
       <header
         style={{
           padding: '20px 20px 12px',
@@ -504,341 +523,128 @@ export function HomeScreen({ isVisible = true }: { isVisible?: boolean }) {
       </header>
 
       {/* ═════════════════════════════════════════════════════════════════════
-          1️⃣ SPEED DIAL & SMART RANDOMIZER (Top Section)
-          3x3 Paged Horizontal Grid with Smart Randomizer on Slot 9
+          1️⃣ SECTION: JUMP BACK IN
+          Horizontal snap carousel of user's active rotations & quick-resumes
       ═════════════════════════════════════════════════════════════════════ */}
-      <section style={{ padding: '0 20px 16px' }}>
-        <div
-          style={{
-            display: 'grid',
-            gridTemplateColumns: 'repeat(3, 1fr)',
-            gap: 8,
-          }}
-        >
-          {(speedDialPage === 0 ? page1Items : page2Items).map((song, i) => {
-            const isCurrent = playerState.currentSong?.id === song.id;
-            const isPlaying = isCurrent && playerState.isPlaying;
+      {jumpBackInTracks.length > 0 && (
+        <section>
+          <SectionHeader
+            title="Jump back in"
+            subtitle="Pick up right where you left off"
+            badge="Resume"
+            onPlayAll={() => playSong(jumpBackInTracks[0], jumpBackInTracks, 0)}
+          />
 
-            return (
-              <div
-                key={song.id}
-                onClick={() => playSong(song, speedDialItems, i)}
-                onContextMenu={(e) => {
-                  e.preventDefault();
-                  triggerLongPress(song);
-                }}
-                style={{
-                  display: 'flex',
-                  alignItems: 'center',
-                  gap: 8,
-                  padding: '6px 8px',
-                  background: isCurrent
-                    ? 'var(--color-accent-subtle, rgba(249, 115, 22, 0.12))'
-                    : 'var(--color-surface)',
-                  border: isCurrent
-                    ? '1px solid var(--color-accent)'
-                    : '1px solid var(--color-border)',
-                  borderRadius: 'var(--radius-md, 10px)',
-                  cursor: 'pointer',
-                  overflow: 'hidden',
-                  position: 'relative',
-                  minHeight: 52,
-                  transition: 'transform 120ms ease, background 150ms ease',
-                }}
-                onMouseDown={(e) => (e.currentTarget.style.transform = 'scale(0.97)')}
-                onMouseUp={(e) => (e.currentTarget.style.transform = 'scale(1)')}
-              >
-                <img
-                  src={resizeImageUrl(song.artwork, 128, 128)}
-                  alt={song.title}
-                  width={38}
-                  height={38}
-                  loading="lazy"
-                  style={{
-                    borderRadius: 'var(--radius-sm, 6px)',
-                    objectFit: 'cover',
-                    flexShrink: 0,
-                  }}
-                  onError={(e) => {
-                    (e.target as HTMLImageElement).src = CONFIG.ARTWORK_PLACEHOLDER;
-                  }}
-                />
-                <div style={{ flex: 1, minWidth: 0 }}>
-                  <p
-                    style={{
-                      margin: 0,
-                      fontSize: '11.5px',
-                      fontWeight: 600,
-                      color: isCurrent ? 'var(--color-accent)' : 'var(--color-text-primary)',
-                      overflow: 'hidden',
-                      textOverflow: 'ellipsis',
-                      whiteSpace: 'nowrap',
-                    }}
-                  >
-                    {song.title}
-                  </p>
-                  <p
-                    style={{
-                      margin: 0,
-                      fontSize: '10px',
-                      color: 'var(--color-text-secondary)',
-                      overflow: 'hidden',
-                      textOverflow: 'ellipsis',
-                      whiteSpace: 'nowrap',
-                    }}
-                  >
-                    {song.artist}
-                  </p>
-                </div>
-                {isPlaying && (
-                  <div style={{ marginRight: 2 }}>
-                    <EqBars />
-                  </div>
-                )}
-              </div>
-            );
-          })}
-
-          {/* Slot 9: Smart Randomizer Button (on Page 1) */}
-          {speedDialPage === 0 && (
-            <button
-              onClick={handleSmartRandomize}
-              className="speed-dial-randomizer"
-              style={{
-                display: 'flex',
-                alignItems: 'center',
-                gap: 8,
-                padding: '6px 10px',
-                background: 'linear-gradient(135deg, var(--color-accent) 0%, #EA580C 100%)',
-                border: 'none',
-                borderRadius: 'var(--radius-md, 10px)',
-                cursor: 'pointer',
-                overflow: 'hidden',
-                minHeight: 52,
-                color: 'var(--color-accent-on, #FFFFFF)',
-                boxShadow: '0 4px 14px rgba(249, 115, 22, 0.35)',
-                transition: 'transform 150ms ease',
-              }}
-              onMouseDown={(e) => (e.currentTarget.style.transform = 'scale(0.96)')}
-              onMouseUp={(e) => (e.currentTarget.style.transform = 'scale(1)')}
-            >
-              <div
-                style={{
-                  width: 38,
-                  height: 38,
-                  borderRadius: 'var(--radius-sm, 6px)',
-                  background: 'rgba(255,255,255,0.2)',
-                  display: 'flex',
-                  alignItems: 'center',
-                  justifyContent: 'center',
-                  flexShrink: 0,
-                  transform: isRandomizing ? 'rotate(180deg)' : 'none',
-                  transition: 'transform 300ms cubic-bezier(0.34, 1.56, 0.64, 1)',
-                }}
-              >
-                <ShuffleIcon size={18} color="#FFFFFF" />
-              </div>
-              <div style={{ textAlign: 'left', minWidth: 0 }}>
-                <p style={{ margin: 0, fontSize: '11.5px', fontWeight: 700, lineHeight: 1.2 }}>
-                  Shuffle Mix
-                </p>
-                <p style={{ margin: 0, fontSize: '10px', opacity: 0.85, whiteSpace: 'nowrap' }}>
-                  Smart Random
-                </p>
-              </div>
-            </button>
-          )}
-        </div>
-
-        {/* Pager Dots (if multiple pages exist) */}
-        {hasPage2 && (
-          <div style={{ display: 'flex', justifyContent: 'center', gap: 6, marginTop: 10 }}>
-            <div
-              onClick={() => setSpeedDialPage(0)}
-              style={{
-                width: speedDialPage === 0 ? 18 : 6,
-                height: 6,
-                borderRadius: 3,
-                background: speedDialPage === 0 ? 'var(--color-accent)' : 'var(--color-border)',
-                cursor: 'pointer',
-                transition: 'all 200ms ease',
-              }}
-            />
-            <div
-              onClick={() => setSpeedDialPage(1)}
-              style={{
-                width: speedDialPage === 1 ? 18 : 6,
-                height: 6,
-                borderRadius: 3,
-                background: speedDialPage === 1 ? 'var(--color-accent)' : 'var(--color-border)',
-                cursor: 'pointer',
-                transition: 'all 200ms ease',
-              }}
-            />
-          </div>
-        )}
-      </section>
-
-      {/* ═════════════════════════════════════════════════════════════════════
-          2️⃣ HERO "QUICK PICKS" CAROUSEL
-          Horizontal Snap Carousel (250x290dp) with glass Play badge & gradient scrim
-      ═════════════════════════════════════════════════════════════════════ */}
-      <section>
-        <SectionHeader
-          title="Quick Picks"
-          subtitle="Listen right where you left off"
-          badge="Top Pick"
-        />
-
-        <div
-          style={{
-            display: 'flex',
-            gap: 16,
-            overflowX: 'auto',
-            padding: '0 20px 8px',
-            scrollSnapType: 'x mandatory',
-            WebkitOverflowScrolling: 'touch',
-          }}
-        >
-          {isLocalLoading && quickPicks.length === 0 ? (
-            [0, 1, 2].map((k) => (
-              <div key={k} style={{ flexShrink: 0, width: 250, height: 290 }}>
-                <SkeletonBox width={250} height={290} borderRadius="var(--radius-lg, 16px)" />
-              </div>
-            ))
-          ) : (
-            quickPicks.slice(0, 8).map((song, i) => {
+          <div
+            style={{
+              display: 'flex',
+              gap: 14,
+              overflowX: 'auto',
+              padding: '0 20px 8px',
+              scrollSnapType: 'x mandatory',
+              WebkitOverflowScrolling: 'touch',
+            }}
+          >
+            {jumpBackInTracks.slice(0, 10).map((song, i) => {
               const isCurrent = playerState.currentSong?.id === song.id;
               const isPlaying = isCurrent && playerState.isPlaying;
 
               return (
                 <div
                   key={song.id}
-                  onClick={() => playSong(song, quickPicks, i)}
+                  onClick={() => playSong(song, jumpBackInTracks, i)}
                   onContextMenu={(e) => {
                     e.preventDefault();
                     triggerLongPress(song);
                   }}
                   style={{
                     flexShrink: 0,
-                    width: 250,
-                    height: 290,
-                    borderRadius: 'var(--radius-lg, 16px)',
-                    position: 'relative',
-                    overflow: 'hidden',
+                    width: 156,
                     cursor: 'pointer',
                     scrollSnapAlign: 'start',
-                    boxShadow: '0 8px 24px rgba(0, 0, 0, 0.45)',
-                    border: isCurrent
-                      ? '2px solid var(--color-accent)'
-                      : '1px solid var(--color-border)',
-                    transition: 'transform 180ms ease',
+                    display: 'flex',
+                    flexDirection: 'column',
+                    gap: 8,
                   }}
-                  onMouseDown={(e) => (e.currentTarget.style.transform = 'scale(0.98)')}
-                  onMouseUp={(e) => (e.currentTarget.style.transform = 'scale(1)')}
                 >
-                  {/* Full-bleed high-res artwork */}
-                  <img
-                    src={resizeImageUrl(song.artworkLg || song.artwork, 800, 800)}
-                    alt={song.title}
-                    style={{
-                      width: '100%',
-                      height: '100%',
-                      objectFit: 'cover',
-                      display: 'block',
-                    }}
-                    onError={(e) => {
-                      (e.target as HTMLImageElement).src = CONFIG.ARTWORK_PLACEHOLDER;
-                    }}
-                  />
-
-                  {/* Deep Vertical Gradient Scrim for text readability */}
                   <div
                     style={{
-                      position: 'absolute',
-                      inset: 0,
-                      background:
-                        'linear-gradient(to top, rgba(0,0,0,0.94) 0%, rgba(0,0,0,0.5) 45%, transparent 75%)',
-                      pointerEvents: 'none',
-                    }}
-                  />
-
-                  {/* Top-Left Circular Glass Play Badge */}
-                  <div
-                    style={{
-                      position: 'absolute',
-                      top: 14,
-                      left: 14,
-                      width: 44,
-                      height: 44,
-                      borderRadius: '50%',
-                      background: 'rgba(255, 255, 255, 0.22)',
-                      backdropFilter: 'blur(16px) saturate(180%)',
-                      WebkitBackdropFilter: 'blur(16px) saturate(180%)',
-                      border: '1px solid rgba(255, 255, 255, 0.35)',
-                      display: 'flex',
-                      alignItems: 'center',
-                      justifyContent: 'center',
-                      color: isCurrent ? 'var(--color-accent)' : '#FFFFFF',
-                      boxShadow: '0 4px 12px rgba(0, 0, 0, 0.35)',
+                      width: 156,
+                      height: 156,
+                      borderRadius: 'var(--radius-lg, 16px)',
+                      overflow: 'hidden',
+                      position: 'relative',
+                      background: 'var(--color-surface)',
+                      border: isCurrent
+                        ? '2px solid var(--color-accent)'
+                        : '1px solid var(--color-border)',
+                      boxShadow: '0 6px 18px rgba(0, 0, 0, 0.35)',
                     }}
                   >
-                    <PlayIcon size={18} color={isCurrent ? 'var(--color-accent)' : '#FFFFFF'} />
-                  </div>
+                    <img
+                      src={resizeImageUrl(song.artworkLg || song.artwork, 544, 544)}
+                      alt={song.title}
+                      style={{
+                        width: '100%',
+                        height: '100%',
+                        objectFit: 'cover',
+                        display: 'block',
+                      }}
+                      onError={(e) => {
+                        (e.target as HTMLImageElement).src = CONFIG.ARTWORK_PLACEHOLDER;
+                      }}
+                    />
 
-                  {/* Top-Right Equalizer indicator if actively playing */}
-                  {isPlaying && (
+                    {/* Gradient shadow overlay */}
                     <div
                       style={{
                         position: 'absolute',
-                        top: 14,
-                        right: 14,
-                        padding: '6px 10px',
-                        background: 'rgba(0, 0, 0, 0.65)',
-                        backdropFilter: 'blur(8px)',
-                        borderRadius: 'var(--radius-full, 9999px)',
+                        inset: 0,
+                        background: 'linear-gradient(to top, rgba(0,0,0,0.7) 0%, transparent 50%)',
+                        pointerEvents: 'none',
+                      }}
+                    />
+
+                    {/* Play Badge */}
+                    <div
+                      style={{
+                        position: 'absolute',
+                        right: 8,
+                        bottom: 8,
+                        width: 36,
+                        height: 36,
+                        borderRadius: '50%',
+                        background: isCurrent ? 'var(--color-accent)' : 'rgba(255, 255, 255, 0.85)',
+                        color: isCurrent ? 'var(--color-accent-on, #FFFFFF)' : '#000000',
                         display: 'flex',
                         alignItems: 'center',
-                        gap: 6,
+                        justifyContent: 'center',
+                        boxShadow: '0 4px 12px rgba(0, 0, 0, 0.35)',
                       }}
                     >
-                      <EqBars />
-                      <span style={{ fontSize: 10, fontWeight: 700, color: 'var(--color-accent)' }}>
-                        PLAYING
-                      </span>
+                      {isPlaying ? <EqBars /> : <PlayIcon size={15} color={isCurrent ? '#FFFFFF' : '#000000'} />}
                     </div>
-                  )}
+                  </div>
 
-                  {/* Bottom-Left Track Details */}
-                  <div
-                    style={{
-                      position: 'absolute',
-                      bottom: 16,
-                      left: 16,
-                      right: 16,
-                      pointerEvents: 'none',
-                    }}
-                  >
-                    <h3
+                  <div>
+                    <p
                       style={{
                         margin: 0,
-                        fontSize: '17px',
-                        fontWeight: 800,
-                        color: isCurrent ? 'var(--color-accent)' : '#FFFFFF',
+                        fontSize: '13px',
+                        fontWeight: 600,
+                        color: isCurrent ? 'var(--color-accent)' : 'var(--color-text-primary)',
                         overflow: 'hidden',
                         textOverflow: 'ellipsis',
                         whiteSpace: 'nowrap',
-                        lineHeight: 1.25,
                       }}
                     >
                       {song.title}
-                    </h3>
+                    </p>
                     <p
                       style={{
-                        margin: '4px 0 0',
-                        fontSize: '13px',
-                        color: 'rgba(255, 255, 255, 0.78)',
-                        fontWeight: 500,
+                        margin: '2px 0 0',
+                        fontSize: '11.5px',
+                        color: 'var(--color-text-secondary)',
                         overflow: 'hidden',
                         textOverflow: 'ellipsis',
                         whiteSpace: 'nowrap',
@@ -849,22 +655,21 @@ export function HomeScreen({ isVisible = true }: { isVisible?: boolean }) {
                   </div>
                 </div>
               );
-            })
-          )}
-        </div>
-      </section>
+            })}
+          </div>
+        </section>
+      )}
 
       {/* ═════════════════════════════════════════════════════════════════════
-          3️⃣ "DAILY DISCOVER" CAROUSEL
-          Freshly paired matching tracks with "Play All" button
+          2️⃣ SECTION: YOUR TOP MIXES
+          Spotify-style daily and genre mix capsules based on listening patterns
       ═════════════════════════════════════════════════════════════════════ */}
-      {dailyDiscover.length > 0 && (
+      {topMixPlaylists.length > 0 && (
         <section>
           <SectionHeader
-            title="Daily Discover"
-            subtitle="Fresh discoveries tailored to your listening habits"
-            badge="Discovery"
-            onPlayAll={() => playSong(dailyDiscover[0], dailyDiscover, 0)}
+            title="Your top mixes"
+            subtitle="Personalized mixes tailored to your favorite genres and moods"
+            badge="Top Mixes"
           />
 
           <div
@@ -876,35 +681,117 @@ export function HomeScreen({ isVisible = true }: { isVisible?: boolean }) {
               WebkitOverflowScrolling: 'touch',
             }}
           >
-            {dailyDiscover.map((song, i) => (
-              <div
-                key={song.id}
-                onContextMenu={(e) => {
-                  e.preventDefault();
-                  triggerLongPress(song);
-                }}
-              >
-                <SongSquareCard
-                  song={song}
-                  queue={dailyDiscover}
-                  index={i}
-                  size={150}
-                />
-              </div>
-            ))}
+            {topMixPlaylists.map((playlist) => {
+              const art = playlist.artwork || (playlist.tracks[0]?.artwork ?? '');
+              return (
+                <div
+                  key={playlist.id}
+                  onClick={() => handleOpenPlaylist(playlist)}
+                  style={{
+                    width: 154,
+                    flexShrink: 0,
+                    cursor: 'pointer',
+                    display: 'flex',
+                    flexDirection: 'column',
+                    gap: 8,
+                  }}
+                >
+                  <div
+                    style={{
+                      width: 154,
+                      height: 154,
+                      borderRadius: 'var(--radius-lg, 16px)',
+                      overflow: 'hidden',
+                      position: 'relative',
+                      background: 'var(--color-surface)',
+                      border: '1px solid var(--color-border)',
+                      boxShadow: '0 6px 18px rgba(0, 0, 0, 0.35)',
+                    }}
+                  >
+                    <img
+                      src={resizeImageUrl(art, 544, 544)}
+                      alt={playlist.title}
+                      style={{ width: '100%', height: '100%', objectFit: 'cover' }}
+                      onError={(e) => {
+                        (e.target as HTMLImageElement).src = CONFIG.ARTWORK_PLACEHOLDER;
+                      }}
+                    />
+
+                    {/* Gradient label overlay */}
+                    <div
+                      style={{
+                        position: 'absolute',
+                        inset: 0,
+                        background: 'linear-gradient(to top, rgba(0,0,0,0.85) 0%, rgba(0,0,0,0.2) 50%, transparent 100%)',
+                        pointerEvents: 'none',
+                      }}
+                    />
+
+                    {/* Bottom Play Badge */}
+                    <div
+                      style={{
+                        position: 'absolute',
+                        right: 8,
+                        bottom: 8,
+                        width: 34,
+                        height: 34,
+                        borderRadius: '50%',
+                        background: 'var(--color-accent)',
+                        display: 'flex',
+                        alignItems: 'center',
+                        justifyContent: 'center',
+                        boxShadow: '0 4px 12px rgba(0, 0, 0, 0.4)',
+                        color: '#FFFFFF',
+                      }}
+                    >
+                      <PlayIcon size={14} color="var(--color-accent-on, #FFFFFF)" />
+                    </div>
+                  </div>
+
+                  <div>
+                    <p
+                      style={{
+                        margin: 0,
+                        fontSize: '13px',
+                        fontWeight: 700,
+                        color: 'var(--color-text-primary)',
+                        overflow: 'hidden',
+                        textOverflow: 'ellipsis',
+                        whiteSpace: 'nowrap',
+                      }}
+                    >
+                      {playlist.title}
+                    </p>
+                    <p
+                      style={{
+                        margin: '2px 0 0',
+                        fontSize: '11.5px',
+                        color: 'var(--color-text-secondary)',
+                        overflow: 'hidden',
+                        textOverflow: 'ellipsis',
+                        whiteSpace: 'nowrap',
+                      }}
+                    >
+                      {playlist.creator || 'Daily Mix'}
+                    </p>
+                  </div>
+                </div>
+              );
+            })}
           </div>
         </section>
       )}
 
       {/* ═════════════════════════════════════════════════════════════════════
-          4️⃣ "KEEP LISTENING" (Recent Favorites)
-          2-Row Horizontal Scrolling Grid
+          3️⃣ SECTION: RECENTLY PLAYED
+          2-Row Horizontal Snapping Grid of recent tracks
       ═════════════════════════════════════════════════════════════════════ */}
-      {keepListening.length > 0 && (
+      {appState.recentlyPlayed && appState.recentlyPlayed.length > 0 && (
         <section>
           <SectionHeader
-            title="Keep Listening"
-            subtitle="Your recent rotations & favorites"
+            title="Recently played"
+            subtitle="Your recent track listening history"
+            onPlayAll={() => playSong(appState.recentlyPlayed[0], appState.recentlyPlayed, 0)}
           />
 
           <div
@@ -919,14 +806,14 @@ export function HomeScreen({ isVisible = true }: { isVisible?: boolean }) {
               WebkitOverflowScrolling: 'touch',
             }}
           >
-            {keepListening.map((song, i) => {
+            {deduplicateSongs(appState.recentlyPlayed).slice(0, 12).map((song, i) => {
               const isCurrent = playerState.currentSong?.id === song.id;
               const isPlaying = isCurrent && playerState.isPlaying;
 
               return (
                 <div
                   key={song.id}
-                  onClick={() => playSong(song, keepListening, i)}
+                  onClick={() => playSong(song, appState.recentlyPlayed, i)}
                   onContextMenu={(e) => {
                     e.preventDefault();
                     triggerLongPress(song);
@@ -996,15 +883,15 @@ export function HomeScreen({ isVisible = true }: { isVisible?: boolean }) {
       )}
 
       {/* ═════════════════════════════════════════════════════════════════════
-          5️⃣ "FROM THE COMMUNITY" (Trending Public Playlists)
-          Horizontal Carousel of 160dp cards with 2x2 collage artwork
+          4️⃣ SECTION: MADE FOR YOU
+          AI-curated customized playlists and listening capsules
       ═════════════════════════════════════════════════════════════════════ */}
-      {communityPlaylists.length > 0 && (
+      {madeForYouPlaylists.length > 0 && (
         <section>
           <SectionHeader
-            title="From the Community"
-            subtitle="Trending community playlists"
-            badge="Popular"
+            title="Made for you"
+            subtitle="Curated discovery playlists tuned to your unique taste profile"
+            badge="For You"
           />
 
           <div
@@ -1016,15 +903,15 @@ export function HomeScreen({ isVisible = true }: { isVisible?: boolean }) {
               WebkitOverflowScrolling: 'touch',
             }}
           >
-            {communityPlaylists.map((playlist) => {
+            {madeForYouPlaylists.map((playlist) => {
               const thumbs = playlist.tracks.slice(0, 4).map((t) => t.artwork).filter(Boolean);
 
               return (
                 <div
                   key={playlist.id}
-                  onClick={() => navigate('playlist', { playlistId: playlist.id, playlist })}
+                  onClick={() => handleOpenPlaylist(playlist)}
                   style={{
-                    width: 160,
+                    width: 154,
                     flexShrink: 0,
                     cursor: 'pointer',
                     display: 'flex',
@@ -1032,11 +919,10 @@ export function HomeScreen({ isVisible = true }: { isVisible?: boolean }) {
                     gap: 8,
                   }}
                 >
-                  {/* 2x2 Collage Artwork or Single Artwork */}
                   <div
                     style={{
-                      width: 160,
-                      height: 160,
+                      width: 154,
+                      height: 154,
                       borderRadius: 'var(--radius-lg, 16px)',
                       overflow: 'hidden',
                       position: 'relative',
@@ -1074,7 +960,6 @@ export function HomeScreen({ isVisible = true }: { isVisible?: boolean }) {
                       />
                     )}
 
-                    {/* Glass Play Overlay Badge */}
                     <div
                       style={{
                         position: 'absolute',
@@ -1088,7 +973,7 @@ export function HomeScreen({ isVisible = true }: { isVisible?: boolean }) {
                         alignItems: 'center',
                         justifyContent: 'center',
                         boxShadow: '0 4px 12px rgba(0, 0, 0, 0.4)',
-                        color: '#000000',
+                        color: '#FFFFFF',
                       }}
                     >
                       <PlayIcon size={14} color="var(--color-accent-on, #FFFFFF)" />
@@ -1119,7 +1004,7 @@ export function HomeScreen({ isVisible = true }: { isVisible?: boolean }) {
                         whiteSpace: 'nowrap',
                       }}
                     >
-                      {playlist.creator || 'Soundwave Community'}
+                      {playlist.creator || 'Custom Mix'}
                     </p>
                   </div>
                 </div>
@@ -1130,161 +1015,18 @@ export function HomeScreen({ isVisible = true }: { isVisible?: boolean }) {
       )}
 
       {/* ═════════════════════════════════════════════════════════════════════
-          6️⃣ "FORGOTTEN FAVORITES" (Classic Gems)
-          4-Row Snapping Horizontal Grid with "Play All" button
+          5️⃣ SECTION: CHARTS
+          Top 100 / Trending Charts with numbered rankings & "Play All"
       ═════════════════════════════════════════════════════════════════════ */}
-      {forgottenFavorites.length > 0 && (
+      {(chartsTracks.length > 0 || (ytViewModel.chartsPage?.topSongs && ytViewModel.chartsPage.topSongs.length > 0)) && (
         <section>
           <SectionHeader
-            title="Forgotten Favorites"
-            subtitle="Rediscover tracks you used to love"
-            badge="Rediscover"
-            onPlayAll={() => playSong(forgottenFavorites[0], forgottenFavorites, 0)}
-          />
-
-          <div
-            style={{
-              display: 'grid',
-              gridTemplateRows: 'repeat(4, auto)',
-              gridAutoFlow: 'column',
-              gridAutoColumns: '280px',
-              gap: 10,
-              overflowX: 'auto',
-              padding: '0 20px 8px',
-              WebkitOverflowScrolling: 'touch',
-            }}
-          >
-            {forgottenFavorites.map((song, i) => {
-              const isCurrent = playerState.currentSong?.id === song.id;
-              const isPlaying = isCurrent && playerState.isPlaying;
-
-              return (
-                <div
-                  key={song.id}
-                  onClick={() => playSong(song, forgottenFavorites, i)}
-                  onContextMenu={(e) => {
-                    e.preventDefault();
-                    triggerLongPress(song);
-                  }}
-                  style={{
-                    display: 'flex',
-                    alignItems: 'center',
-                    gap: 10,
-                    padding: 8,
-                    background: 'var(--color-surface)',
-                    border: isCurrent
-                      ? '1px solid var(--color-accent)'
-                      : '1px solid var(--color-border)',
-                    borderRadius: 'var(--radius-md, 10px)',
-                    cursor: 'pointer',
-                  }}
-                >
-                  <img
-                    src={resizeImageUrl(song.artwork, 160, 160)}
-                    alt={song.title}
-                    width={44}
-                    height={44}
-                    loading="lazy"
-                    style={{
-                      borderRadius: 'var(--radius-sm, 6px)',
-                      objectFit: 'cover',
-                      flexShrink: 0,
-                    }}
-                    onError={(e) => {
-                      (e.target as HTMLImageElement).src = CONFIG.ARTWORK_PLACEHOLDER;
-                    }}
-                  />
-                  <div style={{ flex: 1, minWidth: 0 }}>
-                    <p
-                      style={{
-                        margin: 0,
-                        fontSize: '13px',
-                        fontWeight: 600,
-                        color: isCurrent ? 'var(--color-accent)' : 'var(--color-text-primary)',
-                        overflow: 'hidden',
-                        textOverflow: 'ellipsis',
-                        whiteSpace: 'nowrap',
-                      }}
-                    >
-                      {song.title}
-                    </p>
-                    <p
-                      style={{
-                        margin: '2px 0 0',
-                        fontSize: '11px',
-                        color: 'var(--color-text-secondary)',
-                        overflow: 'hidden',
-                        textOverflow: 'ellipsis',
-                        whiteSpace: 'nowrap',
-                      }}
-                    >
-                      {song.artist}
-                    </p>
-                  </div>
-                  {isPlaying && <EqBars />}
-                </div>
-              );
-            })}
-          </div>
-        </section>
-      )}
-
-      {/* ═════════════════════════════════════════════════════════════════════
-          7️⃣ "SIMILAR TO..." PERSONALIZED SHELVES
-          Dynamic horizontal recommendations based on user's top artist / album
-      ═════════════════════════════════════════════════════════════════════ */}
-      {similarShelves.map((shelf, idx) => (
-        <section key={idx}>
-          <SectionHeader
-            title={shelf.title}
-            subtitle={shelf.subtitle}
-            onPlayAll={() => playSong(shelf.songs[0], shelf.songs, 0)}
-          />
-
-          <div
-            style={{
-              display: 'flex',
-              gap: 14,
-              overflowX: 'auto',
-              padding: '0 20px 8px',
-              WebkitOverflowScrolling: 'touch',
-            }}
-          >
-            {shelf.songs.map((song, i) => (
-              <div
-                key={song.id}
-                onContextMenu={(e) => {
-                  e.preventDefault();
-                  triggerLongPress(song);
-                }}
-              >
-                <SongSquareCard
-                  song={song}
-                  queue={shelf.songs}
-                  index={i}
-                  size={144}
-                />
-              </div>
-            ))}
-          </div>
-        </section>
-      ))}
-
-      {/* ═════════════════════════════════════════════════════════════════════
-          8️⃣ DYNAMIC YOUTUBE MUSIC & TRENDING SHELVES
-          • Trending Songs & Charts (4-Row horizontal grid with "Play All")
-          • New Release Albums (1-Row horizontal card carousel)
-      ═════════════════════════════════════════════════════════════════════ */}
-      {/* YouTube Trending & Daily Charts */}
-      {ytViewModel.chartsPage?.topSongs && ytViewModel.chartsPage.topSongs.length > 0 && (
-        <section>
-          <SectionHeader
-            title="YouTube Music Top Charts"
-            subtitle="Today's top trending songs in India & Worldwide"
-            badge="Trending"
+            title="Charts"
+            subtitle={`Top trending songs in ${primaryLanguage} & India`}
+            badge="Top 100"
             onPlayAll={() => {
-              const songs = ytViewModel.getTrendingSongs();
-              if (songs.length > 0) playSong(songs[0], songs, 0);
+              const list = chartsTracks.length > 0 ? chartsTracks : ytViewModel.getTrendingSongs();
+              if (list.length > 0) playSong(list[0], list, 0);
             }}
           />
 
@@ -1300,14 +1042,15 @@ export function HomeScreen({ isVisible = true }: { isVisible?: boolean }) {
               WebkitOverflowScrolling: 'touch',
             }}
           >
-            {ytViewModel.getTrendingSongs().map((song, i) => {
+            {(chartsTracks.length > 0 ? chartsTracks : ytViewModel.getTrendingSongs()).slice(0, 16).map((song, i) => {
               const isCurrent = playerState.currentSong?.id === song.id;
               const isPlaying = isCurrent && playerState.isPlaying;
+              const chartList = chartsTracks.length > 0 ? chartsTracks : ytViewModel.getTrendingSongs();
 
               return (
                 <div
                   key={song.id}
-                  onClick={() => playSong(song, ytViewModel.getTrendingSongs(), i)}
+                  onClick={() => playSong(song, chartList, i)}
                   onContextMenu={(e) => {
                     e.preventDefault();
                     triggerLongPress(song);
@@ -1386,13 +1129,17 @@ export function HomeScreen({ isVisible = true }: { isVisible?: boolean }) {
         </section>
       )}
 
-      {/* YouTube New Release Albums */}
-      {ytViewModel.explorePage?.newReleaseAlbums && ytViewModel.explorePage.newReleaseAlbums.length > 0 && (
+      {/* ═════════════════════════════════════════════════════════════════════
+          6️⃣ SECTION: NEW RELEASES FOR YOU
+          Freshly dropped songs & albums in user's favorite language
+      ═════════════════════════════════════════════════════════════════════ */}
+      {newReleasesList.length > 0 && (
         <section>
           <SectionHeader
-            title="New Releases"
-            subtitle="Fresh albums and singles just dropped"
+            title="New releases for you"
+            subtitle={`Fresh tracks and singles just dropped in ${primaryLanguage}`}
             badge="New"
+            onPlayAll={() => playSong(newReleasesList[0], newReleasesList, 0)}
           />
 
           <div
@@ -1404,47 +1151,181 @@ export function HomeScreen({ isVisible = true }: { isVisible?: boolean }) {
               WebkitOverflowScrolling: 'touch',
             }}
           >
-            {ytViewModel.getNewReleaseAlbums().map((album) => (
+            {newReleasesList.map((song, i) => (
+              <div
+                key={song.id}
+                onContextMenu={(e) => {
+                  e.preventDefault();
+                  triggerLongPress(song);
+                }}
+              >
+                <SongSquareCard
+                  song={song}
+                  queue={newReleasesList}
+                  index={i}
+                  size={144}
+                />
+              </div>
+            ))}
+          </div>
+        </section>
+      )}
+
+      {/* ═════════════════════════════════════════════════════════════════════
+          7️⃣ SECTION: RECOMMENDED FOR TODAY
+          Contextual day-and-time personalized track picks
+      ═════════════════════════════════════════════════════════════════════ */}
+      {recommendedTodayTracks.length > 0 && (
+        <section>
+          <SectionHeader
+            title="Recommended for today"
+            subtitle="Handpicked tracks for your daily listening flow"
+            badge="Today"
+            onPlayAll={() => playSong(recommendedTodayTracks[0], recommendedTodayTracks, 0)}
+          />
+
+          <div
+            style={{
+              display: 'flex',
+              gap: 14,
+              overflowX: 'auto',
+              padding: '0 20px 8px',
+              WebkitOverflowScrolling: 'touch',
+            }}
+          >
+            {recommendedTodayTracks.map((song, i) => (
+              <div
+                key={song.id}
+                onContextMenu={(e) => {
+                  e.preventDefault();
+                  triggerLongPress(song);
+                }}
+              >
+                <SongSquareCard
+                  song={song}
+                  queue={recommendedTodayTracks}
+                  index={i}
+                  size={148}
+                />
+              </div>
+            ))}
+          </div>
+        </section>
+      )}
+
+      {/* ═════════════════════════════════════════════════════════════════════
+          8️⃣ SECTION: BASED ON YOUR RECENT LISTENING
+          Dynamic recommendations connected to a recent track/artist seed
+      ═════════════════════════════════════════════════════════════════════ */}
+      {basedOnRecentTracks && basedOnRecentTracks.songs.length > 0 && (
+        <section>
+          <SectionHeader
+            title="Based on your recent listening"
+            subtitle={`Inspired by "${basedOnRecentTracks.seedTitle}"`}
+            badge="Inspired"
+            onPlayAll={() => playSong(basedOnRecentTracks.songs[0], basedOnRecentTracks.songs, 0)}
+          />
+
+          <div
+            style={{
+              display: 'flex',
+              gap: 14,
+              overflowX: 'auto',
+              padding: '0 20px 8px',
+              WebkitOverflowScrolling: 'touch',
+            }}
+          >
+            {basedOnRecentTracks.songs.map((song, i) => (
+              <div
+                key={song.id}
+                onContextMenu={(e) => {
+                  e.preventDefault();
+                  triggerLongPress(song);
+                }}
+              >
+                <SongSquareCard
+                  song={song}
+                  queue={basedOnRecentTracks.songs}
+                  index={i}
+                  size={144}
+                />
+              </div>
+            ))}
+          </div>
+        </section>
+      )}
+
+      {/* ═════════════════════════════════════════════════════════════════════
+          9️⃣ SECTION: MORE LIKE [ARTIST NAME]
+          Artist-specific recommendation shelf for the user's #1 favorite artist
+      ═════════════════════════════════════════════════════════════════════ */}
+      {moreLikeArtistData && moreLikeArtistData.songs.length > 0 && (
+        <section>
+          <SectionHeader
+            title={`More like ${moreLikeArtistData.artistName}`}
+            subtitle={`Fans of ${moreLikeArtistData.artistName} also love these tracks`}
+            badge="Artist Mix"
+            onPlayAll={() => playSong(moreLikeArtistData.songs[0], moreLikeArtistData.songs, 0)}
+          />
+
+          <div
+            style={{
+              display: 'flex',
+              gap: 14,
+              overflowX: 'auto',
+              padding: '0 20px 8px',
+              WebkitOverflowScrolling: 'touch',
+            }}
+          >
+            {moreLikeArtistData.songs.map((song, i) => (
+              <div
+                key={song.id}
+                onContextMenu={(e) => {
+                  e.preventDefault();
+                  triggerLongPress(song);
+                }}
+              >
+                <SongSquareCard
+                  song={song}
+                  queue={moreLikeArtistData.songs}
+                  index={i}
+                  size={144}
+                />
+              </div>
+            ))}
+          </div>
+        </section>
+      )}
+
+      {/* ═════════════════════════════════════════════════════════════════════
+          🔟 SECTION: ALBUMS FEATURING SONGS YOU LIKE
+          Full albums containing user's favorited / most-replayed songs
+      ═════════════════════════════════════════════════════════════════════ */}
+      {albumsFeaturingLiked.length > 0 && (
+        <section style={{ marginBottom: 16 }}>
+          <SectionHeader
+            title="Albums featuring songs you like"
+            subtitle="Full albums containing your top tracks"
+            badge="Albums"
+          />
+
+          <div
+            style={{
+              display: 'flex',
+              gap: 14,
+              overflowX: 'auto',
+              padding: '0 20px 8px',
+              WebkitOverflowScrolling: 'touch',
+            }}
+          >
+            {albumsFeaturingLiked.map((album) => (
               <AlbumCard key={album.id} album={album} size={144} />
             ))}
           </div>
         </section>
       )}
 
-      {/* Top Artists from Intelligence */}
-      {userTopArtists.length > 0 && (
-        <section style={{ marginTop: 12 }}>
-          <SectionHeader
-            title="Favorite Artists"
-            subtitle="Artists you listen to the most"
-          />
-
-          <div
-            style={{
-              display: 'flex',
-              gap: 16,
-              overflowX: 'auto',
-              padding: '0 20px 8px',
-              WebkitOverflowScrolling: 'touch',
-            }}
-          >
-            {userTopArtists.map((artistName) => (
-              <ArtistCard
-                key={artistName}
-                artist={{
-                  id: `artist_${artistName}`,
-                  name: artistName,
-                  image: '',
-                  provider: 'saavn',
-                }}
-                size={84}
-              />
-            ))}
-          </div>
-        </section>
-      )}
-
-      {/* ── Context Menu Bottom Sheet (Long Press) ── */}
+      {/* ── Context Menu Bottom Sheet (Long Press on track) ── */}
       {selectedSongForMenu && (
         <SongOptionsBottomSheet
           song={selectedSongForMenu}
