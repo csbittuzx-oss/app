@@ -23,6 +23,11 @@ import {
   getPersonalizedTrending,
   getPersonalizedNewReleases,
   getDailyRecommendations,
+  getHappyHits,
+  getPartyHits,
+  getWorkoutHits,
+  getTodayBiggestHits,
+  getPopularAlbums,
   deduplicateSongs,
 } from '../data/repository/musicRepository';
 import { generateSpotifyStyleShelves } from '../services/CuratedPlaylistsService';
@@ -258,7 +263,7 @@ export function HomeScreen({ isVisible = true }: { isVisible?: boolean }) {
     return combined.slice(0, 24);
   }, [appState.recentlyPlayed, appState.searchRecentlyPlayed, appState.favorites]);
 
-  // ── 3. Data States for the 10 Sections ─────────────────────────────────────
+  // ── 3. Data States for Sections ───────────────────────────────────────────
   const [jumpBackInTracks, setJumpBackInTracks] = useState<Song[]>([]);
   const [topMixPlaylists, setTopMixPlaylists] = useState<Playlist[]>([]);
   const [madeForYouPlaylists, setMadeForYouPlaylists] = useState<Playlist[]>([]);
@@ -268,6 +273,11 @@ export function HomeScreen({ isVisible = true }: { isVisible?: boolean }) {
   const [basedOnRecentTracks, setBasedOnRecentTracks] = useState<{ seedTitle: string; songs: Song[] } | null>(null);
   const [moreLikeArtistData, setMoreLikeArtistData] = useState<{ artistName: string; songs: Song[] } | null>(null);
   const [albumsFeaturingLiked, setAlbumsFeaturingLiked] = useState<Album[]>([]);
+  const [happyTracks, setHappyTracks] = useState<Song[]>([]);
+  const [todayBiggestHits, setTodayBiggestHits] = useState<Song[]>([]);
+  const [popularAlbumsList, setPopularAlbumsList] = useState<Album[]>([]);
+  const [partyTracks, setPartyTracks] = useState<Song[]>([]);
+  const [workoutTracks, setWorkoutTracks] = useState<Song[]>([]);
 
   const topArtistName = useMemo(() => {
     const profileArtists = userProfileTracker.getTopArtists(3);
@@ -428,6 +438,46 @@ export function HomeScreen({ isVisible = true }: { isVisible?: boolean }) {
           })
           .catch(() => {});
       }
+
+      getHappyHits(dynamicLanguages, 16)
+        .then((tracks) => {
+          if (tracks && tracks.length > 0) {
+            setHappyTracks(deduplicateSongs(tracks).slice(0, 14));
+          }
+        })
+        .catch(() => {});
+
+      getTodayBiggestHits(dynamicLanguages, 16)
+        .then((tracks) => {
+          if (tracks && tracks.length > 0) {
+            setTodayBiggestHits(deduplicateSongs(tracks).slice(0, 14));
+          }
+        })
+        .catch(() => {});
+
+      getPopularAlbums(dynamicLanguages, 12)
+        .then((albs) => {
+          if (albs && albs.length > 0) {
+            setPopularAlbumsList(albs.slice(0, 12));
+          }
+        })
+        .catch(() => {});
+
+      getPartyHits(dynamicLanguages, 16)
+        .then((tracks) => {
+          if (tracks && tracks.length > 0) {
+            setPartyTracks(deduplicateSongs(tracks).slice(0, 14));
+          }
+        })
+        .catch(() => {});
+
+      getWorkoutHits(dynamicLanguages, 16)
+        .then((tracks) => {
+          if (tracks && tracks.length > 0) {
+            setWorkoutTracks(deduplicateSongs(tracks).slice(0, 14));
+          }
+        })
+        .catch(() => {});
     } catch (e) {
       console.warn('[HomeScreen] Pipeline network fetch error:', e);
     }
@@ -1469,7 +1519,7 @@ export function HomeScreen({ isVisible = true }: { isVisible?: boolean }) {
           🔟 SECTION: ALBUMS FEATURING SONGS YOU LIKE
       ═════════════════════════════════════════════════════════════════════ */}
       {albumsFeaturingLiked.length > 0 && (
-        <section style={{ marginBottom: 16 }}>
+        <section>
           <SectionHeader
             title="Albums featuring songs you like"
             subtitle="Full albums containing your top tracks"
@@ -1490,6 +1540,212 @@ export function HomeScreen({ isVisible = true }: { isVisible?: boolean }) {
           >
             {albumsFeaturingLiked.map((album) => (
               <AlbumCard key={album.id} album={album} size={144} />
+            ))}
+          </div>
+        </section>
+      )}
+
+      {/* ═════════════════════════════════════════════════════════════════════
+          1️⃣1️⃣ SECTION: HAPPY (UPBEAT & FEEL-GOOD)
+      ═════════════════════════════════════════════════════════════════════ */}
+      {happyTracks.length > 0 && (
+        <section>
+          <SectionHeader
+            title="Happy"
+            subtitle="Upbeat and feel-good tracks to brighten your mood"
+            badge="Feel-Good"
+            onPlayAll={() => playSong(happyTracks[0], happyTracks, 0)}
+          />
+
+          <div
+            style={{
+              display: 'flex',
+              gap: 14,
+              overflowX: 'auto',
+              padding: '4px 20px 14px',
+              scrollPadding: '0 20px',
+              WebkitOverflowScrolling: 'touch',
+              scrollbarWidth: 'none',
+              boxSizing: 'border-box',
+            }}
+          >
+            {happyTracks.map((song, i) => (
+              <div
+                key={song.id}
+                onContextMenu={(e) => {
+                  e.preventDefault();
+                  triggerLongPress(song);
+                }}
+              >
+                <SongSquareCard
+                  song={song}
+                  queue={happyTracks}
+                  index={i}
+                  size={144}
+                />
+              </div>
+            ))}
+          </div>
+        </section>
+      )}
+
+      {/* ═════════════════════════════════════════════════════════════════════
+          1️⃣2️⃣ SECTION: TODAY'S BIGGEST HITS
+      ═════════════════════════════════════════════════════════════════════ */}
+      {todayBiggestHits.length > 0 && (
+        <section>
+          <SectionHeader
+            title="Today's Biggest Hits"
+            subtitle="The hottest chartbusters and viral anthems right now"
+            badge="Top Hits"
+            onPlayAll={() => playSong(todayBiggestHits[0], todayBiggestHits, 0)}
+          />
+
+          <div
+            style={{
+              display: 'flex',
+              gap: 14,
+              overflowX: 'auto',
+              padding: '4px 20px 14px',
+              scrollPadding: '0 20px',
+              WebkitOverflowScrolling: 'touch',
+              scrollbarWidth: 'none',
+              boxSizing: 'border-box',
+            }}
+          >
+            {todayBiggestHits.map((song, i) => (
+              <div
+                key={song.id}
+                onContextMenu={(e) => {
+                  e.preventDefault();
+                  triggerLongPress(song);
+                }}
+              >
+                <SongSquareCard
+                  song={song}
+                  queue={todayBiggestHits}
+                  index={i}
+                  size={144}
+                />
+              </div>
+            ))}
+          </div>
+        </section>
+      )}
+
+      {/* ═════════════════════════════════════════════════════════════════════
+          1️⃣3️⃣ SECTION: POPULAR ALBUMS
+      ═════════════════════════════════════════════════════════════════════ */}
+      {popularAlbumsList.length > 0 && (
+        <section>
+          <SectionHeader
+            title="Popular Albums"
+            subtitle="Top trending full albums and featured releases"
+            badge="Trending"
+          />
+
+          <div
+            style={{
+              display: 'flex',
+              gap: 14,
+              overflowX: 'auto',
+              padding: '4px 20px 14px',
+              scrollPadding: '0 20px',
+              WebkitOverflowScrolling: 'touch',
+              scrollbarWidth: 'none',
+              boxSizing: 'border-box',
+            }}
+          >
+            {popularAlbumsList.map((album) => (
+              <AlbumCard key={album.id} album={album} size={144} />
+            ))}
+          </div>
+        </section>
+      )}
+
+      {/* ═════════════════════════════════════════════════════════════════════
+          1️⃣4️⃣ SECTION: PARTY (HIGH-ENERGY DANCE & CLUB)
+      ═════════════════════════════════════════════════════════════════════ */}
+      {partyTracks.length > 0 && (
+        <section>
+          <SectionHeader
+            title="Party"
+            subtitle="High-energy club bangers and dance floor chartbusters"
+            badge="Party"
+            onPlayAll={() => playSong(partyTracks[0], partyTracks, 0)}
+          />
+
+          <div
+            style={{
+              display: 'flex',
+              gap: 14,
+              overflowX: 'auto',
+              padding: '4px 20px 14px',
+              scrollPadding: '0 20px',
+              WebkitOverflowScrolling: 'touch',
+              scrollbarWidth: 'none',
+              boxSizing: 'border-box',
+            }}
+          >
+            {partyTracks.map((song, i) => (
+              <div
+                key={song.id}
+                onContextMenu={(e) => {
+                  e.preventDefault();
+                  triggerLongPress(song);
+                }}
+              >
+                <SongSquareCard
+                  song={song}
+                  queue={partyTracks}
+                  index={i}
+                  size={144}
+                />
+              </div>
+            ))}
+          </div>
+        </section>
+      )}
+
+      {/* ═════════════════════════════════════════════════════════════════════
+          1️⃣5️⃣ SECTION: WORKOUT (HIGH-ENERGY GYM & FITNESS)
+      ═════════════════════════════════════════════════════════════════════ */}
+      {workoutTracks.length > 0 && (
+        <section style={{ marginBottom: 20 }}>
+          <SectionHeader
+            title="Workout"
+            subtitle="Pumping bass and high-energy motivation for your fitness session"
+            badge="Pumping"
+            onPlayAll={() => playSong(workoutTracks[0], workoutTracks, 0)}
+          />
+
+          <div
+            style={{
+              display: 'flex',
+              gap: 14,
+              overflowX: 'auto',
+              padding: '4px 20px 14px',
+              scrollPadding: '0 20px',
+              WebkitOverflowScrolling: 'touch',
+              scrollbarWidth: 'none',
+              boxSizing: 'border-box',
+            }}
+          >
+            {workoutTracks.map((song, i) => (
+              <div
+                key={song.id}
+                onContextMenu={(e) => {
+                  e.preventDefault();
+                  triggerLongPress(song);
+                }}
+              >
+                <SongSquareCard
+                  song={song}
+                  queue={workoutTracks}
+                  index={i}
+                  size={144}
+                />
+              </div>
             ))}
           </div>
         </section>

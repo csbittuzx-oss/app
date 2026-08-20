@@ -1067,6 +1067,74 @@ export async function getPartyHits(languages: string[], limit = 16): Promise<Son
   return songs;
 }
 
+// ─── Workout (High-Energy Gym & Fitness Beats) ────────────────────────────────
+
+export async function getWorkoutHits(languages: string[], limit = 16): Promise<Song[]> {
+  const cacheKey = `workout_hits_${languages.join('_')}_${limit}`;
+  const cached = fromCache<Song[]>(cacheKey);
+  if (cached) return cached;
+
+  const validLangs = languages.length > 0 ? languages : ['Hindi', 'International', 'Punjabi'];
+  const queries = validLangs.map((lang) => `${lang} workout gym fitness motivation energetic high bass gymming songs hits`);
+
+  const searchPromises = queries.map(async (q) => {
+    const [sRes, ytRes] = await Promise.allSettled([
+      searchJioSaavn(q, Math.ceil(limit / queries.length) + 4),
+      searchYouTubeMusic(q, Math.ceil(limit / queries.length) + 4),
+    ]);
+    const sSongs = sRes.status === 'fulfilled' ? sRes.value.songs : [];
+    const ytSongs = ytRes.status === 'fulfilled' ? ytRes.value.songs : [];
+    return [...sSongs, ...ytSongs];
+  });
+
+  const langResults = await Promise.all(searchPromises);
+  const combined: Song[] = [];
+  const maxLen = Math.max(...langResults.map(r => r.length), 0);
+  for (let i = 0; i < maxLen; i++) {
+    for (const group of langResults) {
+      if (group[i]) combined.push(group[i]);
+    }
+  }
+
+  const songs = deduplicateSongs(combined).slice(0, limit);
+  setCache(cacheKey, songs);
+  return songs;
+}
+
+// ─── Today's Biggest Hits (Top Chartbusters & Viral Hits) ─────────────────────
+
+export async function getTodayBiggestHits(languages: string[], limit = 16): Promise<Song[]> {
+  const cacheKey = `today_biggest_hits_${languages.join('_')}_${limit}`;
+  const cached = fromCache<Song[]>(cacheKey);
+  if (cached) return cached;
+
+  const validLangs = languages.length > 0 ? languages : ['Hindi', 'International'];
+  const queries = validLangs.map((lang) => `${lang} top 50 biggest hits today trending chartbusters 2026`);
+
+  const searchPromises = queries.map(async (q) => {
+    const [sRes, ytRes] = await Promise.allSettled([
+      searchJioSaavn(q, Math.ceil(limit / queries.length) + 4),
+      searchYouTubeMusic(q, Math.ceil(limit / queries.length) + 4),
+    ]);
+    const sSongs = sRes.status === 'fulfilled' ? sRes.value.songs : [];
+    const ytSongs = ytRes.status === 'fulfilled' ? ytRes.value.songs : [];
+    return [...sSongs, ...ytSongs];
+  });
+
+  const langResults = await Promise.all(searchPromises);
+  const combined: Song[] = [];
+  const maxLen = Math.max(...langResults.map(r => r.length), 0);
+  for (let i = 0; i < maxLen; i++) {
+    for (const group of langResults) {
+      if (group[i]) combined.push(group[i]);
+    }
+  }
+
+  const songs = deduplicateSongs(combined).slice(0, limit);
+  setCache(cacheKey, songs);
+  return songs;
+}
+
 // ─── Throwback (Nostalgic 90s/2000s Classics) ──────────────────────────────────
 
 export async function getThrowbackHits(languages: string[], limit = 16): Promise<Song[]> {
@@ -1245,6 +1313,50 @@ export async function getTopArtists(limit = 12): Promise<Artist[]> {
 }
 
 // ─── Album ───────────────────────────────────────────────────────────────────
+
+export async function getPopularAlbums(languages: string[], limit = 12): Promise<Album[]> {
+  const cacheKey = `popular_albums_${languages.join('_')}_${limit}`;
+  const cached = fromCache<Album[]>(cacheKey);
+  if (cached) return cached;
+
+  const validLangs = languages.length > 0 ? languages : ['Hindi', 'International', 'Punjabi'];
+  const queries = validLangs.map((lang) => `${lang} top hit albums 2025 2026`);
+
+  const albumMap = new Map<string, Album>();
+
+  await Promise.allSettled(
+    queries.map(async (q) => {
+      try {
+        const [saavnRes, ytRes] = await Promise.allSettled([
+          searchJioSaavn(q, 10),
+          searchYouTubeMusic(q, 10),
+        ]);
+
+        if (saavnRes.status === 'fulfilled' && Array.isArray(saavnRes.value.albums)) {
+          saavnRes.value.albums.forEach((alb) => {
+            const key = alb.title.toLowerCase().trim();
+            if (key && !albumMap.has(key)) {
+              albumMap.set(key, alb);
+            }
+          });
+        }
+
+        if (ytRes.status === 'fulfilled' && Array.isArray(ytRes.value.albums)) {
+          ytRes.value.albums.forEach((alb) => {
+            const key = alb.title.toLowerCase().trim();
+            if (key && !albumMap.has(key)) {
+              albumMap.set(key, alb);
+            }
+          });
+        }
+      } catch {}
+    })
+  );
+
+  const albums = Array.from(albumMap.values()).slice(0, limit);
+  setCache(cacheKey, albums);
+  return albums;
+}
 
 export async function getAlbumTracks(albumId: string): Promise<Song[]> {
   const cacheKey = `album_${albumId}`;
