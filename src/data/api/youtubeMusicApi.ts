@@ -2,6 +2,7 @@ import type { Song, Album, Artist, SearchResult } from '../models';
 import { resolveFullTrack } from './saavnApi';
 import { universalGet, universalPost } from '../../core/utils/http';
 import { resizeImageUrl } from '../../core/utils/imageUtils';
+import { evaluateTrackMatch, cleanCoreTitle } from '../../domain/player/TrackMatchingEngine';
 
 const YTM_SEARCH_ENDPOINT = 'https://music.youtube.com/youtubei/v1/search?prettyPrint=false';
 const PIPED_API_ENDPOINT = 'https://api.piped.private.coffee';
@@ -336,15 +337,7 @@ export async function resolveYouTubeFullAudioStream(
   artist: string,
   targetDuration?: number
 ): Promise<{ streamUrl: string; duration: number; artwork?: string; videoId?: string } | null> {
-  const cleanTitle = title
-    .replace(/\(feat\..*?\)/gi, '')
-    .replace(/\(with.*?\)/gi, '')
-    .replace(/\[.*?\]/g, '')
-    .replace(/\(.*?\)/g, '')
-    .replace(/[^\p{L}\p{N}\s]/gu, ' ')
-    .replace(/\s+/g, ' ')
-    .trim();
-
+  const cleanTitle = cleanCoreTitle(title);
   const primaryArtist = (artist || '').split(/[,&/]|feat\.|ft\./i)[0]?.trim() || '';
   const queries = [
     `${cleanTitle} ${primaryArtist} official audio`,
@@ -353,12 +346,12 @@ export async function resolveYouTubeFullAudioStream(
     `${cleanTitle}`,
   ].filter(Boolean);
 
-  const { isExactOrStrictTrackMatch, isPreviewAudioUrl } = await import('./saavnApi');
+  const { isPreviewAudioUrl } = await import('./saavnApi');
 
   // Strategy 1: Direct YouTube Music InnerTube search (Google's native ML search - highest accuracy)
   for (const q of queries) {
     try {
-      const ytResult = await searchYouTubeMusic(q, 6);
+      const ytResult = await searchYouTubeMusic(q, 8);
       if (ytResult.songs && ytResult.songs.length > 0) {
         const matchingCandidates = ytResult.songs
           .map((candidateSong) => {
@@ -366,13 +359,14 @@ export async function resolveYouTubeFullAudioStream(
             const cand = {
               title: candidateSong.title,
               artist: candidateSong.artist,
+              album: candidateSong.album,
               duration: candidateSong.duration,
             };
-            const { isMatch, score } = isExactOrStrictTrackMatch(cand, title, artist, targetDuration, true);
-            return { song: candidateSong, videoId, isMatch, score };
+            const decision = evaluateTrackMatch(title, artist, targetDuration, cand, 'YouTubeMusic InnerTube');
+            return { song: candidateSong, videoId, isMatch: decision.isMatch, confidence: decision.confidence };
           })
           .filter((c) => c.isMatch && c.videoId)
-          .sort((a, b) => b.score - a.score);
+          .sort((a, b) => b.confidence - a.confidence);
 
         for (const candidate of matchingCandidates) {
           const stream = await fetchAudioStreamFromYouTubeId(candidate.videoId);
@@ -405,11 +399,11 @@ export async function resolveYouTubeFullAudioStream(
                 artist: item.uploaderName || item.artist || '',
                 duration: item.duration || 0,
               };
-              const { isMatch, score } = isExactOrStrictTrackMatch(cand, title, artist, targetDuration, true);
-              return { item, isMatch, score };
+              const decision = evaluateTrackMatch(title, artist, targetDuration, cand, 'Piped Music Fallback');
+              return { item, isMatch: decision.isMatch, confidence: decision.confidence };
             })
             .filter((x: any) => x.isMatch && x.item.url)
-            .sort((a: any, b: any) => b.score - a.score);
+            .sort((a: any, b: any) => b.confidence - a.confidence);
 
           for (const cand of verifiedCandidates.slice(0, 3)) {
             const videoId = cand.item.url.replace('/watch?v=', '');

@@ -1,6 +1,7 @@
 import CryptoJS from 'crypto-js';
 import type { Song, Album, Artist, SearchResult, AudioQuality } from '../models';
 import { universalGet } from '../../core/utils/http';
+import { evaluateTrackMatch, cleanCoreTitle } from '../../domain/player/TrackMatchingEngine';
 
 const BASE_URL = 'https://www.jiosaavn.com/api.php';
 const DES_KEY = '38346591';
@@ -314,23 +315,10 @@ export async function getJioSaavnTrending(limit = 20): Promise<Song[]> {
 }
 
 /**
- * Cleans a song title by stripping extraneous movie, soundtrack, remix, and feat tags.
+ * Cleans a song title by stripping extraneous movie, soundtrack, and non-semantic video/audio tags.
  */
 export function cleanTitleForMatching(title: string): string {
-  if (!title) return '';
-  return title
-    .replace(/\(feat\..*?\)/gi, '')
-    .replace(/\(with.*?\)/gi, '')
-    .replace(/\(from.*?\)/gi, '')
-    .replace(/\[feat\..*?\]/gi, '')
-    .replace(/\(.*?\)/g, '')
-    .replace(/\[.*?\]/g, '')
-    .replace(/\s*-\s*(from|soundtrack|ost|remix|acoustic|remastered|live|original|radio edit|deluxe|version|slowed|reverb|lofi|cover|reprise|unplugged|male|female|duet|audio|video|teaser|lyric|lyrics).*$/gi, '')
-    .replace(/["'’]/g, '')
-    .replace(/[^\p{L}\p{N}\s]/gu, ' ')
-    .replace(/\s+/g, ' ')
-    .trim()
-    .toLowerCase();
+  return cleanCoreTitle(title);
 }
 
 /**
@@ -338,8 +326,7 @@ export function cleanTitleForMatching(title: string): string {
  */
 export function generateSearchVariants(title: string, artist: string): string[] {
   const variants: string[] = [];
-
-  const cleanTitle = cleanTitleForMatching(title);
+  const cleanTitle = cleanCoreTitle(title);
 
   // Clean Artists: primary artist (before comma, &, feat, with)
   const primaryArtist = (artist || '')
@@ -385,31 +372,6 @@ export function generateSearchVariants(title: string, artist: string): string[] 
   return [...new Set(variants.filter((v) => v.length > 0))];
 }
 
-const UNWANTED_MODIFIERS = [
-  'slowed + reverb',
-  'slowed and reverb',
-  'slowed reverb',
-  'lo-fi remix',
-  'lofi remix',
-  'tribute to',
-  'cover by',
-  'karaoke version',
-  'karaoke track',
-  'instrumental version',
-  '8d audio',
-  'ringtone cut',
-];
-
-function normalizeText(str: string): string {
-  return (str || '')
-    .toLowerCase()
-    .replace(/\(.*?\)/g, '')
-    .replace(/\[.*?\]/g, '')
-    .replace(/[^\p{L}\p{N}\s]/gu, '')
-    .replace(/\s+/g, ' ')
-    .trim();
-}
-
 /**
  * Strict, high-precision match verification.
  * Guarantees that only the EXACT same song by the authentic artist is resolved.
@@ -422,105 +384,14 @@ export function isExactOrStrictTrackMatch(
   targetDuration?: number,
   relaxedArtist = false
 ): { isMatch: boolean; score: number } {
-  const cleanTarget = cleanTitleForMatching(targetTitle);
-  const cleanCand = cleanTitleForMatching(candidate.title);
-
-  if (!cleanCand || !cleanTarget) return { isMatch: false, score: 0 };
-
-  // 1. REJECT fake versions (Slowed, Reverb, Lofi, Cover, Remake, Karaoke)
-  const rawCandTitle = (candidate.title || '').toLowerCase();
-  const rawCandAlbum = (candidate.album || '').toLowerCase();
-  const rawTargetTitle = (targetTitle || '').toLowerCase();
-
-  for (const mod of UNWANTED_MODIFIERS) {
-    if (!rawTargetTitle.includes(mod)) {
-      if (rawCandTitle.includes(mod) || rawCandAlbum.includes(mod)) {
-        return { isMatch: false, score: 0 };
-      }
-    }
-  }
-
-  // 2. Exact or High-Confidence Title Matching
-  let titleScore = 0;
-  if (cleanCand === cleanTarget) {
-    titleScore = 100; // Exact title match
-  } else if (cleanCand.startsWith(cleanTarget) || cleanTarget.startsWith(cleanCand)) {
-    titleScore = 90;
-  } else {
-    const targetWords = cleanTarget.split(' ').filter((w) => w.length > 0);
-    const candWords = cleanCand.split(' ').filter((w) => w.length > 0);
-
-    if (targetWords.length === 0 || candWords.length === 0) return { isMatch: false, score: 0 };
-
-    const commonWords = targetWords.filter((w) => candWords.includes(w));
-    const targetWordRatio = commonWords.length / targetWords.length;
-    const candWordRatio = commonWords.length / candWords.length;
-
-    if (targetWordRatio === 1.0 && candWords.length <= targetWords.length + 2) {
-      titleScore = 85;
-    } else if (targetWordRatio >= 0.65 && candWordRatio >= 0.4) {
-      titleScore = Math.round(targetWordRatio * 75);
-    } else {
-      return { isMatch: false, score: 0 }; // Completely different title -> Reject
-    }
-  }
-
-  // 3. Artist & Record Label Verification
-  const normTargetArtist = normalizeText(targetArtist);
-  const normCandArtist = normalizeText(`${candidate.artist || ''} ${candidate.album || ''}`);
-
-  let artistScore = 0;
-  if (normTargetArtist && normCandArtist) {
-    const targetTokens = normTargetArtist.split(/[,&/]|feat|ft|with|\s+/).filter((w) => w.length >= 2);
-    const candTokens = normCandArtist.split(/[,&/]|feat|ft|with|\s+/).filter((w) => w.length >= 2);
-
-    const hasCommonArtist = targetTokens.some((t) =>
-      candTokens.some((c) => c === t || c.includes(t) || t.includes(c))
-    );
-
-    const OFFICIAL_RECORD_LABELS = [
-      'tseries', 't series', 'sony', 'sonymusic', 'zee', 'zeemusic', 'yrf', 'saregama',
-      'speedrecords', 'speed', 'tips', 'whitehill', 'geetmp3', 'dmf', 'desimusicfactory',
-      'universal', 'warnermusic', 'warner', 'vevo', 'topic', 'official', 'records', 'music'
-    ];
-
-    const isOfficialLabelOrTopic = OFFICIAL_RECORD_LABELS.some((lbl) =>
-      normCandArtist.includes(lbl)
-    );
-
-    if (hasCommonArtist) {
-      artistScore = 50;
-    } else if (isOfficialLabelOrTopic && titleScore >= 85) {
-      artistScore = 30; // Official label publishing the exact same title
-    } else if (relaxedArtist && titleScore >= 90) {
-      // Relaxed mode for Spotify cross-catalog: trust title + duration strongly
-      artistScore = 0; // Neutral — don't penalize unknown artist from cross-catalog
-    } else {
-      artistScore = -40; // Different artist → lower penalty (was -60, too aggressive for cross-catalog)
-    }
-  } else {
-    artistScore = 20;
-  }
-
-  // 4. Duration verification (more weight in relaxed mode)
-  let durationScore = 0;
-  if (targetDuration && targetDuration > 0 && candidate.duration && candidate.duration > 0) {
-    const diff = Math.abs(candidate.duration - targetDuration);
-    if (diff <= 10) {
-      durationScore = relaxedArtist ? 40 : 30; // Strong duration match is very reliable
-    } else if (diff <= 20) {
-      durationScore = relaxedArtist ? 25 : 15;
-    } else if (diff <= 35) {
-      durationScore = 10;
-    } else if (diff > 85) {
-      durationScore = -30;
-    }
-  }
-
-  const total = titleScore + artistScore + durationScore;
-  // In relaxed mode (Spotify imports), lower threshold: 55 instead of 65
-  const threshold = relaxedArtist ? 55 : 65;
-  return { isMatch: total >= threshold, score: total };
+  const decision = evaluateTrackMatch(
+    targetTitle,
+    targetArtist,
+    targetDuration,
+    candidate,
+    relaxedArtist ? 'JioSaavn (Relaxed)' : 'JioSaavn'
+  );
+  return { isMatch: decision.isMatch, score: Math.round(decision.confidence * 100) };
 }
 
 /**
@@ -533,12 +404,9 @@ export async function resolveFullTrack(
   artist: string,
   quality: AudioQuality = 'high',
   targetDuration?: number,
-  isSpotifyImport = false
+  _isSpotifyImport = false
 ): Promise<{ streamUrl: string; duration: number; artwork?: string } | null> {
   const queryVariants = generateSearchVariants(title, artist);
-  // relaxedArtist = true for Spotify imports: title + duration are more reliable
-  // than the cross-catalog artist name alignment between Spotify and JioSaavn
-  const relaxed = isSpotifyImport;
 
   // 1. Tier 1: Search JioSaavn through prioritized query variants with strict score matching
   for (const q of queryVariants) {
@@ -547,11 +415,11 @@ export async function resolveFullTrack(
       if (res.songs && res.songs.length > 0) {
         const scoredCandidates = res.songs
           .map((song) => {
-            const { isMatch, score } = isExactOrStrictTrackMatch(song, title, artist, targetDuration, relaxed);
-            return { song, isMatch, score };
+            const decision = evaluateTrackMatch(title, artist, targetDuration, song, 'JioSaavn Tier 1');
+            return { song, isMatch: decision.isMatch, confidence: decision.confidence };
           })
           .filter((item) => item.isMatch && item.song.previewUrl && item.song.previewUrl.startsWith('http'))
-          .sort((a, b) => b.score - a.score);
+          .sort((a, b) => b.confidence - a.confidence);
 
         if (scoredCandidates.length > 0) {
           const best = scoredCandidates[0].song;
@@ -589,7 +457,7 @@ export async function resolveFullTrack(
 
   // 2. Tier 2: JioSaavn Autocomplete fuzzy match -> strict verify detailed songs
   try {
-    const cleanT = cleanTitleForMatching(title);
+    const cleanT = cleanCoreTitle(title);
     const primA = (artist || '').split(/[,&/]|feat\.|ft\./i)[0]?.trim() || '';
     const autoQuery = `${cleanT} ${primA}`.trim();
     const autoUrl = `${BASE_URL}?__call=autocomplete.get&query=${encodeURIComponent(autoQuery)}&_format=json&_marker=0&ctx=web6dot0`;
@@ -612,8 +480,8 @@ export async function resolveFullTrack(
               album: decodeHtmlEntities(item.album || ''),
               duration: parseInt(item.duration, 10) || 0,
             };
-            const { isMatch } = isExactOrStrictTrackMatch(cand, title, artist, targetDuration, relaxed);
-            if (isMatch) {
+            const decision = evaluateTrackMatch(title, artist, targetDuration, cand, 'JioSaavn Tier 2');
+            if (decision.isMatch) {
               const dur = cand.duration || targetDuration || 180;
               return {
                 streamUrl: formatMediaUrlWithQuality(fullAudioUrl, quality),

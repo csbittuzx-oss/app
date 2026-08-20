@@ -809,10 +809,30 @@ class AudioPlayer {
       }
     }
 
-    // ── Full-track URL resolution (Spotify / iTunes / Previews / Restored Session → JioSaavn) ──
+    // ── Full-track URL resolution (Spotify / iTunes / Previews / Restored Session → JioSaavn / YouTube) ──
     const isRestoredTrack = this.savedResumeTrackId === targetSong.id;
     if (isRestoredTrack && targetSong.previewUrl && !targetSong.previewUrl.startsWith('blob:') && !targetSong.isDownloaded) {
       targetSong.previewUrl = null;
+    }
+
+    // 0. Direct YouTube Video Stream: If song is a native YouTube track with valid 11-char ID
+    if (targetSong.id.startsWith('yt_') && (!targetSong.previewUrl || isPreviewAudioUrl(targetSong.previewUrl)) && navigator.onLine) {
+      const cleanVideoId = targetSong.id.replace('yt_', '').trim();
+      if (cleanVideoId.length === 11 && /^[a-zA-Z0-9_-]{11}$/.test(cleanVideoId)) {
+        try {
+          const { fetchAudioStreamFromYouTubeId } = await import('../../data/api/youtubeMusicApi');
+          const directStream = await fetchAudioStreamFromYouTubeId(cleanVideoId);
+          if (myGen !== this._playGeneration) return;
+          if (directStream?.streamUrl && !isPreviewAudioUrl(directStream.streamUrl)) {
+            targetSong.previewUrl = directStream.streamUrl;
+            if (directStream.duration) targetSong.duration = directStream.duration;
+            targetSong.provider = 'youtube';
+            this.emit({ type: 'songchange', song: { ...targetSong } });
+          }
+        } catch (e) {
+          console.warn('Direct YouTube stream fetch error:', e);
+        }
+      }
     }
 
     const isShortPreview = (!targetSong.previewUrl && navigator.onLine)
