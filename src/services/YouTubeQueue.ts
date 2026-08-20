@@ -18,10 +18,11 @@ import {
   normalizeArtist,
   isPhonkSong,
   smartRecommendationEngine,
+  analyzeSongCharacteristics,
+  calculateSongSimilarityScore,
 } from '../domain/recommendation/SmartRecommendationEngine';
 import { isSongMatchingLanguage } from '../data/repository/musicRepository';
 import { userProfileTracker } from '../domain/recommendation/UserProfileTracker';
-import { aiTasteProfileEngine, inferSongMood } from '../domain/ai/AITasteProfileEngine';
 
 const YTM_NEXT_ENDPOINT = 'https://music.youtube.com/youtubei/v1/next?prettyPrint=false';
 
@@ -157,49 +158,31 @@ export class YouTubeQueueService {
       }
     }
 
-    // ── Score & Rank Candidates with Freshness First + AI Taste Alignment ──
-    const currentArtistNorm = normalizeArtist(seedSong.artist);
-    const currentMood = aiTasteProfileEngine.getCurrentContextualMood();
-    const aiTopArtists = aiTasteProfileEngine.getProfile().topArtists;
+    // ── Score & Rank Candidates with Style Similarity & Freshness ──────────
+    const seedChars = analyzeSongCharacteristics(seedSong);
 
     const scored = candidates.map((song) => {
-      let score = 50;
-      const songArtistNorm = normalizeArtist(song.artist);
-      const songCore = getCoreTitle(song.title);
+      const candChars = analyzeSongCharacteristics(song);
+      const similarityScore = calculateSongSimilarityScore(
+        seedSong,
+        song,
+        seedChars,
+        candChars,
+        [],
+        playedSongIds
+      );
 
-      // Freshness: Check if unplayed / not in user library
+      const songCore = getCoreTitle(song.title);
       const isFresh = !playedSongIds.has(song.id) && (!songCore || !knownCoreTitles.has(songCore));
 
-      if (isFresh) {
-        score += 80; // Heavy Freshness Priority!
-      } else {
-        score -= 50; // Known song penalty
-      }
-
-      // User Taste: Artist Affinity
-      score += userProfileTracker.getArtistTasteScore(song.artist);
-
-      // AI Taste Profile Top Artist Match
-      if (aiTopArtists[songArtistNorm]) {
-        score += Math.min(30, aiTopArtists[songArtistNorm].score * 3);
-      }
-
-      // Mood / Vibe Match
-      const songMood = inferSongMood(song);
-      if (songMood === currentMood && songMood !== 'neutral') {
-        score += 15;
-      }
-
-      // Complementary Artist / Current Song Boost
-      if (currentArtistNorm && songArtistNorm === currentArtistNorm) {
-        score += 20;
-      }
+      let score = similarityScore;
+      if (isFresh) score += 35;
 
       return { song, score, isFresh };
     });
 
-    const freshList = scored.filter((i) => i.isFresh).sort((a, b) => b.score - a.score);
-    const knownList = scored.filter((i) => !i.isFresh).sort((a, b) => b.score - a.score);
+    const freshList = scored.filter((i) => i.score > -100 && i.isFresh).sort((a, b) => b.score - a.score);
+    const knownList = scored.filter((i) => i.score > -100 && !i.isFresh).sort((a, b) => b.score - a.score);
 
     const orderedPool: Song[] = [
       ...freshList.map((i) => i.song),

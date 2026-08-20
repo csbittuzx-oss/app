@@ -18,7 +18,6 @@ import { searchYouTubeMusic } from '../../data/api/youtubeMusicApi';
 import { userProfileTracker } from './UserProfileTracker';
 import { isSongMatchingLanguage, deduplicateSongs } from '../../data/repository/musicRepository';
 import { filterSpotifyAvailableTracks } from '../../services/SpotifyAvailabilityService';
-import { aiTasteProfileEngine, inferSongMood } from '../ai/AITasteProfileEngine';
 
 export interface RecommendationContext {
   languages?: string[];
@@ -27,6 +26,8 @@ export interface RecommendationContext {
   favorites?: Song[];
   recentlyPlayed?: Song[];
   searchHistory?: string[];
+  sessionHistoryArtists?: string[];
+  sessionPlayedIds?: Set<string>;
 }
 
 export interface MusicContext {
@@ -182,6 +183,259 @@ export function isPhonkSong(song: Song): boolean {
     text.includes('playaphonk') || text.includes('dxrk') || text.includes('cursed evil');
 }
 
+export type SongMood = 'romantic' | 'party' | 'sad' | 'chill' | 'energetic' | 'devotional' | 'focus' | 'neutral';
+
+export interface SongCharacteristics {
+  language: string;
+  genre: string;
+  mood: SongMood;
+  tempo: 'slow' | 'medium' | 'fast';
+  artist: string;
+  normalizedArtist: string;
+  coreTitle: string;
+  tags: string[];
+}
+
+/**
+ * Performs deep multi-dimensional analysis of a song's attributes.
+ */
+export function analyzeSongCharacteristics(song: Song | null): SongCharacteristics {
+  if (!song) {
+    return {
+      language: 'Hindi',
+      genre: 'Bollywood',
+      mood: 'neutral',
+      tempo: 'medium',
+      artist: '',
+      normalizedArtist: '',
+      coreTitle: '',
+      tags: [],
+    };
+  }
+
+  const musicCtx = classifySongContext(song);
+  const rawText = `${song.title} ${song.artist} ${song.album || ''} ${song.genre || ''} ${song.language || ''}`.toLowerCase();
+
+  let mood: SongMood = 'neutral';
+  let tempo: 'slow' | 'medium' | 'fast' = 'medium';
+
+  // 1. Devotional / Bhakti Check
+  const isDevotional =
+    rawText.includes('bhajan') ||
+    rawText.includes('aarti') ||
+    rawText.includes('kirtan') ||
+    rawText.includes('chalisa') ||
+    rawText.includes('shabad') ||
+    rawText.includes('qawwali') ||
+    rawText.includes('stotram') ||
+    rawText.includes('mantra') ||
+    rawText.includes('ram siyan') ||
+    rawText.includes('shree ram') ||
+    rawText.includes('hanuman') ||
+    rawText.includes('shiv tandav') ||
+    rawText.includes('mahadev') ||
+    rawText.includes('krishna') ||
+    rawText.includes('waheguru') ||
+    rawText.includes('devotional');
+
+  if (isDevotional) {
+    mood = 'devotional';
+    tempo = 'medium';
+  } else if (
+    rawText.includes('workout') ||
+    rawText.includes('gym') ||
+    rawText.includes('power') ||
+    rawText.includes('pump') ||
+    rawText.includes('rock') ||
+    rawText.includes('metal') ||
+    rawText.includes('bhangra') ||
+    rawText.includes('hype') ||
+    musicCtx.isPhonk
+  ) {
+    mood = 'energetic';
+    tempo = 'fast';
+  } else if (
+    rawText.includes('party') ||
+    rawText.includes('dance') ||
+    rawText.includes('club') ||
+    rawText.includes('dj') ||
+    rawText.includes('dhamaka') ||
+    rawText.includes('nachle') ||
+    rawText.includes('thumka') ||
+    rawText.includes('sharab') ||
+    rawText.includes('daaru') ||
+    rawText.includes('hookah') ||
+    rawText.includes('edm')
+  ) {
+    mood = 'party';
+    tempo = 'fast';
+  } else if (
+    rawText.includes('sad') ||
+    rawText.includes('heartbreak') ||
+    rawText.includes('pain') ||
+    rawText.includes('alone') ||
+    rawText.includes('dard') ||
+    rawText.includes('judaai') ||
+    rawText.includes('bewafa') ||
+    rawText.includes('roye') ||
+    rawText.includes('yaad') ||
+    rawText.includes('aansoo') ||
+    rawText.includes('broken') ||
+    rawText.includes('tujhe kitna chahein')
+  ) {
+    mood = 'sad';
+    tempo = 'slow';
+  } else if (
+    rawText.includes('love') ||
+    rawText.includes('romantic') ||
+    rawText.includes('ishq') ||
+    rawText.includes('pyaar') ||
+    rawText.includes('dil') ||
+    rawText.includes('sanam') ||
+    rawText.includes('tum hi ho') ||
+    rawText.includes('kesariya') ||
+    rawText.includes('humsafar') ||
+    rawText.includes('peelings') ||
+    rawText.includes('chahat') ||
+    rawText.includes('mohabbat') ||
+    rawText.includes('acoustic') ||
+    rawText.includes('unplugged')
+  ) {
+    mood = 'romantic';
+    tempo = 'slow';
+  } else if (
+    rawText.includes('study') ||
+    rawText.includes('focus') ||
+    rawText.includes('instrumental') ||
+    rawText.includes('piano') ||
+    rawText.includes('ambient') ||
+    rawText.includes('relax')
+  ) {
+    mood = 'focus';
+    tempo = 'slow';
+  } else if (
+    rawText.includes('chill') ||
+    rawText.includes('lofi') ||
+    rawText.includes('lo-fi') ||
+    rawText.includes('coffee') ||
+    rawText.includes('peace') ||
+    rawText.includes('calm') ||
+    rawText.includes('slowed') ||
+    rawText.includes('reverb') ||
+    rawText.includes('night drive')
+  ) {
+    mood = 'chill';
+    tempo = 'slow';
+  }
+
+  const tags: string[] = [musicCtx.language, musicCtx.genre, mood];
+  if (isDevotional) tags.push('Bhakti', 'Devotional');
+  if (musicCtx.isPhonk) tags.push('Phonk', 'Drift');
+
+  return {
+    language: musicCtx.language,
+    genre: musicCtx.genre,
+    mood,
+    tempo,
+    artist: song.artist,
+    normalizedArtist: normalizeArtist(song.artist),
+    coreTitle: getCoreTitle(song.title),
+    tags,
+  };
+}
+
+/**
+ * Calculates a multi-factor similarity score between a seed track and candidate track.
+ */
+export function calculateSongSimilarityScore(
+  seed: Song,
+  cand: Song,
+  seedChars: SongCharacteristics,
+  candChars: SongCharacteristics,
+  sessionHistoryArtists: string[] = [],
+  sessionPlayedIds: Set<string> = new Set()
+): number {
+  // 1. Disqualification checks
+  if (cand.id === seed.id) return -9999;
+  if (sessionPlayedIds.has(cand.id)) return -9999;
+  if (isSameOrSimilarTitle(cand.title, seed.title)) return -9999;
+  if (candChars.coreTitle && seedChars.coreTitle && candChars.coreTitle === seedChars.coreTitle) return -9999;
+
+  let score = 50;
+
+  // 2. Strict Language Compatibility
+  if (seedChars.language.toLowerCase() === candChars.language.toLowerCase()) {
+    score += 45;
+  } else if (
+    (seedChars.language === 'International' && candChars.language === 'English') ||
+    (seedChars.language === 'English' && candChars.language === 'International')
+  ) {
+    score += 35;
+  } else {
+    return -9999; // Different language barrier
+  }
+
+  // 3. Mood & Energy Compatibility
+  if (seedChars.mood === candChars.mood && seedChars.mood !== 'neutral') {
+    score += 35;
+  } else if (
+    (seedChars.mood === 'romantic' && candChars.mood === 'chill') ||
+    (seedChars.mood === 'chill' && candChars.mood === 'romantic') ||
+    (seedChars.mood === 'party' && candChars.mood === 'energetic') ||
+    (seedChars.mood === 'energetic' && candChars.mood === 'party') ||
+    (seedChars.mood === 'sad' && candChars.mood === 'romantic')
+  ) {
+    score += 20;
+  } else if (
+    (seedChars.mood === 'sad' && candChars.mood === 'party') ||
+    (seedChars.mood === 'party' && candChars.mood === 'sad') ||
+    (seedChars.mood === 'devotional' && candChars.mood !== 'devotional') ||
+    (seedChars.mood !== 'devotional' && candChars.mood === 'devotional')
+  ) {
+    score -= 60; // Major mood clash
+  }
+
+  // 4. Tempo Compatibility
+  if (seedChars.tempo === candChars.tempo) {
+    score += 15;
+  }
+
+  // 5. Genre Compatibility
+  if (seedChars.genre.toLowerCase() === candChars.genre.toLowerCase()) {
+    score += 25;
+  }
+
+  // 6. Artist Similarity & Anti-Repetition
+  const isSameArtist =
+    seedChars.normalizedArtist &&
+    candChars.normalizedArtist &&
+    seedChars.normalizedArtist === candChars.normalizedArtist;
+  if (isSameArtist) {
+    score += 20;
+  }
+
+  // Penalize if candidate's artist was played in the last 2 tracks
+  const recentSameArtistCount = sessionHistoryArtists.slice(0, 2).filter((a) => a === candChars.normalizedArtist).length;
+  if (recentSameArtistCount > 0) {
+    score -= 40;
+  }
+
+  // 7. User Taste & Affinity Alignment
+  const artistTasteScore = userProfileTracker.getArtistTasteScore(cand.artist);
+  score += Math.min(25, artistTasteScore * 0.5);
+
+  const affinityScore = userProfileTracker.calculateAffinityScore(cand);
+  score += Math.min(20, affinityScore);
+
+  // Freshness boost for unplayed songs
+  const playedSongIds = userProfileTracker.getAllKnownPlayedSongIds();
+  if (!playedSongIds.has(cand.id)) {
+    score += 30;
+  }
+
+  return score;
+}
+
 class SmartRecommendationEngineService {
   private preloadedTrackCache: Map<string, { song: Song; ts: number }> = new Map();
 
@@ -194,9 +448,9 @@ class SmartRecommendationEngineService {
     count = 5,
     context: RecommendationContext = {}
   ): Promise<Song[]> {
-    const musicCtx = classifySongContext(currentSong);
-    const targetLanguage = musicCtx.language;
-    const isPhonk = musicCtx.isPhonk;
+    const seedChars = analyzeSongCharacteristics(currentSong);
+    const targetLanguage = seedChars.language;
+    const isPhonk = targetLanguage === 'Phonk';
 
     const existingQueue = context.queue || [];
     const recentSongs = context.recentlyPlayed || [];
@@ -224,8 +478,7 @@ class SmartRecommendationEngineService {
 
     if (currentSong) {
       blacklistedIds.add(currentSong.id);
-      const currentCore = getCoreTitle(currentSong.title);
-      if (currentCore) blacklistedCoreTitles.add(currentCore);
+      if (seedChars.coreTitle) blacklistedCoreTitles.add(seedChars.coreTitle);
     }
 
     existingQueue.forEach((s) => {
@@ -236,13 +489,14 @@ class SmartRecommendationEngineService {
 
     const candidatePool: Song[] = [];
 
-    // ── 1. Dynamic Query Generation with User Taste Integration ─────────────
+    // ── 1. Dynamic Query Generation with Mood & User Taste Integration ───────
     const topTasteArtists = userProfileTracker.getTopArtists(5);
+    const primaryArtist = seedChars.normalizedArtist;
+    const moodPrefix = seedChars.mood !== 'neutral' ? seedChars.mood : '';
 
     if (isPhonk) {
-      // Strictly Phonk queries
       const phonkQueries = [
-        `${musicCtx.artist} phonk`,
+        `${primaryArtist} phonk`,
         'Drift Phonk viral hits 2025 2026',
         'Brazilian Phonk drift bass',
         'Aggressive Phonk playlist club',
@@ -259,85 +513,34 @@ class SmartRecommendationEngineService {
       });
       const results = await Promise.all(searchPromises);
       candidatePool.push(...results.flat().filter(isPhonkSong));
-    } else if (targetLanguage.toLowerCase() === 'bhojpuri') {
-      // Strictly Bhojpuri queries tailored to user taste & current song
-      const primaryArtist = normalizeArtist(currentSong?.artist || 'Pawan Singh');
-      const bhojpuriTasteArtist = topTasteArtists.find((a) => a && a !== primaryArtist) || 'Khesari Lal Yadav';
-
-      const bhojpuriQueries = [
-        `${primaryArtist} new bhojpuri song`,
-        `${bhojpuriTasteArtist} top bhojpuri hits 2025 2026`,
-        'Top Bhojpuri chartbusters 2025 2026',
-        'Bhojpuri superhit dance songs viral',
-        'Bhojpuri romantic melody hits',
-      ];
-      const searchPromises = bhojpuriQueries.map(async (q) => {
-        const [sRes, ytRes] = await Promise.allSettled([
-          searchJioSaavn(q, 14),
-          searchYouTubeMusic(q, 10),
-        ]);
-        const sSongs = sRes.status === 'fulfilled' ? sRes.value.songs : [];
-        const ytSongs = ytRes.status === 'fulfilled' ? ytRes.value.songs : [];
-        return [...sSongs, ...ytSongs];
-      });
-      const results = await Promise.all(searchPromises);
-      candidatePool.push(...results.flat().filter((s) => isSongMatchingLanguage(s, 'Bhojpuri')));
-    } else if (targetLanguage.toLowerCase() === 'hindi') {
-      // Strictly Hindi queries tailored to user taste & current song
-      const primaryArtist = normalizeArtist(currentSong?.artist || 'Arijit Singh');
-      const hindiTasteArtist = topTasteArtists.find((a) => a && a !== primaryArtist) || 'Arijit Singh';
-
-      const hindiQueries = [
-        `${primaryArtist} latest songs`,
-        `${hindiTasteArtist} superhit Bollywood songs`,
-        'Bollywood Hindi romantic hits 2025 2026',
-        'Latest Hindi chartbusters trending 2025',
-        'Top Bollywood melodies trending',
-      ];
-      const searchPromises = hindiQueries.map(async (q) => {
-        const [sRes, ytRes] = await Promise.allSettled([
-          searchJioSaavn(q, 14),
-          searchYouTubeMusic(q, 10),
-        ]);
-        const sSongs = sRes.status === 'fulfilled' ? sRes.value.songs : [];
-        const ytSongs = ytRes.status === 'fulfilled' ? ytRes.value.songs : [];
-        return [...sSongs, ...ytSongs];
-      });
-      const results = await Promise.all(searchPromises);
-      candidatePool.push(...results.flat().filter((s) => isSongMatchingLanguage(s, 'Hindi')));
-    } else if (targetLanguage.toLowerCase() === 'punjabi') {
-      // Strictly Punjabi queries tailored to user taste & current song
-      const primaryArtist = normalizeArtist(currentSong?.artist || 'Diljit Dosanjh');
-      const punjabiTasteArtist = topTasteArtists.find((a) => a && a !== primaryArtist) || 'Karan Aujla';
-
-      const punjabiQueries = [
-        `${primaryArtist} latest punjabi song`,
-        `${punjabiTasteArtist} punjabi hits 2025`,
-        'Latest Punjabi chartbusters 2025 2026',
-        'Trending Punjabi hits viral',
-      ];
-      const searchPromises = punjabiQueries.map(async (q) => {
-        const [sRes, ytRes] = await Promise.allSettled([
-          searchJioSaavn(q, 14),
-          searchYouTubeMusic(q, 10),
-        ]);
-        const sSongs = sRes.status === 'fulfilled' ? sRes.value.songs : [];
-        const ytSongs = ytRes.status === 'fulfilled' ? ytRes.value.songs : [];
-        return [...sSongs, ...ytSongs];
-      });
-      const results = await Promise.all(searchPromises);
-      candidatePool.push(...results.flat().filter((s) => isSongMatchingLanguage(s, 'Punjabi')));
     } else {
-      // Strict other language queries (Tamil, Telugu, International)
-      const primaryArtist = normalizeArtist(currentSong?.artist || '');
-      const query = primaryArtist ? `${primaryArtist} ${targetLanguage} songs` : `${targetLanguage} top hits 2025 2026`;
-      const [sRes, ytRes] = await Promise.allSettled([
-        searchJioSaavn(query, 16),
-        searchYouTubeMusic(query, 12),
-      ]);
-      const sSongs = sRes.status === 'fulfilled' ? sRes.value.songs : [];
-      const ytSongs = ytRes.status === 'fulfilled' ? ytRes.value.songs : [];
-      candidatePool.push(...[...sSongs, ...ytSongs].filter((s) => isSongMatchingLanguage(s, targetLanguage)));
+      // Build mood-specific and artist-specific queries
+      const tasteArtist = topTasteArtists.find((a) => a && a !== primaryArtist) || '';
+      const queries: string[] = [];
+
+      if (primaryArtist) {
+        queries.push(moodPrefix ? `${primaryArtist} ${moodPrefix} songs` : `${primaryArtist} best songs`);
+      }
+      if (tasteArtist) {
+        queries.push(moodPrefix ? `${tasteArtist} ${moodPrefix} ${targetLanguage}` : `${tasteArtist} superhits ${targetLanguage}`);
+      }
+
+      queries.push(
+        moodPrefix ? `${targetLanguage} ${moodPrefix} songs trending` : `${targetLanguage} top chartbusters 2025`,
+        `${targetLanguage} latest superhits 2025 2026`
+      );
+
+      const searchPromises = queries.slice(0, 4).map(async (q) => {
+        const [sRes, ytRes] = await Promise.allSettled([
+          searchJioSaavn(q, 12),
+          searchYouTubeMusic(q, 10),
+        ]);
+        const sSongs = sRes.status === 'fulfilled' ? sRes.value.songs : [];
+        const ytSongs = ytRes.status === 'fulfilled' ? ytRes.value.songs : [];
+        return [...sSongs, ...ytSongs];
+      });
+      const results = await Promise.all(searchPromises);
+      candidatePool.push(...results.flat().filter((s) => isSongMatchingLanguage(s, targetLanguage)));
     }
 
     // ── 2. Add Library/Favorites as Low-Priority Fallbacks ONLY ──────────────
@@ -388,62 +591,39 @@ class SmartRecommendationEngineService {
 
     const spotifyVerifiedCandidates = await filterSpotifyAvailableTracks(validCandidates);
 
-    // ── 4. AI Taste & Freshness Scoring Algorithm ───────────────────────────
-    const currentArtistNorm = currentSong ? normalizeArtist(currentSong.artist) : '';
-    const currentMood = aiTasteProfileEngine.getCurrentContextualMood();
-    const aiTopArtists = aiTasteProfileEngine.getProfile().topArtists;
+    // ── 4. Deep Similarity & Style Scoring Algorithm ────────────────────────
+    const sessionHistoryArtists = context.sessionHistoryArtists || [];
+    const sessionPlayedIds = context.sessionPlayedIds || new Set<string>();
 
     const scored = spotifyVerifiedCandidates.map((song) => {
-      let score = 50; // base score
-      const songArtistNorm = normalizeArtist(song.artist);
-      const songCore = getCoreTitle(song.title);
+      const candChars = analyzeSongCharacteristics(song);
+      const similarityScore = currentSong
+        ? calculateSongSimilarityScore(
+            currentSong,
+            song,
+            seedChars,
+            candChars,
+            sessionHistoryArtists,
+            sessionPlayedIds
+          )
+        : 50;
 
-      // Freshness check: Is this song unplayed / not in library history?
+      const songCore = getCoreTitle(song.title);
       const isFresh = !playedSongIds.has(song.id) && (!songCore || !knownCoreTitles.has(songCore));
 
-      if (isFresh) {
-        score += 80; // Massive Freshness Priority Boost!
-      } else {
-        score -= 50; // Previously known / played song penalty
-      }
-
-      // User Taste Alignment: Artist Affinity from UserProfileTracker
-      const artistTasteScore = userProfileTracker.getArtistTasteScore(song.artist);
-      score += artistTasteScore; // 0 to 50 points
-
-      // User Taste Alignment: AI Taste Profile Engine Top Artists
-      if (aiTopArtists[songArtistNorm]) {
-        score += Math.min(30, aiTopArtists[songArtistNorm].score * 3);
-      }
-
-      // Mood / Vibe Alignment with current listening context
-      const songMood = inferSongMood(song);
-      if (songMood === currentMood && songMood !== 'neutral') {
-        score += 15;
-      }
-
-      // Same Artist Boost (different track)
-      if (currentArtistNorm && songArtistNorm === currentArtistNorm) {
-        score += 20;
-      }
-
-      // User Affinity Score from Tracker
-      const affinityScore = userProfileTracker.calculateAffinityScore(song);
-      score += affinityScore;
-
-      // Popularity signal
-      score += Math.min(20, (song.popularity || 70) * 0.2);
+      let score = similarityScore;
+      if (isFresh) score += 35;
 
       return { song, score, isFresh };
     });
 
     // ── 5. Partition Selection: Fresh Songs First, Fallback to Known ────────
-    const freshScored = scored.filter((item) => item.isFresh).sort((a, b) => b.score - a.score);
-    const knownScored = scored.filter((item) => !item.isFresh).sort((a, b) => b.score - a.score);
+    const freshScored = scored.filter((item) => item.score > -100 && item.isFresh).sort((a, b) => b.score - a.score);
+    const knownScored = scored.filter((item) => item.score > -100 && !item.isFresh).sort((a, b) => b.score - a.score);
 
     const selected: Song[] = [];
     const selectedCoreTitles = new Set<string>();
-    let lastSelectedArtist = currentArtistNorm;
+    let lastSelectedArtist = seedChars.normalizedArtist;
 
     // First pass: Pick fresh unplayed songs with artist diversity
     for (const item of freshScored) {

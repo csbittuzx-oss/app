@@ -16,6 +16,7 @@ import {
   smartRecommendationEngine,
   getCoreTitle,
   isSameOrSimilarTitle,
+  normalizeArtist,
 } from '../recommendation/SmartRecommendationEngine';
 import { userProfileTracker } from '../recommendation/UserProfileTracker';
 import { aiTasteProfileEngine } from '../ai/AITasteProfileEngine';
@@ -70,6 +71,7 @@ class AudioPlayer {
 
   // Endless Seed Radio & Automix state
   private _automixQueue: Song[] = [];
+  private _sessionHistory: Song[] = [];
   private isAutomixReplenishing = false;
 
   // Crossfade state
@@ -428,12 +430,17 @@ class AudioPlayer {
       const searchHistory = JSON.parse(localStorage.getItem('sw_search_history') || '[]');
       const recentlyPlayed = JSON.parse(localStorage.getItem('sw_recently_played') || '[]');
 
+      const sessionHistoryArtists = this._sessionHistory.map((s) => normalizeArtist(s.artist)).filter(Boolean);
+      const sessionPlayedIds = new Set<string>(this._sessionHistory.map((s) => s.id));
+
       return {
         languages,
         favorites,
         userPlaylists,
         searchHistory,
         recentlyPlayed,
+        sessionHistoryArtists,
+        sessionPlayedIds,
         queue: this._queue,
       };
     } catch {
@@ -672,8 +679,13 @@ class AudioPlayer {
 
     const currentCore = this.currentSong ? getCoreTitle(this.currentSong.title) : '';
     const existingIds = new Set<string>(this._queue.map((s) => s.id));
+    const sessionIds = new Set<string>(this._sessionHistory.map((s) => s.id));
     const existingCores = new Set<string>(this._queue.map((s) => getCoreTitle(s.title)).filter(Boolean));
-    if (currentCore) existingCores.add(currentCore);
+    const sessionCores = new Set<string>(this._sessionHistory.slice(0, 20).map((s) => getCoreTitle(s.title)).filter(Boolean));
+    if (currentCore) {
+      existingCores.add(currentCore);
+      sessionCores.add(currentCore);
+    }
 
     let nextSong: Song | null = null;
 
@@ -681,10 +693,11 @@ class AudioPlayer {
       const candidate = this._automixQueue.shift()!;
       const candCore = getCoreTitle(candidate.title);
 
-      // Enforce ID and title uniqueness
+      // Enforce ID, title uniqueness, anti-duplicate/remix, and recent session exclusion
       if (
         !existingIds.has(candidate.id) &&
-        (!candCore || !existingCores.has(candCore)) &&
+        !sessionIds.has(candidate.id) &&
+        (!candCore || (!existingCores.has(candCore) && !sessionCores.has(candCore))) &&
         (!this.currentSong || !isSameOrSimilarTitle(candidate.title, this.currentSong.title))
       ) {
         nextSong = candidate;
@@ -707,8 +720,8 @@ class AudioPlayer {
     this.emit({ type: 'automixchange', automixQueue: [...this._automixQueue] });
     this.scheduleNextSongPreBuffer();
 
-    // Replenish buffer if low (< 5 items)
-    if (this._automixQueue.length < 5) {
+    // Replenish buffer if low (< 6 items)
+    if (this._automixQueue.length < 6) {
       this.replenishAutomixQueue(nextSong);
     }
     return nextSong;
@@ -766,6 +779,7 @@ class AudioPlayer {
     }
 
     this.lastTimeUpdateSecond = 0;
+    this._sessionHistory = [targetSong, ...this._sessionHistory.filter((s) => s.id !== targetSong.id)].slice(0, 30);
     userProfileTracker.recordPlay(targetSong);
     aiTasteProfileEngine.recordSongPlay(targetSong);
 
