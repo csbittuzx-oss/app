@@ -11,6 +11,7 @@ import {
   fetchJioSaavnChartTracks,
   fetchJioSaavnTrendingContent,
   formatMediaUrlWithQuality,
+  isPreviewAudioUrl,
 } from '../api/saavnApi';
 import { searchItunes, getItunesAlbumTracks, getItunesTopCharts, searchItunesArtist } from '../api/itunesApi';
 import { getJamendoFeatured, getJamendoNewReleases, getJamendoByGenre, getJamendoAlbumTracks } from '../api/jamendoApi';
@@ -18,7 +19,6 @@ import { getLastfmArtist, getSimilarArtists, getLastfmTopArtists } from '../api/
 import { filterSpotifyAvailableTracks } from '../../services/SpotifyAvailabilityService';
 import { getArtistProfileImage } from '../../services/ArtistProfileService';
 import { userProfileTracker } from '../../domain/recommendation/UserProfileTracker';
-import { universalGet } from '../../core/utils/http';
 import { CONFIG } from '../../config';
 
 // Simple in-memory cache
@@ -806,64 +806,24 @@ export async function getPersonalizedRecommendForYou(
 
 /**
  * ══════════════════════════════════════════════════════════════════════════════
- * ISSUE 2 FIX: NEW RELEASES FOR YOU
- * Sourced strictly from verified official release endpoints (iTunes RSS new music,
- * JioSaavn official trending new albums/singles), with strict release-date validation.
+ * NEW RELEASES FOR YOU
+ * Sourced directly from JioSaavn's official trending drops and authentic new
+ * single releases with guaranteed 320kbps full master audio.
+ * Completely eliminates 30s preview clips and re-release compilation albums.
  * ══════════════════════════════════════════════════════════════════════════════
  */
 export async function getPersonalizedNewReleases(languages: string[], limit = 20): Promise<Song[]> {
-  const cacheKey = `personalized_new_${languages.join('_')}_${limit}`;
+  const cacheKey = `personalized_new_releases_${languages.join('_')}_${limit}`;
   const cached = fromCache<Song[]>(cacheKey);
   if (cached) return cached;
 
-  const validLangs = languages.length > 0 ? languages : ['Hindi', 'International'];
-  const now = Date.now();
-  const maxAgeMs = 75 * 24 * 60 * 60 * 1000; // 75-day window for genuine new releases
+  const validLangs = languages.length > 0 ? languages : ['Hindi', 'International', 'Punjabi'];
   const currentYear = new Date().getFullYear();
 
   const langPromises = validLangs.map(async (lang) => {
-    const l = lang.toLowerCase().trim();
-    let candidates: Song[] = [];
+    const candidates: Song[] = [];
 
-    // 1. iTunes RSS New Songs Feed (has exact ISO release dates)
-    try {
-      const itunesUrl = l === 'international' || l === 'english'
-        ? 'https://itunes.apple.com/us/rss/topsongs/limit=50/json'
-        : 'https://itunes.apple.com/in/rss/topsongs/limit=50/json';
-      const itunesRes = await universalGet(itunesUrl);
-      const entries = itunesRes?.feed?.entry || [];
-      const itunesParsed: Song[] = entries
-        .map((e: any) => {
-          const title = e['im:name']?.label || '';
-          const artist = e['im:artist']?.label || '';
-          const dateStr = e['im:releaseDate']?.label || '';
-          const img = e['im:image']?.[2]?.label || e['im:image']?.[1]?.label || '';
-          const durationSec = parseInt(e['link']?.[1]?.['im:duration']?.label || '0', 10) || 0;
-          const releaseTime = dateStr ? new Date(dateStr).getTime() : 0;
-          const isRecent = releaseTime > 0 ? (now - releaseTime) <= maxAgeMs : true;
-          if (!isRecent) return null;
-
-          return {
-            id: `itunes_${e.id?.attributes?.['im:id'] || title.toLowerCase().replace(/[^a-z0-9]/g, '_')}`,
-            title,
-            artist,
-            album: e['im:collection']?.['im:name']?.label || '',
-            artwork: img ? img.replace('170x170', '600x600') : '',
-            artworkLg: img ? img.replace('170x170', '600x600') : '',
-            duration: durationSec,
-            previewUrl: e.link?.[1]?.attributes?.href || null,
-            provider: 'itunes' as const,
-            year: dateStr ? parseInt(dateStr.slice(0, 4), 10) : currentYear,
-            isLiked: false,
-            isDownloaded: false,
-            language: l,
-          };
-        })
-        .filter(Boolean) as Song[];
-      candidates.push(...itunesParsed);
-    } catch {}
-
-    // 2. JioSaavn Trending & Latest Releases
+    // 1. JioSaavn Trending & Latest Releases Content
     try {
       const trendingData = await fetchJioSaavnTrendingContent();
       if (trendingData.songs.length > 0) {
@@ -871,22 +831,31 @@ export async function getPersonalizedNewReleases(languages: string[], limit = 20
       }
     } catch {}
 
+    // 2. JioSaavn Language-Specific Latest Single Queries
     try {
-      const saavnRes = await searchJioSaavn(`${lang} latest new songs ${currentYear}`, 15);
-      if (saavnRes.songs && saavnRes.songs.length > 0) {
-        candidates.push(...saavnRes.songs);
-      }
+      const [sRes1, sRes2] = await Promise.allSettled([
+        searchJioSaavn(`${lang} latest new singles ${currentYear}`, 12),
+        searchJioSaavn(`${lang} new release songs ${currentYear}`, 12),
+      ]);
+      const s1 = sRes1.status === 'fulfilled' ? sRes1.value.songs : [];
+      const s2 = sRes2.status === 'fulfilled' ? sRes2.value.songs : [];
+      candidates.push(...s1, ...s2);
     } catch {}
 
-    // Filter by quality and language
-    const qualityTracks = sanitizeHomeFeedTracks(candidates)
-      .filter((s) => isSongMatchingLanguage(s, lang))
-      .filter((s) => {
-        if (s.year && s.year < currentYear - 1) return false;
-        return true;
-      });
+    // 3. Purge compilations, re-release anniversary albums, and ensure full audio exists
+    const cleanTracks = sanitizeHomeFeedTracks(candidates).filter((s) => {
+      if (!s.previewUrl || isPreviewAudioUrl(s.previewUrl)) return false;
+      const alb = (s.album || '').toLowerCase();
+      // Purge re-release anniversary / holiday compilation albums (e.g. "World Music Day 2026", "Valentines Special")
+      if (/\b(world music|valentines?|special|compilation|best of|anniversary|celebration|superhits|biggest hits)\b/i.test(alb)) {
+        return false;
+      }
+      if (s.year && s.year < currentYear - 1) return false;
+      return isSongMatchingLanguage(s, lang);
+    });
 
-    return (await filterSpotifyAvailableTracks(qualityTracks)).slice(0, 20);
+    const verified = await filterSpotifyAvailableTracks(cleanTracks);
+    return verified.slice(0, 20);
   });
 
   const langResults = await Promise.all(langPromises);

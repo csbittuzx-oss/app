@@ -4,9 +4,12 @@
 
 /** Format seconds → M:SS */
 export function formatDuration(seconds: number): string {
-  if (!seconds || isNaN(seconds)) return '0:00';
-  const m = Math.floor(seconds / 60);
-  const s = Math.floor(seconds % 60);
+  if (!seconds || isNaN(seconds) || seconds <= 0) return '0:00';
+  let sec = seconds;
+  if (sec > 10000) sec = sec / 1000; // Auto-correct millisecond input
+  sec = Math.max(0, sec);
+  const m = Math.floor(sec / 60);
+  const s = Math.floor(sec % 60);
   return `${m}:${s.toString().padStart(2, '0')}`;
 }
 
