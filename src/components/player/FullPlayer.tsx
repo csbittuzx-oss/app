@@ -2,7 +2,6 @@ import React, { useState, useEffect, useRef } from 'react';
 import { usePlayer } from '../../state/PlayerContext';
 import { useApp } from '../../state/AppContext';
 import { getLyrics } from '../../data/api/lyricsApi';
-import { BollywoodLyricsDisplay } from './BollywoodLyricsDisplay';
 import { NowPlayingMenuSheet } from './NowPlayingMenuSheet';
 import type { Lyrics } from '../../data/models';
 import { formatDuration } from '../../core/utils';
@@ -74,6 +73,10 @@ export function FullPlayer() {
   const [isDragging, setIsDragging] = useState(false);
   const [dragProgress, setDragProgress] = useState(0);
   const progressRef = useRef<HTMLDivElement>(null);
+  const lineRefs = useRef<(HTMLParagraphElement | null)[]>([]);
+  const lyricsContainerRef = useRef<HTMLDivElement | null>(null);
+  const isUserScrollingRef = useRef(false);
+  const scrollTimeoutRef = useRef<any>(null);
 
   // ── Gestures State ──
   const [dismissOffsetY, setDismissOffsetY] = useState(0);
@@ -112,6 +115,11 @@ export function FullPlayer() {
     const clientY = 'touches' in e ? e.touches[0].clientY : e.clientY;
     const dx = clientX - rootTouchStartPosRef.current.x;
     const dy = clientY - rootTouchStartPosRef.current.y;
+
+    // Check if touching inside lyrics container while scrolled down
+    if (showLyrics && lyricsContainerRef.current && lyricsContainerRef.current.scrollTop > 0) {
+      return;
+    }
 
     if (!isRootDraggingRef.current) {
       if (dy > 8 && dy > Math.abs(dx)) {
@@ -283,6 +291,29 @@ export function FullPlayer() {
     }
     return active;
   }, [lyrics, currentTime]);
+
+  // Auto-scroll the active lyric line to viewport center smoothly without whole list jumping
+  useEffect(() => {
+    if (activeLineIndex >= 0 && lyricsContainerRef.current && !isUserScrollingRef.current) {
+      const container = lyricsContainerRef.current;
+      const activeEl = lineRefs.current[activeLineIndex];
+      if (activeEl) {
+        const targetScrollTop = activeEl.offsetTop - (container.clientHeight / 2) + (activeEl.clientHeight / 2);
+        container.scrollTo({
+          top: Math.max(0, targetScrollTop),
+          behavior: 'smooth',
+        });
+      }
+    }
+  }, [activeLineIndex]);
+
+  const handleLyricsUserScroll = () => {
+    isUserScrollingRef.current = true;
+    if (scrollTimeoutRef.current) clearTimeout(scrollTimeoutRef.current);
+    scrollTimeoutRef.current = setTimeout(() => {
+      isUserScrollingRef.current = false;
+    }, 2800);
+  };
 
   if (!currentSong) return null;
 
@@ -522,28 +553,133 @@ export function FullPlayer() {
               </div>
             </div>
           ) : (
-            /* Bollywood Poster Style Synced Lyrics Display */
-            <BollywoodLyricsDisplay
-              lyrics={lyrics}
-              currentTime={currentTime}
-              activeLineIndex={activeLineIndex}
-              onSeek={(time) => seekToTime(time)}
-              loading={lyricsLoading}
-              error={lyricsError}
-              onRetry={() => {
-                if (!currentSong) return;
-                setLyricsError(false);
-                setLyricsLoading(true);
-                getLyrics(currentSong.artist, currentSong.title, currentSong.duration, currentSong.id)
-                  .then((l) => {
-                    setLyrics(l);
-                    setLyricsError(!l || l.lines.length === 0);
-                  })
-                  .catch(() => setLyricsError(true))
-                  .finally(() => setLyricsLoading(false));
+            /* Real-time Synced Lyrics panel */
+            <div
+              ref={lyricsContainerRef}
+              onScroll={handleLyricsUserScroll}
+              style={{
+                flex: 1,
+                overflowY: 'auto',
+                padding: '140px 0 180px',
+                scrollbarWidth: 'none',
+                WebkitMaskImage: 'linear-gradient(to bottom, transparent 0%, black 20%, black 80%, transparent 100%)',
+                maskImage: 'linear-gradient(to bottom, transparent 0%, black 20%, black 80%, transparent 100%)',
               }}
-              currentSong={currentSong}
-            />
+            >
+              {lyricsLoading && (
+                <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', padding: 60, gap: 12, color: 'var(--color-text-muted)' }}>
+                  {icons.loading}
+                  <span style={{ fontSize: 'var(--text-sm)' }}>Synchronizing lyrics...</span>
+                </div>
+              )}
+              {lyricsError && !lyricsLoading && (
+                <div style={{ textAlign: 'center', padding: '48px 20px', display: 'flex', flexDirection: 'column', alignItems: 'center' }}>
+                  <div style={{
+                    width: 56,
+                    height: 56,
+                    borderRadius: '50%',
+                    background: 'var(--color-surface-2)',
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                    color: 'var(--color-text-muted)',
+                    marginBottom: 16,
+                  }}>
+                    <svg width="26" height="26" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.75">
+                      <path d="M9 18V5l12-2v13" />
+                      <circle cx="6" cy="18" r="3" />
+                      <circle cx="18" cy="16" r="3" />
+                    </svg>
+                  </div>
+                  <p style={{ color: 'var(--color-text-primary)', fontSize: 'var(--text-base)', fontWeight: 600, margin: 0 }}>
+                    Lyrics Not Available
+                  </p>
+                  <p style={{ color: 'var(--color-text-muted)', fontSize: 'var(--text-xs)', marginTop: 6, maxWidth: 240, lineHeight: 1.5 }}>
+                    Lyrics for this track haven't been synchronized yet. Enjoy the music!
+                  </p>
+                  <button
+                    onClick={() => {
+                      if (!currentSong) return;
+                      setLyricsError(false);
+                      setLyricsLoading(true);
+                      getLyrics(currentSong.artist, currentSong.title, currentSong.duration)
+                        .then((l) => {
+                          setLyrics(l);
+                          setLyricsError(!l || l.lines.length === 0);
+                        })
+                        .catch(() => setLyricsError(true))
+                        .finally(() => setLyricsLoading(false));
+                    }}
+                    className="btn-ghost"
+                    style={{
+                      marginTop: 14,
+                      fontSize: 'var(--text-xs)',
+                      padding: '8px 16px',
+                      color: 'var(--color-accent)',
+                      background: 'var(--color-accent-dim)',
+                      borderRadius: 'var(--radius-full)',
+                    }}
+                  >
+                    Retry Loading
+                  </button>
+                </div>
+              )}
+              {lyrics && lyrics.lines.map((line, i) => {
+                const isActive = lyrics.synced ? i === activeLineIndex : false;
+                const isPast = lyrics.synced && activeLineIndex >= 0 && i < activeLineIndex;
+
+                return (
+                  <p
+                    key={i}
+                    ref={(el) => { lineRefs.current[i] = el; }}
+                    onClick={() => {
+                      if (line.time !== undefined) {
+                        seekToTime(line.time);
+                      }
+                    }}
+                    style={{
+                      margin: 0,
+                      padding: lyrics.synced ? (isActive ? '14px 0' : '8px 0') : '8px 0',
+                      fontFamily: 'var(--font-lyrics)',
+                      fontSize: lyrics.synced
+                        ? isActive
+                          ? 'clamp(2rem, 5.8vw, 2.75rem)'
+                          : 'clamp(1.2rem, 3.8vw, 1.55rem)'
+                        : 'clamp(1.3rem, 4.2vw, 1.65rem)',
+                      fontWeight: lyrics.synced ? (isActive ? 800 : 700) : 700,
+                      textTransform: 'uppercase',
+                      letterSpacing: '0.025em',
+                      lineHeight: lyrics.synced ? (isActive ? 1.14 : 1.22) : 1.35,
+                      color: !lyrics.synced
+                        ? 'var(--color-text-primary)'
+                        : isActive
+                        ? 'var(--color-text-primary)'
+                        : isPast
+                        ? 'var(--color-text-secondary)'
+                        : 'var(--color-text-muted)',
+                      opacity: !lyrics.synced ? 0.95 : isActive ? 1 : isPast ? 0.22 : 0.28,
+                      transform: lyrics.synced
+                        ? isActive
+                          ? 'translate3d(0, 0, 0) scale(1)'
+                          : isPast
+                          ? 'translate3d(0, -6px, 0) scale(0.96)'
+                          : 'translate3d(0, 6px, 0) scale(0.96)'
+                        : 'none',
+                      transformOrigin: 'left center',
+                      cursor: line.time !== undefined ? 'pointer' : 'default',
+                      transition: 'transform 380ms cubic-bezier(0.25, 1, 0.5, 1), opacity 380ms ease, color 380ms ease, text-shadow 380ms ease',
+                      willChange: 'transform, opacity, color',
+                      textShadow: lyrics.synced && isActive
+                        ? '0 4px 28px rgba(245, 158, 11, 0.4), 0 0 16px rgba(255, 255, 255, 0.15)'
+                        : 'none',
+                      userSelect: 'none',
+                    }}
+                  >
+                    {line.text}
+                  </p>
+                );
+              })}
+            </div>
           )}
         </div>
 
