@@ -104,6 +104,10 @@ class AudioPlayer {
   constructor() {
     this.audio = new Audio();
     this.crossfadeAudio = new Audio();
+    this.audio.autoplay = false;
+    this.crossfadeAudio.autoplay = false;
+    this.audio.preload = 'none';
+    this.crossfadeAudio.preload = 'none';
     adaptiveStreaming.configureAudioElement(this.audio);
     adaptiveStreaming.configureAudioElement(this.crossfadeAudio);
     // Initialise network monitoring immediately
@@ -164,6 +168,7 @@ class AudioPlayer {
       // validate/fetch the URL, throwing a 403 Forbidden / network error before the user interacts,
       // which produces "Playback failed. Tap to retry."
       this.audio.src = '';
+      this.audio.pause();
     } catch {
       // ignore
     }
@@ -370,9 +375,10 @@ class AudioPlayer {
         return;
       }
 
-      // If online and we haven't already attempted an auto-recovery for this stream error,
-      // proactively re-resolve a fresh audio stream and resume playback before showing any error
-      if (navigator.onLine && this.currentSong && !this.isAutoRecovering) {
+      // If user was ACTIVELY playing when the stream error occurred, attempt in-flight auto-recovery
+      // NEVER start playing automatically if the audio was paused or app was just opened
+      const wasActivelyPlaying = !this.audio.paused;
+      if (wasActivelyPlaying && navigator.onLine && this.currentSong && !this.isAutoRecovering) {
         this.isAutoRecovering = true;
         const songToRecover = this.currentSong;
         const resumePos = this.audio.currentTime || this.savedResumePosition || 0;
@@ -391,7 +397,9 @@ class AudioPlayer {
       }
 
       this.emit({ type: 'loading', isLoading: false });
-      this.emit({ type: 'error', error: 'Playback failed. Tap to retry.' });
+      if (wasActivelyPlaying) {
+        this.emit({ type: 'error', error: 'Playback failed. Tap to retry.' });
+      }
     });
 
     // Install adaptive stall watcher for graceful buffering recovery
