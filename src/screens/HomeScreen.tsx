@@ -2,7 +2,7 @@
 //  HomeScreen — Soundwave Personalized Music Home Interface
 //
 //  Sections (Content Area):
-//  🌟 CONTINUE LISTENING (Top Hero Card & Quick-Access Grid)
+//  🌟 NOW-PLAYING / CONTINUE LISTENING (Top Hero Card & Quick-Access Grid)
 //  1️⃣ Jump back in
 //  2️⃣ Your top mixes
 //  3️⃣ Recently played
@@ -70,7 +70,7 @@ function PlayIcon({ size = 16, color = 'currentColor' }: { size?: number; color?
   );
 }
 
-function EqBars() {
+function EqBars({ color = 'var(--color-accent)' }: { color?: string }) {
   return (
     <div style={{ display: 'flex', alignItems: 'flex-end', gap: 2.5, height: 14, width: 12 }} aria-hidden="true">
       {[0, 150, 80].map((delay, i) => (
@@ -78,7 +78,7 @@ function EqBars() {
           key={i}
           style={{
             width: 2.5,
-            background: 'var(--color-accent)',
+            background: color,
             borderRadius: 1.5,
             height: '100%',
             animation: `playEq 0.8s ease-in-out ${delay}ms infinite alternate`,
@@ -243,7 +243,7 @@ export function HomeScreen({ isVisible = true }: { isVisible?: boolean }) {
   // Context Bottom Sheet state for long-press
   const [selectedSongForMenu, setSelectedSongForMenu] = useState<Song | null>(null);
 
-  // ── 2. Top "Continue Listening" State ─────────────────────────────────────
+  // ── 2. Top Now-Playing / Continue Listening State ─────────────────────────
   const continueListeningSong = useMemo(() => {
     if (playerState.currentSong) return playerState.currentSong;
     if (appState.recentlyPlayed && appState.recentlyPlayed.length > 0) return appState.recentlyPlayed[0];
@@ -550,12 +550,11 @@ export function HomeScreen({ isVisible = true }: { isVisible?: boolean }) {
       </header>
 
       {/* ═════════════════════════════════════════════════════════════════════
-          🌟 TOP HERO: CONTINUE LISTENING
-          Featured resume hero card & 6-item quick-access grid
+          🌟 NOW-PLAYING / CONTINUE LISTENING (Top Card)
       ═════════════════════════════════════════════════════════════════════ */}
       {continueListeningSong && (
         <section style={{ padding: '0 20px 16px' }}>
-          {/* Main Continue Listening Hero Card */}
+          {/* Main Now-Playing Hero Card */}
           <div
             onClick={() => {
               if (playerState.currentSong?.id === continueListeningSong.id) {
@@ -571,15 +570,15 @@ export function HomeScreen({ isVisible = true }: { isVisible?: boolean }) {
             style={{
               display: 'flex',
               alignItems: 'center',
-              gap: 14,
+              gap: 12,
               padding: '12px 14px',
-              background: 'linear-gradient(135deg, var(--color-surface) 0%, var(--color-surface-2, rgba(255,255,255,0.06)) 100%)',
+              background: 'linear-gradient(135deg, var(--color-surface) 0%, var(--color-surface-2, rgba(255,255,255,0.05)) 100%)',
               border: isContinueActive ? '1.5px solid var(--color-accent)' : '1px solid var(--color-border)',
               borderRadius: 'var(--radius-lg, 16px)',
               cursor: 'pointer',
               position: 'relative',
               overflow: 'hidden',
-              boxShadow: '0 6px 20px rgba(0, 0, 0, 0.35)',
+              boxShadow: '0 4px 16px rgba(0, 0, 0, 0.25)',
               transition: 'transform 120ms ease, border-color 150ms ease',
             }}
             onMouseDown={(e) => (e.currentTarget.style.transform = 'scale(0.985)')}
@@ -591,27 +590,28 @@ export function HomeScreen({ isVisible = true }: { isVisible?: boolean }) {
                 position: 'absolute',
                 top: 0,
                 right: 0,
-                width: '60%',
+                width: '50%',
                 height: '100%',
                 backgroundImage: `url(${resizeImageUrl(continueListeningSong.artwork, 160, 160)})`,
                 backgroundSize: 'cover',
                 backgroundPosition: 'center',
-                filter: 'blur(30px) opacity(0.18)',
+                filter: 'blur(32px) opacity(0.18)',
                 pointerEvents: 'none',
               }}
             />
 
+            {/* Album Artwork */}
             <div style={{ position: 'relative', flexShrink: 0 }}>
               <img
                 src={resizeImageUrl(continueListeningSong.artworkLg || continueListeningSong.artwork, 256, 256)}
                 alt={continueListeningSong.title}
-                width={62}
-                height={62}
+                width={56}
+                height={56}
                 style={{
                   borderRadius: 'var(--radius-md, 10px)',
                   objectFit: 'cover',
                   display: 'block',
-                  boxShadow: '0 4px 12px rgba(0,0,0,0.4)',
+                  boxShadow: '0 2px 8px rgba(0,0,0,0.3)',
                 }}
                 onError={(e) => {
                   (e.target as HTMLImageElement).src = CONFIG.ARTWORK_PLACEHOLDER;
@@ -619,39 +619,12 @@ export function HomeScreen({ isVisible = true }: { isVisible?: boolean }) {
               />
             </div>
 
-            <div style={{ flex: 1, minWidth: 0, position: 'relative' }}>
-              <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginBottom: 3 }}>
-                <span
-                  style={{
-                    fontSize: 9.5,
-                    fontWeight: 700,
-                    textTransform: 'uppercase',
-                    letterSpacing: '0.08em',
-                    color: 'var(--color-accent)',
-                  }}
-                >
-                  Continue Listening
-                </span>
-                {isContinuePlaying && (
-                  <span
-                    style={{
-                      fontSize: 9,
-                      fontWeight: 700,
-                      padding: '1px 5px',
-                      borderRadius: 4,
-                      background: 'var(--color-accent-subtle, rgba(249, 115, 22, 0.16))',
-                      color: 'var(--color-accent)',
-                    }}
-                  >
-                    NOW PLAYING
-                  </span>
-                )}
-              </div>
-
+            {/* Song Title, Artist & Progress bar */}
+            <div style={{ flex: 1, minWidth: 0, display: 'flex', flexDirection: 'column', gap: 2 }}>
               <p
                 style={{
                   margin: 0,
-                  fontSize: '14px',
+                  fontSize: '14.5px',
                   fontWeight: 700,
                   color: isContinueActive ? 'var(--color-accent)' : 'var(--color-text-primary)',
                   overflow: 'hidden',
@@ -665,23 +638,24 @@ export function HomeScreen({ isVisible = true }: { isVisible?: boolean }) {
 
               <p
                 style={{
-                  margin: '2px 0 6px',
-                  fontSize: '11.5px',
+                  margin: 0,
+                  fontSize: '12px',
                   color: 'var(--color-text-secondary)',
                   overflow: 'hidden',
                   textOverflow: 'ellipsis',
                   whiteSpace: 'nowrap',
+                  lineHeight: 1.2,
                 }}
               >
                 {continueListeningSong.artist}
               </p>
 
-              {/* Progress bar */}
-              <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+              {/* Progress bar & timestamp */}
+              <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginTop: 4 }}>
                 <div
                   style={{
                     flex: 1,
-                    height: 3,
+                    height: 3.5,
                     borderRadius: 2,
                     background: 'rgba(255, 255, 255, 0.12)',
                     overflow: 'hidden',
@@ -697,33 +671,44 @@ export function HomeScreen({ isVisible = true }: { isVisible?: boolean }) {
                   />
                 </div>
                 {playerState.currentTime > 0 && (
-                  <span style={{ fontSize: 10, color: 'var(--color-text-secondary)', fontWeight: 500 }}>
+                  <span style={{ fontSize: 10.5, color: 'var(--color-text-secondary)', fontWeight: 500, flexShrink: 0 }}>
                     {formatTime(playerState.currentTime)}
                   </span>
                 )}
               </div>
             </div>
 
-            {/* Circular Play / Resume Button */}
+            {/* Circular Play / Pause Control Button */}
             <div
+              onClick={(e) => {
+                e.stopPropagation();
+                if (playerState.currentSong?.id === continueListeningSong.id) {
+                  togglePlay();
+                } else {
+                  playSong(continueListeningSong, appState.recentlyPlayed, 0);
+                }
+              }}
               style={{
                 width: 42,
                 height: 42,
                 borderRadius: '50%',
                 background: 'var(--color-accent)',
-                color: 'var(--color-accent-on, #FFFFFF)',
+                color: '#FFFFFF',
                 display: 'flex',
                 alignItems: 'center',
                 justifyContent: 'center',
                 flexShrink: 0,
-                boxShadow: '0 4px 14px rgba(249, 115, 22, 0.4)',
-                position: 'relative',
+                boxShadow: '0 4px 12px rgba(249, 115, 22, 0.4)',
+                cursor: 'pointer',
+                marginLeft: 4,
               }}
             >
               {isContinuePlaying ? (
-                <EqBars />
+                <EqBars color="#FFFFFF" />
               ) : (
-                <PlayIcon size={18} color="var(--color-accent-on, #FFFFFF)" />
+                <svg width={16} height={16} viewBox="0 0 24 24" fill="#FFFFFF" style={{ marginLeft: 2 }}>
+                  <polygon points="5 3 19 12 5 21 5 3" />
+                </svg>
               )}
             </div>
           </div>
@@ -827,10 +812,10 @@ export function HomeScreen({ isVisible = true }: { isVisible?: boolean }) {
 
       {/* ═════════════════════════════════════════════════════════════════════
           1️⃣ SECTION: JUMP BACK IN
-          Horizontal snap carousel of user's active rotations & quick-resumes
+          Horizontal scrolling carousel with proper edge spacing & contrast
       ═════════════════════════════════════════════════════════════════════ */}
       {jumpBackInTracks.length > 0 && (
-        <section>
+        <section style={{ marginBottom: 8 }}>
           <SectionHeader
             title="Jump back in"
             subtitle="Pick up right where you left off"
@@ -843,9 +828,11 @@ export function HomeScreen({ isVisible = true }: { isVisible?: boolean }) {
               display: 'flex',
               gap: 14,
               overflowX: 'auto',
-              padding: '0 20px 8px',
-              scrollSnapType: 'x mandatory',
+              padding: '4px 20px 14px',
+              scrollPadding: '0 20px',
               WebkitOverflowScrolling: 'touch',
+              scrollbarWidth: 'none',
+              boxSizing: 'border-box',
             }}
           >
             {jumpBackInTracks.slice(0, 10).map((song, i) => {
@@ -864,7 +851,6 @@ export function HomeScreen({ isVisible = true }: { isVisible?: boolean }) {
                     flexShrink: 0,
                     width: 156,
                     cursor: 'pointer',
-                    scrollSnapAlign: 'start',
                     display: 'flex',
                     flexDirection: 'column',
                     gap: 8,
@@ -915,15 +901,26 @@ export function HomeScreen({ isVisible = true }: { isVisible?: boolean }) {
                         width: 36,
                         height: 36,
                         borderRadius: '50%',
-                        background: isCurrent ? 'var(--color-accent)' : 'rgba(255, 255, 255, 0.85)',
-                        color: isCurrent ? 'var(--color-accent-on, #FFFFFF)' : '#000000',
+                        background: isCurrent ? 'var(--color-accent)' : 'rgba(255, 255, 255, 0.88)',
                         display: 'flex',
                         alignItems: 'center',
                         justifyContent: 'center',
                         boxShadow: '0 4px 12px rgba(0, 0, 0, 0.35)',
                       }}
                     >
-                      {isPlaying ? <EqBars /> : <PlayIcon size={15} color={isCurrent ? '#FFFFFF' : '#000000'} />}
+                      {isPlaying ? (
+                        <EqBars color="#FFFFFF" />
+                      ) : (
+                        <svg
+                          width={15}
+                          height={15}
+                          viewBox="0 0 24 24"
+                          fill={isCurrent ? '#FFFFFF' : '#000000'}
+                          style={{ marginLeft: 2 }}
+                        >
+                          <polygon points="5 3 19 12 5 21 5 3" />
+                        </svg>
+                      )}
                     </div>
                   </div>
 
@@ -978,8 +975,11 @@ export function HomeScreen({ isVisible = true }: { isVisible?: boolean }) {
               display: 'flex',
               gap: 14,
               overflowX: 'auto',
-              padding: '0 20px 8px',
+              padding: '4px 20px 14px',
+              scrollPadding: '0 20px',
               WebkitOverflowScrolling: 'touch',
+              scrollbarWidth: 'none',
+              boxSizing: 'border-box',
             }}
           >
             {topMixPlaylists.map((playlist) => {
@@ -1101,8 +1101,11 @@ export function HomeScreen({ isVisible = true }: { isVisible?: boolean }) {
               gridAutoColumns: '260px',
               gap: 10,
               overflowX: 'auto',
-              padding: '0 20px 8px',
+              padding: '4px 20px 14px',
+              scrollPadding: '0 20px',
               WebkitOverflowScrolling: 'touch',
+              scrollbarWidth: 'none',
+              boxSizing: 'border-box',
             }}
           >
             {deduplicateSongs(appState.recentlyPlayed).slice(0, 12).map((song, i) => {
@@ -1198,8 +1201,11 @@ export function HomeScreen({ isVisible = true }: { isVisible?: boolean }) {
               display: 'flex',
               gap: 14,
               overflowX: 'auto',
-              padding: '0 20px 8px',
+              padding: '4px 20px 14px',
+              scrollPadding: '0 20px',
               WebkitOverflowScrolling: 'touch',
+              scrollbarWidth: 'none',
+              boxSizing: 'border-box',
             }}
           >
             {madeForYouPlaylists.map((playlist) => {
@@ -1337,8 +1343,11 @@ export function HomeScreen({ isVisible = true }: { isVisible?: boolean }) {
               gridAutoColumns: '290px',
               gap: 10,
               overflowX: 'auto',
-              padding: '0 20px 8px',
+              padding: '4px 20px 14px',
+              scrollPadding: '0 20px',
               WebkitOverflowScrolling: 'touch',
+              scrollbarWidth: 'none',
+              boxSizing: 'border-box',
             }}
           >
             {(chartsTracks.length > 0 ? chartsTracks : ytViewModel.getTrendingSongs()).slice(0, 16).map((song, i) => {
@@ -1431,7 +1440,7 @@ export function HomeScreen({ isVisible = true }: { isVisible?: boolean }) {
       {/* ═════════════════════════════════════════════════════════════════════
           6️⃣ SECTION: NEW RELEASES FOR YOU
           Freshly dropped songs & albums in user's favorite language
-      ═════════════════════════════════════════════ */}
+      ═════════════════════════════════════════════════════════════════════ */}
       {newReleasesList.length > 0 && (
         <section>
           <SectionHeader
@@ -1446,8 +1455,11 @@ export function HomeScreen({ isVisible = true }: { isVisible?: boolean }) {
               display: 'flex',
               gap: 14,
               overflowX: 'auto',
-              padding: '0 20px 8px',
+              padding: '4px 20px 14px',
+              scrollPadding: '0 20px',
               WebkitOverflowScrolling: 'touch',
+              scrollbarWidth: 'none',
+              boxSizing: 'border-box',
             }}
           >
             {newReleasesList.map((song, i) => (
@@ -1488,8 +1500,11 @@ export function HomeScreen({ isVisible = true }: { isVisible?: boolean }) {
               display: 'flex',
               gap: 14,
               overflowX: 'auto',
-              padding: '0 20px 8px',
+              padding: '4px 20px 14px',
+              scrollPadding: '0 20px',
               WebkitOverflowScrolling: 'touch',
+              scrollbarWidth: 'none',
+              boxSizing: 'border-box',
             }}
           >
             {recommendedTodayTracks.map((song, i) => (
@@ -1530,8 +1545,11 @@ export function HomeScreen({ isVisible = true }: { isVisible?: boolean }) {
               display: 'flex',
               gap: 14,
               overflowX: 'auto',
-              padding: '0 20px 8px',
+              padding: '4px 20px 14px',
+              scrollPadding: '0 20px',
               WebkitOverflowScrolling: 'touch',
+              scrollbarWidth: 'none',
+              boxSizing: 'border-box',
             }}
           >
             {basedOnRecentTracks.songs.map((song, i) => (
@@ -1572,8 +1590,11 @@ export function HomeScreen({ isVisible = true }: { isVisible?: boolean }) {
               display: 'flex',
               gap: 14,
               overflowX: 'auto',
-              padding: '0 20px 8px',
+              padding: '4px 20px 14px',
+              scrollPadding: '0 20px',
               WebkitOverflowScrolling: 'touch',
+              scrollbarWidth: 'none',
+              boxSizing: 'border-box',
             }}
           >
             {moreLikeArtistData.songs.map((song, i) => (
@@ -1599,7 +1620,7 @@ export function HomeScreen({ isVisible = true }: { isVisible?: boolean }) {
       {/* ═════════════════════════════════════════════════════════════════════
           🔟 SECTION: ALBUMS FEATURING SONGS YOU LIKE
           Full albums containing user's favorited / most-replayed songs
-      ═════════════════════════════════════════════════════════════════════ */}
+      ═════════════════════════════════════════════ */}
       {albumsFeaturingLiked.length > 0 && (
         <section style={{ marginBottom: 16 }}>
           <SectionHeader
@@ -1613,8 +1634,11 @@ export function HomeScreen({ isVisible = true }: { isVisible?: boolean }) {
               display: 'flex',
               gap: 14,
               overflowX: 'auto',
-              padding: '0 20px 8px',
+              padding: '4px 20px 14px',
+              scrollPadding: '0 20px',
               WebkitOverflowScrolling: 'touch',
+              scrollbarWidth: 'none',
+              boxSizing: 'border-box',
             }}
           >
             {albumsFeaturingLiked.map((album) => (
