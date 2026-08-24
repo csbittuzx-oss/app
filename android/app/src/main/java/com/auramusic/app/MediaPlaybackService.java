@@ -79,9 +79,6 @@ public class MediaPlaybackService extends Service {
         createNotificationChannel();
         initMediaSession();
         initWakeLock();
-
-        // Immediately register foreground notification on creation to satisfy Android 8+
-        startForegroundSynchronously();
     }
 
     private void startForegroundSynchronously() {

@@ -407,12 +407,12 @@ class AudioPlayer {
     this.audio.addEventListener('error', () => {
       const err = this.audio.error;
       // Filter out abort errors, empty src resets during song switching, or unmounted states
-      if (!this.audio.src || !this.currentSong || err?.code === MediaError.MEDIA_ERR_ABORTED) {
+      if (!this.audio.src || !this.currentSong || err?.code === MediaError.MEDIA_ERR_ABORTED || !this.isUserInteracted) {
         return;
       }
 
       // Automatic Instant YouTube Fallback if JioSaavn stream fails
-      if (navigator.onLine && this.currentSong && !this.isAutoRecovering) {
+      if (navigator.onLine && this.currentSong && !this.isAutoRecovering && this.isUserInteracted) {
         this.isAutoRecovering = true;
         const songToRecover = this.currentSong;
         const resumePos = this.audio.currentTime || this.savedResumePosition || 0;
@@ -1034,6 +1034,7 @@ class AudioPlayer {
    * Plays unavailable JioSaavn songs seamlessly via the Headless YouTube Audio Engine.
    */
   private async playViaYouTubeFallback(targetSong: Song, seekSeconds = 0): Promise<boolean> {
+    if (!this.isUserInteracted) return false;
     const myGen = this._playGeneration;
     this.emit({ type: 'loading', isLoading: true });
     try {
@@ -1463,6 +1464,8 @@ class AudioPlayer {
   // ─── Queue Navigation & Smart AutoPlay ────────────────────────────────────
 
   private handleEnded() {
+    if (!this.isUserInteracted) return;
+
     // ── Premature short-preview cutoff detector for HTML5:
     // If playback ends in less than 35s on a track that is supposed to be full-length (>45s),
     // automatically re-resolve full stream via YouTube and continue uninterrupted.

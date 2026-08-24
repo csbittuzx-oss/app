@@ -49,12 +49,6 @@ public class MediaNotificationPlugin extends Plugin {
     public void load() {
         super.load();
         instance = this;
-        // Bind to existing service if running, but do NOT start foreground until playback starts
-        Context context = getContext();
-        if (context != null) {
-            Intent intent = new Intent(context, MediaPlaybackService.class);
-            context.bindService(intent, serviceConnection, Context.BIND_AUTO_CREATE);
-        }
     }
 
     private void ensureServiceRunning() {
