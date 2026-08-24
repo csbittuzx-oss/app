@@ -113,29 +113,6 @@ export function SectionShimmerSkeleton({
 export function HomeShimmerSkeleton() {
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: 12, paddingBottom: 40 }}>
-      {/* Hero Now Playing / Continue Listening Shimmer Card */}
-      <div style={{ padding: '0 20px 4px' }}>
-        <div
-          style={{
-            display: 'flex',
-            alignItems: 'center',
-            gap: 12,
-            padding: '12px 14px',
-            background: 'var(--color-surface)',
-            border: '1px solid var(--color-border)',
-            borderRadius: 'var(--radius-lg, 16px)',
-          }}
-        >
-          <div className="skeleton" style={{ width: 56, height: 56, borderRadius: 'var(--radius-md, 10px)', flexShrink: 0 }} />
-          <div style={{ flex: 1, display: 'flex', flexDirection: 'column', gap: 6 }}>
-            <div className="skeleton" style={{ height: 15, width: '60%', borderRadius: 4 }} />
-            <div className="skeleton" style={{ height: 12, width: '42%', borderRadius: 4 }} />
-            <div className="skeleton" style={{ height: 4, width: '100%', borderRadius: 2, marginTop: 4 }} />
-          </div>
-          <div className="skeleton" style={{ width: 40, height: 40, borderRadius: '50%', flexShrink: 0, marginLeft: 4 }} />
-        </div>
-      </div>
-
       {/* Shelves Shimmers */}
       <SectionShimmerSkeleton titleWidth={150} subtitleWidth={210} cardCount={5} />
       <SectionShimmerSkeleton titleWidth={130} subtitleWidth={175} cardCount={5} />
