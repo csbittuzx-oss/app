@@ -906,22 +906,59 @@ class AudioPlayer {
       }
     }
 
-    // ── 0. Native YouTube Track Direct Playback ──
-    if (targetSong.id.startsWith('yt_') || targetSong.provider === 'youtube') {
-      const cleanVideoId = targetSong.id.replace('yt_', '').trim();
+    // ── 0. Strict YouTube Track Direct Playback ──
+    const isYouTubeTrack = targetSong.provider === 'youtube' || targetSong.id.startsWith('yt_');
+    if (isYouTubeTrack) {
+      this.cancelCrossfade();
+      this.audio.pause();
+      this.audio.removeAttribute('src');
+      this.audio.load();
+      if (this.crossfadeAudio) {
+        this.crossfadeAudio.pause();
+        this.crossfadeAudio.removeAttribute('src');
+        this.crossfadeAudio.load();
+      }
+      this.activeEngine = 'youtube';
+      targetSong.provider = 'youtube';
+
+      let cleanVideoId = targetSong.id.replace('yt_', '').replace('/watch?v=', '').trim();
+      if (cleanVideoId.length !== 11 || !/^[a-zA-Z0-9_-]{11}$/.test(cleanVideoId)) {
+        try {
+          const { resolveYouTubeVideoId } = await import('../../data/api/youtubeMusicApi');
+          const ytMatch = await resolveYouTubeVideoId(targetSong.title, targetSong.artist, targetSong.duration);
+          if (myGen !== this._playGeneration) return;
+          if (ytMatch?.videoId) {
+            cleanVideoId = ytMatch.videoId;
+            targetSong.id = `yt_${cleanVideoId}`;
+            if (ytMatch.duration > 0) targetSong.duration = ytMatch.duration;
+            if (!targetSong.artwork && ytMatch.artwork) {
+              targetSong.artwork = ytMatch.artwork;
+              targetSong.artworkLg = ytMatch.artwork;
+            }
+            this.emit({ type: 'songchange', song: { ...targetSong } });
+          }
+        } catch {}
+      }
+
+      if (myGen !== this._playGeneration) return;
+
       if (cleanVideoId.length === 11 && /^[a-zA-Z0-9_-]{11}$/.test(cleanVideoId)) {
-        this.cancelCrossfade();
-        this.audio.pause();
-        this.audio.src = '';
-        this.activeEngine = 'youtube';
         this.saveCurrentSession();
         await youtubeAudioEngine.loadAndPlay(cleanVideoId, this.pendingSeekPosition);
         this.pendingSeekPosition = 0;
         return;
+      } else {
+        this.emit({ type: 'loading', isLoading: false });
+        this.emit({ type: 'error', error: `Audio stream unavailable for "${targetSong.title}".` });
+        return;
       }
     }
 
-    // ── Full-track URL resolution (Spotify / iTunes / Previews / Restored Session → JioSaavn / YouTube) ──
+    // ── 1. Strict JioSaavn / HTML5 Audio Track Playback ──
+    youtubeAudioEngine.stop();
+    this.activeEngine = 'html5';
+
+    // Full-track URL resolution (Spotify / iTunes / Previews / Restored Session → JioSaavn)
     const isRestoredTrack = this.savedResumeTrackId === targetSong.id;
     if (isRestoredTrack && targetSong.previewUrl && !targetSong.previewUrl.startsWith('blob:') && !targetSong.isDownloaded) {
       targetSong.previewUrl = null;
@@ -958,13 +995,7 @@ class AudioPlayer {
       }
     }
 
-    // ── If stream is STILL unavailable on JioSaavn, trigger Instant YouTube Fallback ──
-    if ((!targetSong.previewUrl || isPreviewAudioUrl(targetSong.previewUrl)) && navigator.onLine) {
-      const handled = await this.playViaYouTubeFallback(targetSong, this.pendingSeekPosition);
-      if (handled) return;
-    }
-
-    if (myGen !== this._playGeneration) return;   // newer song selected, bail
+    if (myGen !== this._playGeneration) return;
 
     if (!targetSong.previewUrl || isPreviewAudioUrl(targetSong.previewUrl)) {
       this.emit({ type: 'loading', isLoading: false });
@@ -1017,10 +1048,7 @@ class AudioPlayer {
       const playPromise = this.audio.play();
       if (playPromise !== undefined) await playPromise;
     } catch {
-      // If play failed on HTML5, seamlessly attempt YouTube Fallback
-      if (navigator.onLine && myGen === this._playGeneration) {
-        this.playViaYouTubeFallback(targetSong, this.pendingSeekPosition).catch(() => {});
-      }
+      this.emit({ type: 'loading', isLoading: false });
     }
 
     if (myGen !== this._playGeneration) return;
@@ -1327,7 +1355,15 @@ class AudioPlayer {
 
   togglePlay() {
     this.isUserInteracted = true;
-    if (this.activeEngine === 'youtube') {
+    const current = this.currentSong;
+    if (!current) return;
+
+    const isYouTubeTrack = current.provider === 'youtube' || current.id.startsWith('yt_');
+    if (isYouTubeTrack || this.activeEngine === 'youtube') {
+      this.cancelCrossfade();
+      this.audio.pause();
+      this.audio.removeAttribute('src');
+      this.activeEngine = 'youtube';
       if (youtubeAudioEngine.isPlaying()) {
         this.pause();
       } else {
@@ -1336,15 +1372,8 @@ class AudioPlayer {
       return;
     }
 
-    if (this.isCrossfading) {
-      if (this.isCrossfadePaused || this.audio.paused) {
-        this.resume();
-      } else {
-        this.pause();
-      }
-      return;
-    }
-
+    youtubeAudioEngine.stop();
+    this.activeEngine = 'html5';
     if (this.audio.paused) {
       this.resume();
     } else {
@@ -1353,22 +1382,15 @@ class AudioPlayer {
   }
 
   pause() {
-    if (this.activeEngine === 'youtube') {
+    const current = this.currentSong;
+    const isYouTubeTrack = current?.provider === 'youtube' || current?.id.startsWith('yt_');
+    if (isYouTubeTrack || this.activeEngine === 'youtube') {
       youtubeAudioEngine.pause();
       this.emit({ type: 'pause' });
       this.saveCurrentSession();
       return;
     }
 
-    if (this.isCrossfading) {
-      this.isCrossfadePaused = true;
-      this.audio.pause();
-      if (this.crossfadeAudio && !this.crossfadeAudio.paused) {
-        this.crossfadeAudio.pause();
-      }
-      this.emit({ type: 'pause' });
-      return;
-    }
     this.cancelCrossfade();
     this.audio.pause();
   }
@@ -1376,25 +1398,23 @@ class AudioPlayer {
   resume() {
     this.isUserInteracted = true;
     studioAudioEngine.resume();
-    if (this.activeEngine === 'youtube') {
+    const current = this.currentSong;
+    if (!current) return;
+
+    const isYouTubeTrack = current.provider === 'youtube' || current.id.startsWith('yt_');
+    if (isYouTubeTrack || this.activeEngine === 'youtube') {
+      this.cancelCrossfade();
+      this.audio.pause();
+      this.audio.removeAttribute('src');
+      this.activeEngine = 'youtube';
       youtubeAudioEngine.resume();
       return;
     }
 
-    if (this.isCrossfading && this.isCrossfadePaused) {
-      this.isCrossfadePaused = false;
-      this.audio.play().catch(() => {});
-      if (this.crossfadeAudio && this.crossfadeAudio.src) {
-        this.crossfadeAudio.play().catch(() => {});
-      }
-      this.emit({ type: 'play' });
-      return;
-    }
+    youtubeAudioEngine.stop();
+    this.activeEngine = 'html5';
 
     if (this.audio.paused) {
-      const current = this.currentSong;
-      if (!current) return;
-
       // If user explicitly resumes the restored session from previous app launch
       if (this.savedResumeTrackId === current.id) {
         const resumePos = this.savedResumePosition || 0;

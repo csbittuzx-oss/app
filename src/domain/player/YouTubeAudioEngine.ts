@@ -302,6 +302,7 @@ class YouTubeAudioEngine {
     this.pendingPlay = false;
     if (this.player && this.isPlayerReady) {
       try {
+        if (typeof this.player.mute === 'function') this.player.mute();
         if (typeof this.player.pauseVideo === 'function') this.player.pauseVideo();
         if (typeof this.player.stopVideo === 'function') this.player.stopVideo();
       } catch {}
