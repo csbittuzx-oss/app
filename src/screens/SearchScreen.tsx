@@ -67,8 +67,37 @@ function AnimatedSearchBar({ query, isActive, mode, onQueryChange, onActivate, o
           style={{ flex: 1, background: "transparent", border: "none", outline: "none", fontFamily: "var(--font-body)", fontSize: "var(--text-md)", fontWeight: 400, color: "var(--color-text-primary)", caretColor: "var(--color-accent)", minWidth: 0 }}
         />
         {query.length > 0 && (
-          <button type="button" aria-label="Clear" onClick={() => { onClear(); inputRef.current?.focus(); }} style={{ background: "var(--color-text-muted)", border: "none", borderRadius: "50%", width: 20, height: 20, display: "flex", alignItems: "center", justifyContent: "center", cursor: "pointer", flexShrink: 0, color: "var(--color-bg)", padding: 0 }}>
-            <svg width="12" height="12" viewBox="0 0 24 24" fill="none"><line x1="18" y1="6" x2="6" y2="18" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" /><line x1="6" y1="6" x2="18" y2="18" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" /></svg>
+          <button
+            type="button"
+            aria-label="Clear search"
+            onPointerDown={(e) => {
+              e.preventDefault();
+              onClear();
+              inputRef.current?.focus();
+            }}
+            onClick={() => {
+              onClear();
+              inputRef.current?.focus();
+            }}
+            style={{
+              background: "var(--color-text-muted)",
+              border: "none",
+              borderRadius: "50%",
+              width: 22,
+              height: 22,
+              display: "flex",
+              alignItems: "center",
+              justifyContent: "center",
+              cursor: "pointer",
+              flexShrink: 0,
+              color: "var(--color-bg)",
+              padding: 0,
+            }}
+          >
+            <svg width="12" height="12" viewBox="0 0 24 24" fill="none">
+              <line x1="18" y1="6" x2="6" y2="18" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" />
+              <line x1="6" y1="6" x2="18" y2="18" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" />
+            </svg>
           </button>
         )}
         <button type="button" aria-label={mode === "online" ? "Switch to local library" : "Switch to online"} onClick={onModeToggle} style={{ background: "none", border: "none", padding: 6, cursor: "pointer", flexShrink: 0, color: mode === "online" ? "var(--color-accent)" : "var(--color-text-secondary)", display: "flex", alignItems: "center", transition: "color 200ms ease" }}>
@@ -268,7 +297,13 @@ export function SearchScreen() {
   const handleFill = useCallback((s: string) => { setQuery(s); setTimeout(() => inputRef.current?.focus(), 50); }, []);
   const handleHistoryDelete = useCallback((q: string) => { deleteSearchHistoryEntry(q); setSuggestions(prev => ({ ...prev, history: prev.history.filter(h => h.query !== q) })); }, []);
   const handleChipSelect = useCallback((q: string) => { setQuery(q); handleSubmit(q); }, [handleSubmit]);
-  const handleClear = useCallback(() => { setResults(null); setSmartIntent(null); setError(false); setSuggestions({ history: [], suggestions: [], items: [], isFromLink: false, isLoading: false }); }, []);
+  const handleClear = useCallback(() => {
+    setQuery("");
+    setResults(null);
+    setSmartIntent(null);
+    setError(false);
+    setSuggestions({ history: [], suggestions: [], items: [], isFromLink: false, isLoading: false });
+  }, []);
   const handleSongPlay = useCallback((song: Song) => {
     playSong(song, [song], 0);
     addSearchRecentPlayed(song);
