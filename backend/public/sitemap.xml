@@ -1,0 +1,48 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9"
+        xmlns:image="http://www.google.com/schemas/sitemap-image/1.1"
+        xmlns:xhtml="http://www.w3.org/1999/xhtml">
+  
+  <!-- Primary Landing Page -->
+  <url>
+    <loc>https://soundwave-apk.vercel.app/</loc>
+    <lastmod>2026-08-24</lastmod>
+    <changefreq>daily</changefreq>
+    <priority>1.0</priority>
+    <image:image>
+      <image:loc>https://soundwave-apk.vercel.app/logo.png</image:loc>
+      <image:title>Soundwave Lossless Music Player Official Logo</image:title>
+      <image:caption>Soundwave Official Android APK Lossless Audio Engine</image:caption>
+    </image:image>
+    <image:image>
+      <image:loc>https://soundwave-apk.vercel.app/hero-bg.png</image:loc>
+      <image:title>Soundwave 320kbps Studio Acoustic Player Interface</image:title>
+      <image:caption>Pure uncompressed sound with zero ads on Android</image:caption>
+    </image:image>
+    <image:image>
+      <image:loc>https://soundwave-apk.vercel.app/bittu-avatar.png</image:loc>
+      <image:title>Pandit Bittu — Creator of Soundwave</image:title>
+    </image:image>
+  </url>
+
+  <!-- Developer Profile Page -->
+  <url>
+    <loc>https://soundwave-apk.vercel.app/developer</loc>
+    <lastmod>2026-08-24</lastmod>
+    <changefreq>weekly</changefreq>
+    <priority>0.8</priority>
+    <image:image>
+      <image:loc>https://soundwave-apk.vercel.app/bittu-avatar.png</image:loc>
+      <image:title>Pandit Bittu Official Developer Profile</image:title>
+      <image:caption>Lead Architect of Soundwave Lossless Audio Engine</image:caption>
+    </image:image>
+  </url>
+
+  <url>
+    <loc>https://soundwave-apk.vercel.app/developer.html</loc>
+    <lastmod>2026-08-24</lastmod>
+    <changefreq>weekly</changefreq>
+    <priority>0.7</priority>
+  </url>
+
+</urlset>

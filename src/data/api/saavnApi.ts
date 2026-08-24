@@ -14,6 +14,7 @@ const DES_KEY = '38346591';
  */
 export function formatMediaUrlWithQuality(url?: string | null, quality: AudioQuality = 'high'): string {
   if (!url || typeof url !== 'string') return '';
+  if (url.startsWith('blob:')) return url;
   const targetSuffix = quality === 'low' ? '_96' : quality === 'medium' ? '_160' : '_320';
   let formatted = url.replace('http://', 'https://');
 
@@ -87,7 +88,9 @@ export async function fetchSaavnSongStreamById(songId: string, quality: AudioQua
  * Detects if a URL is a 30s preview clip rather than a full-length playable audio stream.
  */
 export function isPreviewAudioUrl(url?: string | null): boolean {
-  if (!url || typeof url !== 'string' || !url.startsWith('http')) return true;
+  if (!url || typeof url !== 'string') return true;
+  if (url.startsWith('blob:')) return false;
+  if (!url.startsWith('http')) return true;
   const lower = url.toLowerCase();
   return (
     lower.includes('p.scdn.co') ||

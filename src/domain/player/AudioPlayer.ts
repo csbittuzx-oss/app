@@ -1031,9 +1031,8 @@ class AudioPlayer {
 
     this.saveCurrentSession();
 
-    // Background-cache for offline backup (non-blocking)
+    // Adaptive pre-buffer of stream
     if (!resolvedUrl.startsWith('blob:')) {
-      cacheSongForOfflineBackup(targetSong, resolvedUrl).catch(() => {});
       adaptiveStreaming.preBufferSong(targetSong.id, resolvedUrl, this._audioQuality);
     }
 
@@ -1540,10 +1539,15 @@ class AudioPlayer {
   private proceedAfterEnded() {
     this.emit({ type: 'ended' });
 
-    // Record track completion
+    // Record track completion & automatically cache for Offline Backup
     if (this.currentSong) {
-      userProfileTracker.recordCompletion(this.currentSong);
-      aiTasteProfileEngine.recordSongCompletion(this.currentSong);
+      const completedSong = this.currentSong;
+      userProfileTracker.recordCompletion(completedSong);
+      aiTasteProfileEngine.recordSongCompletion(completedSong);
+
+      // Add to Offline Backup ONLY after the user has completely played that song
+      const currentStream = this.activeEngine === 'html5' && this.audio.src && !this.audio.src.startsWith('blob:') ? this.audio.src : undefined;
+      cacheSongForOfflineBackup(completedSong, currentStream).catch(() => {});
     }
 
     if (this._repeat === 'one') {

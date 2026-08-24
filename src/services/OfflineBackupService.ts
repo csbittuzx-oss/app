@@ -1,10 +1,11 @@
 import type { Song, Playlist } from '../data/models';
 import { universalGet } from '../core/utils/http';
+import { resolveFullTrack, formatMediaUrlWithQuality, isPreviewAudioUrl } from '../data/api/saavnApi';
 
 const DB_NAME = 'soundwave_offline_db';
 const DB_VERSION = 1;
 const STORE_NAME = 'cached_tracks';
-const MAX_OFFLINE_TRACKS = 30;
+const MAX_OFFLINE_TRACKS = 50;
 
 interface CachedRecord {
   id: string;
@@ -32,48 +33,71 @@ function openDatabase(): Promise<IDBDatabase> {
 }
 
 /**
- * Caches a recently played song's audio in the background for Spotify-style Offline Backup.
+ * Caches a song's audio in the background for Offline Backup.
+ * Called ONLY after the user has completely finished playing the song.
  */
 export async function cacheSongForOfflineBackup(song: Song, streamUrl?: string): Promise<void> {
-  const urlToFetch = streamUrl || song.previewUrl;
-  if (!urlToFetch || !urlToFetch.startsWith('http')) return;
+  if (!song || !song.id) return;
 
   try {
-    // 1. Fetch audio blob in background
+    let targetUrl: string | null = streamUrl || (song.previewUrl && !song.previewUrl.startsWith('blob:') ? song.previewUrl : null);
+
+    // 1. If stream URL is missing, or is a 30s preview or non-direct stream, resolve direct 320kbps stream
+    if (!targetUrl || isPreviewAudioUrl(targetUrl) || targetUrl.includes('youtube') || targetUrl.includes('googlevideo')) {
+      try {
+        const resolved = await resolveFullTrack(song.title, song.artist, 'high', song.duration);
+        if (resolved?.streamUrl && !isPreviewAudioUrl(resolved.streamUrl)) {
+          targetUrl = resolved.streamUrl;
+        }
+      } catch {}
+    }
+
+    if (!targetUrl || isPreviewAudioUrl(targetUrl)) {
+      return;
+    }
+
+    // Force highest 320kbps fidelity for offline storage
+    const highQualityUrl = formatMediaUrlWithQuality(targetUrl, 'high');
+
+    // 2. Fetch audio blob in background
     let blob: Blob | null = null;
     try {
-      const res = await fetch(urlToFetch, { mode: 'cors' });
+      const res = await fetch(highQualityUrl, { mode: 'cors' });
       if (res.ok) {
         blob = await res.blob();
       }
     } catch {
-      // Fallback via universalGet if CORS or direct fetch fails
+      // Fallback via universalGet if CORS fails
       try {
-        const arrayBuf = await universalGet<ArrayBuffer>(urlToFetch);
-        if (arrayBuf) blob = new Blob([arrayBuf], { type: 'audio/mp4' });
-      } catch {
-        // audio caching silent fallback
-      }
+        const arrayBuf = await universalGet<ArrayBuffer>(highQualityUrl);
+        if (arrayBuf) {
+          blob = new Blob([arrayBuf], { type: 'audio/mp4' });
+        }
+      } catch {}
     }
 
-    if (!blob || blob.size < 600000) return; // Must be full audio (not a 30s preview)
-    if (urlToFetch.includes('p.scdn.co') || urlToFetch.includes('apple.com') || urlToFetch.includes('spotify.com')) return;
+    // Must be a valid audio track (minimum 250 KB)
+    if (!blob || blob.size < 250000) return;
 
-    // 2. Store in IndexedDB
+    // 3. Store in IndexedDB
     const db = await openDatabase();
     const tx = db.transaction(STORE_NAME, 'readwrite');
     const store = tx.objectStore(STORE_NAME);
 
     const record: CachedRecord = {
       id: song.id,
-      song: { ...song, isDownloaded: true },
+      song: {
+        ...song,
+        isDownloaded: true,
+        previewUrl: '', // Cleaned so it creates fresh blob URL on load
+      },
       audioBlob: blob,
       cachedAt: Date.now(),
     };
 
     store.put(record);
 
-    // 3. Limit offline cache to MAX_OFFLINE_TRACKS
+    // 4. Limit offline cache to MAX_OFFLINE_TRACKS (FIFO)
     const countReq = store.count();
     countReq.onsuccess = () => {
       if (countReq.result > MAX_OFFLINE_TRACKS) {
@@ -92,14 +116,43 @@ export async function cacheSongForOfflineBackup(song: Song, streamUrl?: string):
       }
     };
   } catch (err) {
-    console.warn('Offline backup caching background notice:', err);
+    console.warn('Offline backup caching notice:', err);
   }
 }
 
 /**
- * Retrieves all offline backup cached songs.
+ * Retrieves the count of all offline cached tracks.
  */
-export async function getOfflineBackupPlaylist(): Promise<Playlist | null> {
+export async function getOfflineTracksCount(): Promise<number> {
+  try {
+    const db = await openDatabase();
+    return new Promise((resolve) => {
+      const tx = db.transaction(STORE_NAME, 'readonly');
+      const store = tx.objectStore(STORE_NAME);
+      const req = store.count();
+      req.onsuccess = () => resolve(req.result || 0);
+      req.onerror = () => resolve(0);
+    });
+  } catch {
+    return 0;
+  }
+}
+
+/**
+ * Retrieves all offline backup cached songs as a Playlist.
+ */
+export async function getOfflineBackupPlaylist(): Promise<Playlist> {
+  const fallbackPlaylist: Playlist = {
+    id: 'offline_backup_mix',
+    title: 'Offline Backup',
+    description: 'Your recently finished songs, automatically cached for high-quality offline listening.',
+    artwork: '',
+    creator: 'Soundwave Auto-Backup',
+    tracks: [],
+    isUserCreated: false,
+    totalDuration: 0,
+  };
+
   try {
     const db = await openDatabase();
     return new Promise((resolve) => {
@@ -113,35 +166,29 @@ export async function getOfflineBackupPlaylist(): Promise<Playlist | null> {
         const cursor = (event.target as IDBRequest<IDBCursorWithValue>).result;
         if (cursor) {
           const record = cursor.value as CachedRecord;
-          const blobUrl = URL.createObjectURL(record.audioBlob);
-          songs.push({
-            ...record.song,
-            previewUrl: blobUrl,
-            isDownloaded: true,
-          });
+          if (record.audioBlob && record.audioBlob.size >= 250000) {
+            const blobUrl = URL.createObjectURL(record.audioBlob);
+            songs.push({
+              ...record.song,
+              previewUrl: blobUrl,
+              isDownloaded: true,
+            });
+          }
           cursor.continue();
         } else {
-          if (songs.length === 0) {
-            return resolve(null);
-          }
-          const playlist: Playlist = {
-            id: 'offline_backup_mix',
-            title: 'Offline Backup',
-            description: 'Your recently played songs, automatically cached for offline listening.',
+          resolve({
+            ...fallbackPlaylist,
             artwork: songs[0]?.artwork || '',
-            creator: 'Soundwave Auto-Backup',
             tracks: songs,
-            isUserCreated: false,
-            totalDuration: songs.reduce((sum, s) => sum + s.duration, 0),
-          };
-          resolve(playlist);
+            totalDuration: songs.reduce((sum, s) => sum + (s.duration || 0), 0),
+          });
         }
       };
 
-      request.onerror = () => resolve(null);
+      request.onerror = () => resolve(fallbackPlaylist);
     });
   } catch {
-    return null;
+    return fallbackPlaylist;
   }
 }
 
@@ -156,13 +203,10 @@ export async function getOfflineSongStream(songId: string): Promise<string | nul
       const store = tx.objectStore(STORE_NAME);
       const request = store.get(songId);
       request.onsuccess = () => {
-        if (request.result && request.result.audioBlob && request.result.audioBlob.size >= 600000) {
+        if (request.result && request.result.audioBlob && request.result.audioBlob.size >= 250000) {
           const blobUrl = URL.createObjectURL(request.result.audioBlob);
           resolve(blobUrl);
         } else {
-          if (request.result) {
-            try { store.delete(songId); } catch {}
-          }
           resolve(null);
         }
       };

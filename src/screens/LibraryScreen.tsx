@@ -1,4 +1,4 @@
-import { useState, useRef } from 'react';
+import { useState, useRef, useEffect } from 'react';
 import { useApp } from '../state/AppContext';
 import { usePlayer } from '../state/PlayerContext';
 import { SongCard } from '../components/cards/SongCard';
@@ -8,6 +8,7 @@ import { SpotifyImportModal } from '../components/library/SpotifyImportModal';
 import { PlaylistActionModal } from '../components/library/PlaylistActionModal';
 import { filterSpotifyAvailableTracksSync } from '../services/SpotifyAvailabilityService';
 import type { Playlist } from '../data/models';
+import { getOfflineTracksCount } from '../services/OfflineBackupService';
 
 type LibTab = 'playlists' | 'songs' | 'artists';
 
@@ -25,6 +26,11 @@ export function LibraryScreen() {
   const [showSpotifyImport, setShowSpotifyImport] = useState(false);
   const [newPlaylistTitle, setNewPlaylistTitle] = useState('');
   const [activeActionPlaylist, setActiveActionPlaylist] = useState<Playlist | null>(null);
+  const [offlineCount, setOfflineCount] = useState<number>(0);
+
+  useEffect(() => {
+    getOfflineTracksCount().then(cnt => setOfflineCount(cnt));
+  }, []);
 
   const longPressTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const isLongPressTriggeredRef = useRef(false);
@@ -299,7 +305,7 @@ export function LibraryScreen() {
           ) : (
             <div>
               {/* Spotify-style Offline Backup Mix */}
-              {state.recentlyPlayed.length > 0 && (
+              {offlineCount > 0 && (
                 <div
                   id="playlist-item-offline-backup"
                   onClick={() => navigate('playlist', { playlistId: 'offline_backup_mix' })}
@@ -341,7 +347,7 @@ export function LibraryScreen() {
                         OFFLINE READY
                       </span>
                       <p style={{ margin: 0, fontSize: 'var(--text-sm)', color: 'var(--color-text-secondary)' }}>
-                        {state.recentlyPlayed.length} songs cached
+                        {offlineCount} {offlineCount === 1 ? 'song' : 'songs'} cached
                       </p>
                     </div>
                   </div>

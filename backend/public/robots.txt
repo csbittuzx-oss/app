@@ -1,0 +1,13 @@
+# Soundwave Official Robots.txt
+# https://soundwave-apk.vercel.app/
+
+User-agent: *
+Allow: /
+Allow: /logo.png
+Allow: /bittu-avatar.png
+Allow: /hero-bg.png
+Allow: /developer.html
+Allow: /sitemap.xml
+
+# XML Sitemap Location
+Sitemap: https://soundwave-apk.vercel.app/sitemap.xml
