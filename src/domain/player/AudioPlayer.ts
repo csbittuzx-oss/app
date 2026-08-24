@@ -1037,63 +1037,101 @@ class AudioPlayer {
 
   /**
    * Ultra-fast YouTube Fallback Resolver.
-   * Plays unavailable JioSaavn songs seamlessly via the Headless YouTube Audio Engine.
+   * Strategy:
+   *   1. Get the YouTube video ID (from song or search)
+   *   2. Extract direct audio stream URL via Piped/Invidious API (no IFrame needed)
+   *   3. Play via native HTML5 <audio> element — instant, Android-native, no WebView issues
+   *   4. Fall back to IFrame engine only if Piped/Invidious both fail
    */
   private async playViaYouTubeFallback(targetSong: Song, sessionId: number, seekSeconds = 0): Promise<boolean> {
     if (!this.isUserInteracted) return false;
     this.emit({ type: 'loading', isLoading: true });
 
-    // 1. Direct Video ID if already a YouTube song
+    const { fetchAudioStreamFromYouTubeId, resolveYouTubeVideoId } = await import('../../data/api/youtubeMusicApi');
+    if (sessionId !== this.playbackSessionId) return false;
+
+    // ── Step 1: Get Video ID ──────────────────────────────────────────────────
+    let videoId = '';
     const directVid = targetSong.id.replace('yt_', '').replace('/watch?v=', '').trim();
+
     if (directVid.length === 11 && /^[a-zA-Z0-9_-]{11}$/.test(directVid)) {
-      this.cancelCrossfade();
-      this.audio.pause();
-      this.audio.removeAttribute('src');
-      this.audio.load();
-      this.activeEngine = 'youtube';
-      targetSong.provider = 'youtube';
-      this.emit({ type: 'songchange', song: { ...targetSong } });
-      this.updateMediaSession(targetSong);
-      this.saveCurrentSession();
-      await youtubeAudioEngine.loadAndPlay(directVid, sessionId, seekSeconds);
-      return true;
+      // Already have a direct YouTube video ID in the song
+      videoId = directVid;
+    } else {
+      // Search YouTube Music for the right video ID
+      try {
+        const ytMatch = await resolveYouTubeVideoId(targetSong.title, targetSong.artist, targetSong.duration);
+        if (sessionId !== this.playbackSessionId) return false;
+        if (ytMatch?.videoId) {
+          videoId = ytMatch.videoId;
+          if (ytMatch.duration > 0) targetSong.duration = ytMatch.duration;
+          if (!targetSong.artwork && ytMatch.artwork) {
+            targetSong.artwork = ytMatch.artwork;
+            targetSong.artworkLg = ytMatch.artwork;
+          }
+        }
+      } catch (e) {
+        console.warn('[AudioPlayer] YouTube video ID resolution error:', e);
+      }
+      if (!videoId || sessionId !== this.playbackSessionId) {
+        if (sessionId === this.playbackSessionId) {
+          this.emit({ type: 'loading', isLoading: false });
+          this.emit({ type: 'error', error: `Could not find "${targetSong.title}" on YouTube.` });
+        }
+        return false;
+      }
     }
 
-    // 2. Resolve YouTube video ID by Title & Artist
+    // ── Step 2: Extract direct audio stream URL via Piped/Invidious ───────────
+    // This bypasses the broken YouTube IFrame API on Android WebView entirely
+    let directStreamUrl: string | null = null;
     try {
-      const { resolveYouTubeVideoId } = await import('../../data/api/youtubeMusicApi');
-      const ytMatch = await resolveYouTubeVideoId(targetSong.title, targetSong.artist, targetSong.duration);
+      const streamData = await fetchAudioStreamFromYouTubeId(videoId);
       if (sessionId !== this.playbackSessionId) return false;
-      if (ytMatch && ytMatch.videoId) {
-        this.cancelCrossfade();
-        this.audio.pause();
-        this.audio.removeAttribute('src');
-        this.audio.load();
-        this.activeEngine = 'youtube';
-        targetSong.provider = 'youtube';
-        targetSong.id = `yt_${ytMatch.videoId}`;
-        if (ytMatch.duration > 0) targetSong.duration = ytMatch.duration;
-        if (!targetSong.artwork && ytMatch.artwork) {
-          targetSong.artwork = ytMatch.artwork;
-          targetSong.artworkLg = ytMatch.artwork;
-        }
-        this.emit({ type: 'songchange', song: { ...targetSong } });
-        this.updateMediaSession(targetSong);
-        this.saveCurrentSession();
-        await youtubeAudioEngine.loadAndPlay(ytMatch.videoId, sessionId, seekSeconds);
-        return true;
+      if (streamData?.streamUrl) {
+        directStreamUrl = streamData.streamUrl;
+        if (streamData.duration && streamData.duration > 0) targetSong.duration = streamData.duration;
       }
     } catch (e) {
-      console.warn('[AudioPlayer] YouTube fallback resolution error:', e);
+      console.warn('[AudioPlayer] Piped/Invidious stream extraction failed:', e);
     }
 
     if (sessionId !== this.playbackSessionId) return false;
-    this.emit({ type: 'loading', isLoading: false });
-    this.emit({ type: 'error', error: `Audio source unavailable for "${targetSong.title}".` });
-    if (this._queue.length > 1 && this._queueIndex < this._queue.length - 1) {
-      setTimeout(() => { if (sessionId === this.playbackSessionId && !this.isPlaying) this.next(); }, 1200);
+
+    targetSong.provider = 'youtube';
+    targetSong.id = `yt_${videoId}`;
+    this.emit({ type: 'songchange', song: { ...targetSong } });
+    this.updateMediaSession(targetSong);
+    this.saveCurrentSession();
+
+    // ── Step 3: Play via native HTML5 audio if we got a direct URL ────────────
+    if (directStreamUrl) {
+      console.log('[AudioPlayer] YouTube via native audio (Piped/Invidious):', directStreamUrl.slice(0, 80));
+      this.cancelCrossfade();
+      youtubeAudioEngine.stop(0); // ensure IFrame engine is silent
+      this.activeEngine = 'html5'; // native audio engine
+      this.audio.pause();
+      this.audio.src = directStreamUrl;
+      this.audio.load();
+      if (seekSeconds > 0) this.audio.currentTime = seekSeconds;
+      try {
+        await this.audio.play();
+      } catch (e) {
+        console.warn('[AudioPlayer] Native YouTube audio play() error:', e);
+      }
+      this.emit({ type: 'loading', isLoading: false });
+      return true;
     }
-    return false;
+
+    // ── Step 4: Last resort — IFrame engine (desktop/browser only) ────────────
+    console.warn('[AudioPlayer] Piped/Invidious unavailable, falling back to IFrame engine');
+    this.cancelCrossfade();
+    this.audio.pause();
+    this.audio.removeAttribute('src');
+    this.audio.load();
+    this.activeEngine = 'youtube';
+    await youtubeAudioEngine.loadAndPlay(videoId, sessionId, seekSeconds);
+    return true;
   }
 
   /**
