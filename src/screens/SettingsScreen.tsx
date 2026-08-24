@@ -1,9 +1,10 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { useApp } from '../state/AppContext';
 import { usePlayer } from '../state/PlayerContext';
 import { aiTasteProfileEngine } from '../domain/ai/AITasteProfileEngine';
 import { updateService, type AppUpdateInfo, CURRENT_APP_VERSION } from '../services/UpdateService';
 import { UpdateModal } from '../components/shared/UpdateModal';
+import { dolbyAudioService } from '../services/DolbyAudioService';
 import type { AudioQuality } from '../data/models';
 
 export function SettingsScreen() {
@@ -16,6 +17,13 @@ export function SettingsScreen() {
   const [updateModalInfo, setUpdateModalInfo] = useState<AppUpdateInfo | null>(null);
   const [selectedLangs, setSelectedLangs] = useState<string[]>(state.musicLanguages || ['Hindi', 'International']);
   const [toastMessage, setToastMessage] = useState<string | null>(null);
+  const [isDolbySupported, setIsDolbySupported] = useState(false);
+
+  useEffect(() => {
+    dolbyAudioService.checkSupport().then((supported) => {
+      setIsDolbySupported(supported);
+    });
+  }, []);
 
   const isDark = state.theme === 'dark';
   const audioQuality: AudioQuality = state.config.audioQuality || 'high';
@@ -47,7 +55,7 @@ export function SettingsScreen() {
   const handleQualityChange = (q: AudioQuality) => {
     dispatch({ type: 'SET_CONFIG', payload: { audioQuality: q } });
     setAudioQuality(q);
-    const label = q === 'high' ? 'High (320 kbps Studio HD)' : q === 'medium' ? 'Medium (192 kbps)' : 'Low (96 kbps Data Saver)';
+    const label = q === 'dolby' ? 'Dolby Audio (Hardware Dolby Atmos)' : q === 'high' ? 'High (320 kbps Studio HD)' : q === 'medium' ? 'Medium (192 kbps)' : 'Low (96 kbps Data Saver)';
     showToast(`Audio quality switched to ${label}`);
   };
 
@@ -199,10 +207,16 @@ export function SettingsScreen() {
               overflow: 'hidden',
             }}>
               {[
+                ...(isDolbySupported ? [{
+                  id: 'dolby' as AudioQuality,
+                  title: 'Dolby Audio',
+                  bitrate: 'Dolby Atmos',
+                  desc: 'Hardware-accelerated Dolby Atmos spatial surround sound',
+                }] : []),
                 { id: 'high' as AudioQuality, title: 'High Quality', bitrate: '320 kbps', desc: 'Best sound quality & crystal clear audio (Recommended)' },
                 { id: 'medium' as AudioQuality, title: 'Medium Quality', bitrate: '192 kbps', desc: 'Balanced streaming with moderate data usage' },
                 { id: 'low' as AudioQuality, title: 'Low Quality', bitrate: '96 kbps', desc: 'Data saver mode for slower connections' },
-              ].map((item, index) => {
+              ].map((item, index, arr) => {
                 const isSelected = audioQuality === item.id;
                 return (
                   <div
@@ -218,7 +232,7 @@ export function SettingsScreen() {
                       justifyContent: 'space-between',
                       padding: '14px 16px',
                       cursor: 'pointer',
-                      borderBottom: index < 2 ? '1px solid var(--color-border)' : 'none',
+                      borderBottom: index < arr.length - 1 ? '1px solid var(--color-border)' : 'none',
                       background: isSelected ? 'var(--color-accent-dim)' : 'transparent',
                       transition: 'background 150ms ease',
                     }}

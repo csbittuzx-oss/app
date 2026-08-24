@@ -121,7 +121,7 @@ export interface PlayerState {
   ridingMode?: boolean;
 }
 
-export type AudioQuality = 'high' | 'medium' | 'low';
+export type AudioQuality = 'dolby' | 'high' | 'medium' | 'low';
 
 export interface AppState {
   theme: 'dark' | 'light';

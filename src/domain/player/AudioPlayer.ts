@@ -25,6 +25,7 @@ import { studioAudioEngine } from './StudioAudioEngine';
 import { youtubeAudioEngine } from './YouTubeAudioEngine';
 import { YouTubeQueueService } from '../../services/YouTubeQueue';
 import { BeatAnalyzer } from './BeatAnalyzer';
+import { dolbyAudioService } from '../../services/DolbyAudioService';
 
 export interface PlaybackSession {
   song: Song;
@@ -154,6 +155,10 @@ class AudioPlayer {
     studioAudioEngine.attachAudioElement(this.primaryAudio);
     studioAudioEngine.attachAudioElement(this.secondaryAudio);
     studioAudioEngine.setQuality(this._audioQuality);
+
+    if (this._audioQuality === 'dolby') {
+      dolbyAudioService.setEnabled(true).catch(() => {});
+    }
   }
 
   /**
@@ -533,6 +538,11 @@ class AudioPlayer {
   async setAudioQuality(quality: AudioQuality) {
     this._audioQuality = quality;
     studioAudioEngine.setQuality(quality);
+    if (quality === 'dolby') {
+      dolbyAudioService.setEnabled(true).catch(() => {});
+    } else {
+      dolbyAudioService.setEnabled(false).catch(() => {});
+    }
     this.emit({ type: 'qualitychange', quality });
 
     // Save preference

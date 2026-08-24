@@ -10,6 +10,7 @@ public class MainActivity extends BridgeActivity {
     @Override
     public void onCreate(Bundle savedInstanceState) {
         registerPlugin(MediaNotificationPlugin.class);
+        registerPlugin(DolbyAudioPlugin.class);
         super.onCreate(savedInstanceState);
         try {
             setRequestedOrientation(ActivityInfo.SCREEN_ORIENTATION_PORTRAIT);
