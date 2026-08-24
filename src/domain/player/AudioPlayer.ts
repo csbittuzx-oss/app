@@ -936,7 +936,6 @@ class AudioPlayer {
     if (!targetSong.previewUrl || isPreviewAudioUrl(targetSong.previewUrl)) {
       this.emit({ type: 'loading', isLoading: false });
       this.emit({ type: 'error', error: `Audio source unavailable for "${targetSong.title}".` });
-      showToast(`Audio unavailable for "${targetSong.title}". Skipping...`, 'info', 2000);
       if (this._queue.length > 1 && this._queueIndex < this._queue.length - 1) {
         setTimeout(() => { if (myGen === this._playGeneration && !this.isPlaying) this.next(); }, 1200);
       }
@@ -1030,7 +1029,6 @@ class AudioPlayer {
     if (myGen !== this._playGeneration) return false;
     this.emit({ type: 'loading', isLoading: false });
     this.emit({ type: 'error', error: `Audio source unavailable for "${targetSong.title}".` });
-    showToast(`Audio unavailable for "${targetSong.title}". Skipping...`, 'info', 2000);
     if (this._queue.length > 1 && this._queueIndex < this._queue.length - 1) {
       setTimeout(() => { if (myGen === this._playGeneration && !this.isPlaying) this.next(); }, 1200);
     }
