@@ -304,7 +304,7 @@ class YouTubeAudioEngine {
 
       // Pulse play & un-mute at 250ms
       setTimeout(() => {
-        if (this.activeSessionId === sessionId && this.player && typeof this.player.playVideo === 'function') {
+        if (this.activeSessionId === sessionId && this.activeSessionId !== 0 && this.player && typeof this.player.playVideo === 'function') {
           try {
             this.player.unMute?.();
             this.player.setVolume(Math.round(this.volume * 100));
@@ -315,7 +315,7 @@ class YouTubeAudioEngine {
 
       // Second pulse at 600ms
       setTimeout(() => {
-        if (this.activeSessionId === sessionId && this.player && typeof this.player.playVideo === 'function') {
+        if (this.activeSessionId === sessionId && this.activeSessionId !== 0 && this.player && typeof this.player.playVideo === 'function') {
           try {
             this.player.unMute?.();
             this.player.setVolume(Math.round(this.volume * 100));
@@ -326,7 +326,7 @@ class YouTubeAudioEngine {
 
       // Loading dismissal watchdog (1200ms)
       setTimeout(() => {
-        if (this.activeSessionId === sessionId) {
+        if (this.activeSessionId === sessionId && this.activeSessionId !== 0) {
           this._isPlaying = true;
           this.emit({ type: 'loading', isLoading: false, sessionId });
           this.emit({ type: 'play', sessionId });
@@ -408,8 +408,8 @@ class YouTubeAudioEngine {
     return false;
   }
 
-  stop(newSessionId = 0): void {
-    this.activeSessionId = newSessionId;
+  stop(): void {
+    this.activeSessionId = 0;
     this._isPlaying = false;
     this.stopTimeUpdate();
     this.currentVideoId = null;

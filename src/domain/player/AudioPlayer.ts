@@ -863,7 +863,7 @@ class AudioPlayer {
       this.crossfadeAudio.removeAttribute('src');
       this.crossfadeAudio.load();
     }
-    youtubeAudioEngine.stop(currentSessionId);
+    youtubeAudioEngine.stop();
     this.activeEngine = 'none';
 
     // ── Cancel all in-flight adaptive stream downloads immediately ──
@@ -905,7 +905,7 @@ class AudioPlayer {
       if (offlineUrl) {
         targetSong.previewUrl = offlineUrl;
         targetSong.isDownloaded = true;
-        youtubeAudioEngine.stop(currentSessionId);
+        youtubeAudioEngine.stop();
         this.activeEngine = 'html5';
       } else {
         this.emit({ type: 'loading', isLoading: false });
@@ -983,7 +983,7 @@ class AudioPlayer {
 
 
     // ── Switch to HTML5 Audio engine ──
-    youtubeAudioEngine.stop(currentSessionId);
+    youtubeAudioEngine.stop();
     this.activeEngine = 'html5';
     const resolvedUrl = formatMediaUrlWithQuality(targetSong.previewUrl, this._audioQuality);
 
@@ -1415,7 +1415,7 @@ class AudioPlayer {
       return;
     }
 
-    youtubeAudioEngine.stop(this.playbackSessionId);
+    youtubeAudioEngine.stop();
     this.activeEngine = 'html5';
 
     if (this.audio.paused) {
