@@ -37,6 +37,7 @@ import type { Song, Playlist, Album } from '../data/models';
 import { SongSquareCard } from '../components/cards/SongCard';
 import { AlbumCard } from '../components/cards/AlbumCard';
 import { SongOptionsBottomSheet } from '../components/shared/SongOptionsBottomSheet';
+import { HomeShimmerSkeleton } from '../components/shared/SkeletonCard';
 import { getGreeting } from '../core/utils';
 import { CONFIG } from '../config';
 import { resizeImageUrl } from '../core/utils/imageUtils';
@@ -279,6 +280,7 @@ export function HomeScreen({ isVisible = true }: { isVisible?: boolean }) {
   const [popularAlbumsList, setPopularAlbumsList] = useState<Album[]>([]);
   const [partyTracks, setPartyTracks] = useState<Song[]>([]);
   const [workoutTracks, setWorkoutTracks] = useState<Song[]>([]);
+  const [isInitialLoading, setIsInitialLoading] = useState(true);
 
   const topArtistName = useMemo(() => {
     const profileArtists = userProfileTracker.getTopArtists(3);
@@ -358,10 +360,13 @@ export function HomeScreen({ isVisible = true }: { isVisible?: boolean }) {
     });
     setAlbumsFeaturingLiked(Array.from(albumMap.values()).slice(0, 12));
 
-    if (!navigator.onLine) return;
+    if (!navigator.onLine) {
+      setIsInitialLoading(false);
+      return;
+    }
 
     try {
-      generateSpotifyStyleShelves({
+      const p1 = generateSpotifyStyleShelves({
         languages: dynamicLanguages,
         favorites,
         recentlyPlayed,
@@ -385,7 +390,7 @@ export function HomeScreen({ isVisible = true }: { isVisible?: boolean }) {
         })
         .catch(() => {});
 
-      getPersonalizedTrending(dynamicLanguages, 20)
+      const p2 = getPersonalizedTrending(dynamicLanguages, 20)
         .then((tracks) => {
           if (tracks && tracks.length > 0) {
             setChartsTracks(deduplicateSongs(tracks).slice(0, 16));
@@ -393,7 +398,7 @@ export function HomeScreen({ isVisible = true }: { isVisible?: boolean }) {
         })
         .catch(() => {});
 
-      getPersonalizedNewReleases(dynamicLanguages, 16)
+      const p3 = getPersonalizedNewReleases(dynamicLanguages, 16)
         .then((tracks) => {
           if (tracks && tracks.length > 0) {
             setNewReleasesList(deduplicateSongs(tracks).slice(0, 14));
@@ -401,7 +406,7 @@ export function HomeScreen({ isVisible = true }: { isVisible?: boolean }) {
         })
         .catch(() => {});
 
-      getDailyRecommendations(dynamicLanguages, [topArtistName], 16)
+      const p4 = getDailyRecommendations(dynamicLanguages, [topArtistName], 16)
         .then((tracks) => {
           if (tracks && tracks.length > 0) {
             setRecommendedTodayTracks(deduplicateSongs(tracks).slice(0, 14));
@@ -440,7 +445,7 @@ export function HomeScreen({ isVisible = true }: { isVisible?: boolean }) {
           .catch(() => {});
       }
 
-      getHappyHits(dynamicLanguages, 16)
+      const p5 = getHappyHits(dynamicLanguages, 16)
         .then((tracks) => {
           if (tracks && tracks.length > 0) {
             setHappyTracks(deduplicateSongs(tracks).slice(0, 14));
@@ -448,7 +453,7 @@ export function HomeScreen({ isVisible = true }: { isVisible?: boolean }) {
         })
         .catch(() => {});
 
-      getTodayBiggestHits(dynamicLanguages, 16)
+      const p6 = getTodayBiggestHits(dynamicLanguages, 16)
         .then((tracks) => {
           if (tracks && tracks.length > 0) {
             setTodayBiggestHits(deduplicateSongs(tracks).slice(0, 14));
@@ -456,7 +461,7 @@ export function HomeScreen({ isVisible = true }: { isVisible?: boolean }) {
         })
         .catch(() => {});
 
-      getPopularAlbums(dynamicLanguages, 12)
+      const p7 = getPopularAlbums(dynamicLanguages, 12)
         .then((albs) => {
           if (albs && albs.length > 0) {
             setPopularAlbumsList(albs.slice(0, 12));
@@ -464,7 +469,7 @@ export function HomeScreen({ isVisible = true }: { isVisible?: boolean }) {
         })
         .catch(() => {});
 
-      getPartyHits(dynamicLanguages, 16)
+      const p8 = getPartyHits(dynamicLanguages, 16)
         .then((tracks) => {
           if (tracks && tracks.length > 0) {
             setPartyTracks(deduplicateSongs(tracks).slice(0, 14));
@@ -472,15 +477,19 @@ export function HomeScreen({ isVisible = true }: { isVisible?: boolean }) {
         })
         .catch(() => {});
 
-      getWorkoutHits(dynamicLanguages, 16)
+      const p9 = getWorkoutHits(dynamicLanguages, 16)
         .then((tracks) => {
           if (tracks && tracks.length > 0) {
             setWorkoutTracks(deduplicateSongs(tracks).slice(0, 14));
           }
         })
         .catch(() => {});
+
+      await Promise.allSettled([p1, p2, p3, p4, p5, p6, p7, p8, p9]);
     } catch (e) {
       console.warn('[HomeScreen] Pipeline network fetch error:', e);
+    } finally {
+      setIsInitialLoading(false);
     }
   }, [dynamicLanguages.join(','), appState.favorites.length, appState.recentlyPlayed.length, topArtistName]);
 
@@ -585,11 +594,16 @@ export function HomeScreen({ isVisible = true }: { isVisible?: boolean }) {
         </div>
       </header>
 
-      {/* ═════════════════════════════════════════════════════════════════════
-          🌟 NOW-PLAYING / CONTINUE LISTENING (Top Card)
-      ═════════════════════════════════════════════════════════════════════ */}
-      {continueListeningSong && (
-        <section style={{ padding: '0 20px 4px' }}>
+      {/* ── Content Area: Shimmer Loading Animation vs Shelves ── */}
+      {isInitialLoading ? (
+        <HomeShimmerSkeleton />
+      ) : (
+        <div style={{ animation: 'fadeIn 0.28s ease-out' }}>
+          {/* ═════════════════════════════════════════════════════════════════════
+              🌟 NOW-PLAYING / CONTINUE LISTENING (Top Card)
+          ═════════════════════════════════════════════════════════════════════ */}
+          {continueListeningSong && (
+            <section style={{ padding: '0 20px 4px' }}>
           {/* Main Now-Playing Hero Card */}
           <div
             onClick={() => {
@@ -1750,6 +1764,8 @@ export function HomeScreen({ isVisible = true }: { isVisible?: boolean }) {
             ))}
           </div>
         </section>
+      )}
+        </div>
       )}
 
       {/* ── Context Menu Bottom Sheet ── */}
