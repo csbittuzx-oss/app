@@ -1,5 +1,5 @@
 // ══════════════════════════════════════════════════════════════════════════════
-//  Soundwave Headless YouTube Audio Engine
+//  Soundwave Headless YouTube Audio Engine (Session Aware)
 //  Ultra-fast, high-definition background YouTube audio playback engine
 // ══════════════════════════════════════════════════════════════════════════════
 
@@ -11,13 +11,13 @@ declare global {
 }
 
 export type YouTubeEngineEvent =
-  | { type: 'play' }
-  | { type: 'playing' }
-  | { type: 'pause' }
-  | { type: 'loading'; isLoading: boolean }
-  | { type: 'timeupdate'; currentTime: number; duration: number; progress: number }
-  | { type: 'ended' }
-  | { type: 'error'; error: string | null };
+  | { type: 'play'; sessionId: number }
+  | { type: 'playing'; sessionId: number }
+  | { type: 'pause'; sessionId: number }
+  | { type: 'loading'; isLoading: boolean; sessionId: number }
+  | { type: 'timeupdate'; currentTime: number; duration: number; progress: number; sessionId: number }
+  | { type: 'ended'; sessionId: number }
+  | { type: 'error'; error: string | null; sessionId: number };
 
 export type YouTubeEngineCallback = (event: YouTubeEngineEvent) => void;
 
@@ -25,10 +25,12 @@ class YouTubeAudioEngine {
   private player: any = null;
   private isApiReady = false;
   private isPlayerReady = false;
+  private activeSessionId = 0;
   private currentVideoId: string | null = null;
   private pendingVideoId: string | null = null;
   private pendingStartTime = 0;
   private pendingPlay = false;
+  private pendingSessionId = 0;
   private volume = 1;
   private timeUpdateTimer: ReturnType<typeof setInterval> | null = null;
   private callbacks: Set<YouTubeEngineCallback> = new Set();
@@ -44,10 +46,14 @@ class YouTubeAudioEngine {
     return this.currentVideoId;
   }
 
+  getActiveSessionId(): number {
+    return this.activeSessionId;
+  }
+
   /**
    * Loads the official YouTube Iframe Player API script.
    */
-  private initIframeApi() {
+  public initIframeApi() {
     if (typeof window === 'undefined') return;
 
     if (window.YT && window.YT.Player) {
@@ -133,12 +139,13 @@ class YouTubeAudioEngine {
           onReady: () => {
             this.isPlayerReady = true;
             this.player.setVolume(Math.round(this.volume * 100));
-            if (this.pendingVideoId && this.pendingPlay) {
+            if (this.pendingPlay && this.pendingSessionId === this.activeSessionId && this.pendingVideoId) {
               const vid = this.pendingVideoId;
               const start = this.pendingStartTime;
+              const sid = this.pendingSessionId;
               this.pendingVideoId = null;
               this.pendingPlay = false;
-              this.loadAndPlay(vid, start);
+              this.loadAndPlay(vid, sid, start);
             } else {
               this.pendingVideoId = null;
               this.pendingPlay = false;
@@ -149,8 +156,10 @@ class YouTubeAudioEngine {
           },
           onError: (event: any) => {
             console.warn('[YouTubeAudioEngine] Player error event:', event.data);
-            this.emit({ type: 'error', error: `YouTube audio stream error (${event.data})` });
-            this.emit({ type: 'loading', isLoading: false });
+            if (this.activeSessionId !== 0) {
+              this.emit({ type: 'error', error: `YouTube audio stream error (${event.data})`, sessionId: this.activeSessionId });
+              this.emit({ type: 'loading', isLoading: false, sessionId: this.activeSessionId });
+            }
           },
         },
       });
@@ -160,19 +169,33 @@ class YouTubeAudioEngine {
   }
 
   private handleStateChange(state: number) {
+    // If active session is 0 or stopped, force hard stop and discard
+    if (this.activeSessionId === 0) {
+      if (this.player && typeof this.player.pauseVideo === 'function') {
+        try {
+          this.player.mute?.();
+          this.player.pauseVideo();
+          this.player.stopVideo?.();
+        } catch {}
+      }
+      return;
+    }
+
+    const sid = this.activeSessionId;
+
     // -1: unstarted, 0: ended, 1: playing, 2: paused, 3: buffering, 5: video cued
     if (state === 1) { // PLAYING
       this.isEndedEmitted = false;
-      this.emit({ type: 'loading', isLoading: false });
-      this.emit({ type: 'play' });
-      this.emit({ type: 'playing' });
-      this.startTimeUpdate();
+      this.emit({ type: 'loading', isLoading: false, sessionId: sid });
+      this.emit({ type: 'play', sessionId: sid });
+      this.emit({ type: 'playing', sessionId: sid });
+      this.startTimeUpdate(sid);
     } else if (state === 2) { // PAUSED
-      this.emit({ type: 'loading', isLoading: false });
-      this.emit({ type: 'pause' });
+      this.emit({ type: 'loading', isLoading: false, sessionId: sid });
+      this.emit({ type: 'pause', sessionId: sid });
       this.stopTimeUpdate();
     } else if (state === 3) { // BUFFERING
-      this.emit({ type: 'loading', isLoading: true });
+      this.emit({ type: 'loading', isLoading: true, sessionId: sid });
     } else if (state === 5 || state === -1) { // CUED or UNSTARTED
       if (this.player && typeof this.player.playVideo === 'function') {
         try {
@@ -184,21 +207,24 @@ class YouTubeAudioEngine {
       if (!this.isEndedEmitted) {
         this.isEndedEmitted = true;
         this.stopTimeUpdate();
-        this.emit({ type: 'loading', isLoading: false });
-        this.emit({ type: 'ended' });
+        this.emit({ type: 'loading', isLoading: false, sessionId: sid });
+        this.emit({ type: 'ended', sessionId: sid });
       }
     }
   }
 
-  private startTimeUpdate() {
+  private startTimeUpdate(sessionId: number) {
     this.stopTimeUpdate();
     this.timeUpdateTimer = setInterval(() => {
-      if (!this.player || !this.isPlayerReady) return;
+      if (this.activeSessionId !== sessionId || !this.player || !this.isPlayerReady) {
+        this.stopTimeUpdate();
+        return;
+      }
       try {
         const currentTime = this.player.getCurrentTime() || 0;
         const duration = this.player.getDuration() || 0;
         const progress = duration > 0 ? currentTime / duration : 0;
-        this.emit({ type: 'timeupdate', currentTime, duration, progress });
+        this.emit({ type: 'timeupdate', currentTime, duration, progress, sessionId });
       } catch {}
     }, 250);
   }
@@ -211,24 +237,26 @@ class YouTubeAudioEngine {
   }
 
   /**
-   * Plays a YouTube video as audio.
+   * Plays a YouTube video as audio for a specific session.
    */
-  async loadAndPlay(videoId: string, startSeconds = 0): Promise<void> {
+  async loadAndPlay(videoId: string, sessionId: number, startSeconds = 0): Promise<void> {
     const cleanId = videoId.replace('yt_', '').replace('/watch?v=', '').trim();
+    this.activeSessionId = sessionId;
     this.currentVideoId = cleanId;
     this.isEndedEmitted = false;
 
     if (!this.isPlayerReady || !this.player) {
       this.pendingVideoId = cleanId;
+      this.pendingSessionId = sessionId;
       this.pendingStartTime = startSeconds;
       this.pendingPlay = true;
       this.initIframeApi();
-      this.emit({ type: 'loading', isLoading: true });
+      this.emit({ type: 'loading', isLoading: true, sessionId });
       return;
     }
 
     try {
-      this.emit({ type: 'loading', isLoading: true });
+      this.emit({ type: 'loading', isLoading: true, sessionId });
       if (typeof this.player.unMute === 'function') {
         try { this.player.unMute(); } catch {}
       }
@@ -238,7 +266,6 @@ class YouTubeAudioEngine {
           videoId: cleanId,
           startSeconds: startSeconds || 0,
         });
-        this.player.setVolume(Math.round(this.volume * 100));
         this.player.playVideo();
       } else if (typeof this.player.cueVideoById === 'function') {
         this.player.cueVideoById(cleanId, startSeconds || 0);
@@ -246,7 +273,9 @@ class YouTubeAudioEngine {
       }
     } catch (e) {
       console.warn('[YouTubeAudioEngine] loadAndPlay error:', e);
-      this.emit({ type: 'error', error: 'Failed to start YouTube audio.' });
+      if (this.activeSessionId === sessionId) {
+        this.emit({ type: 'error', error: 'Failed to start YouTube audio.', sessionId });
+      }
     }
   }
 
@@ -273,7 +302,7 @@ class YouTubeAudioEngine {
         this.player.seekTo(seconds, true);
         const duration = this.player.getDuration() || 0;
         const progress = duration > 0 ? seconds / duration : 0;
-        this.emit({ type: 'timeupdate', currentTime: seconds, duration, progress });
+        this.emit({ type: 'timeupdate', currentTime: seconds, duration, progress, sessionId: this.activeSessionId });
       } catch {}
     }
   }
@@ -306,6 +335,7 @@ class YouTubeAudioEngine {
   }
 
   isPlaying(): boolean {
+    if (this.activeSessionId === 0) return false;
     if (this.player && this.isPlayerReady && typeof this.player.getPlayerState === 'function') {
       try {
         return this.player.getPlayerState() === 1; // 1 = PLAYING
@@ -314,11 +344,13 @@ class YouTubeAudioEngine {
     return false;
   }
 
-  stop(): void {
+  stop(newSessionId = 0): void {
+    this.activeSessionId = newSessionId;
     this.stopTimeUpdate();
     this.currentVideoId = null;
     this.pendingVideoId = null;
     this.pendingPlay = false;
+    this.pendingSessionId = 0;
     if (this.player && this.isPlayerReady) {
       try {
         if (typeof this.player.mute === 'function') this.player.mute();

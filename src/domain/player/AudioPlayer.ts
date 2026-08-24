@@ -59,7 +59,8 @@ export type AudioPlayerEvent =
 class AudioPlayer {
   private audio: HTMLAudioElement;
   private crossfadeAudio: HTMLAudioElement;
-  private activeEngine: 'html5' | 'youtube' = 'html5';
+  private activeEngine: 'html5' | 'youtube' | 'none' = 'none';
+  private playbackSessionId = 0;
   private _queue: Song[] = [];
   private _originalQueue: Song[] = [];
   private _queueIndex = 0;
@@ -95,8 +96,6 @@ class AudioPlayer {
   private currentStreamSongId: string | null = null;
   private stallWatcherCleanup: (() => void) | null = null;
   private nextSongPreBuffered: string | null = null;
-  // Generation counter: incremented on every play() call to cancel stale async requests
-  private _playGeneration = 0;
 
   // Continue Listening & Resume state (Restored from previous session exclusively for resume)
   private savedResumeTrackId: string | null = null;
@@ -433,7 +432,9 @@ class AudioPlayer {
 
     // ── Bind Headless YouTube Audio Engine Events ──
     youtubeAudioEngine.subscribe((event) => {
-      if (this.activeEngine !== 'youtube') return;
+      if (this.activeEngine !== 'youtube' || event.sessionId !== this.playbackSessionId) {
+        return;
+      }
       if (event.type === 'play') {
         this.emit({ type: 'loading', isLoading: false });
         this.emit({ type: 'play' });
@@ -845,24 +846,31 @@ class AudioPlayer {
       this.replenishAutomixQueue(targetSong, isSingleSongSelect);
     }
 
-    // ── Generation counter – every play() call gets a unique ID.
-    //    Any async step checks this before touching the audio element.
-    //    If a newer play() arrived while we were awaiting, we bail out.
-    this._playGeneration = (this._playGeneration + 1) & 0x7fffffff;
-    const myGen = this._playGeneration;
+    // ── Centralized Playback Session ID ──
+    // Every play() call creates a unique, monotonically increasing session ID.
+    // Any async resolution, callback, or engine ready event from a previous session is immediately discarded.
+    this.playbackSessionId = (this.playbackSessionId + 1) & 0x7fffffff;
+    const currentSessionId = this.playbackSessionId;
     this.isUserInteracted = true;
 
+    // ── 1. Immediately stop & release all currently active audio engines ──
+    this.cancelCrossfade();
+    this.audio.pause();
+    this.audio.removeAttribute('src');
+    this.audio.load();
+    if (this.crossfadeAudio) {
+      this.crossfadeAudio.pause();
+      this.crossfadeAudio.removeAttribute('src');
+      this.crossfadeAudio.load();
+    }
+    youtubeAudioEngine.stop(currentSessionId);
+    this.activeEngine = 'none';
+
     // ── Cancel all in-flight adaptive stream downloads immediately ──
-    adaptiveStreaming.cancelAllExcept('');   // abort every pending download
+    adaptiveStreaming.cancelAllExcept('');
     this.currentStreamSongId = targetSong.id;
     this.nextSongPreBuffered = null;
     this.crossfadeSongId = null;
-
-    // ── Immediately cancel crossfade and stop both playback engines ──
-    this.cancelCrossfade();
-    this.audio.pause();
-    this.audio.src = '';
-    youtubeAudioEngine.stop();
 
     // ── Correct Playback State Rules ──
     if (seekToSeconds !== undefined) {
@@ -892,12 +900,12 @@ class AudioPlayer {
         offlineUrl = targetSong.previewUrl;
       }
 
-      if (myGen !== this._playGeneration) return;   // newer song selected, bail
+      if (currentSessionId !== this.playbackSessionId) return;
 
       if (offlineUrl) {
         targetSong.previewUrl = offlineUrl;
         targetSong.isDownloaded = true;
-        youtubeAudioEngine.stop();
+        youtubeAudioEngine.stop(currentSessionId);
         this.activeEngine = 'html5';
       } else {
         this.emit({ type: 'loading', isLoading: false });
@@ -909,15 +917,6 @@ class AudioPlayer {
     // ── 0. Strict YouTube Track Direct Playback ──
     const isYouTubeTrack = targetSong.provider === 'youtube' || targetSong.id.startsWith('yt_');
     if (isYouTubeTrack) {
-      this.cancelCrossfade();
-      this.audio.pause();
-      this.audio.removeAttribute('src');
-      this.audio.load();
-      if (this.crossfadeAudio) {
-        this.crossfadeAudio.pause();
-        this.crossfadeAudio.removeAttribute('src');
-        this.crossfadeAudio.load();
-      }
       this.activeEngine = 'youtube';
       targetSong.provider = 'youtube';
 
@@ -926,7 +925,7 @@ class AudioPlayer {
         try {
           const { resolveYouTubeVideoId, searchYouTubeMusic } = await import('../../data/api/youtubeMusicApi');
           const ytMatch = await resolveYouTubeVideoId(targetSong.title, targetSong.artist, targetSong.duration);
-          if (myGen !== this._playGeneration) return;
+          if (currentSessionId !== this.playbackSessionId) return;
           if (ytMatch?.videoId) {
             cleanVideoId = ytMatch.videoId;
             targetSong.id = `yt_${cleanVideoId}`;
@@ -938,7 +937,7 @@ class AudioPlayer {
             this.emit({ type: 'songchange', song: { ...targetSong } });
           } else {
             const ytSearch = await searchYouTubeMusic(`${targetSong.title} ${targetSong.artist}`, 5);
-            if (myGen !== this._playGeneration) return;
+            if (currentSessionId !== this.playbackSessionId) return;
             if (ytSearch.songs && ytSearch.songs.length > 0) {
               const firstYt = ytSearch.songs[0];
               const candId = firstYt.id.replace('yt_', '').trim();
@@ -957,11 +956,11 @@ class AudioPlayer {
         } catch {}
       }
 
-      if (myGen !== this._playGeneration) return;
+      if (currentSessionId !== this.playbackSessionId) return;
 
       if (cleanVideoId.length === 11 && /^[a-zA-Z0-9_-]{11}$/.test(cleanVideoId)) {
         this.saveCurrentSession();
-        await youtubeAudioEngine.loadAndPlay(cleanVideoId, this.pendingSeekPosition);
+        await youtubeAudioEngine.loadAndPlay(cleanVideoId, currentSessionId, this.pendingSeekPosition);
         this.pendingSeekPosition = 0;
         return;
       } else {
@@ -972,7 +971,7 @@ class AudioPlayer {
     }
 
     // ── 1. Strict JioSaavn / HTML5 Audio Track Playback ──
-    youtubeAudioEngine.stop();
+    youtubeAudioEngine.stop(currentSessionId);
     this.activeEngine = 'html5';
 
     // Full-track URL resolution (Spotify / iTunes / Previews / Restored Session → JioSaavn)
@@ -986,7 +985,7 @@ class AudioPlayer {
       if (targetSong.id.startsWith('saavn_')) {
         try {
           const directSaavnUrl = await fetchSaavnSongStreamById(targetSong.id, this._audioQuality);
-          if (myGen !== this._playGeneration) return;
+          if (currentSessionId !== this.playbackSessionId) return;
           if (directSaavnUrl && !isPreviewAudioUrl(directSaavnUrl)) {
             targetSong.previewUrl = directSaavnUrl;
             targetSong.provider = 'saavn';
@@ -1006,7 +1005,7 @@ class AudioPlayer {
             targetSong.duration,
             isSpotifyImport
           );
-          if (myGen !== this._playGeneration) return;
+          if (currentSessionId !== this.playbackSessionId) return;
           if (fullTrack?.streamUrl && !isPreviewAudioUrl(fullTrack.streamUrl)) {
             targetSong.previewUrl = fullTrack.streamUrl;
             if (fullTrack.duration > 0) targetSong.duration = fullTrack.duration;
@@ -1025,25 +1024,27 @@ class AudioPlayer {
 
     // 3. If stream is STILL unavailable on JioSaavn, trigger Instant YouTube Fallback
     if ((!targetSong.previewUrl || isPreviewAudioUrl(targetSong.previewUrl)) && navigator.onLine) {
-      const handled = await this.playViaYouTubeFallback(targetSong, this.pendingSeekPosition);
+      const handled = await this.playViaYouTubeFallback(targetSong, currentSessionId, this.pendingSeekPosition);
       if (handled) return;
     }
 
-    if (myGen !== this._playGeneration) return;
+    if (currentSessionId !== this.playbackSessionId) return;
 
     if (!targetSong.previewUrl || isPreviewAudioUrl(targetSong.previewUrl)) {
       this.emit({ type: 'loading', isLoading: false });
       this.emit({ type: 'error', error: `Audio source unavailable for "${targetSong.title}".` });
       if (this._queue.length > 1 && this._queueIndex < this._queue.length - 1) {
-        setTimeout(() => { if (myGen === this._playGeneration && !this.isPlaying) this.next(); }, 1200);
+        setTimeout(() => { if (currentSessionId === this.playbackSessionId && !this.isPlaying) this.next(); }, 1200);
       }
       return;
     }
 
     // ── Switch to HTML5 Audio engine ──
-    youtubeAudioEngine.stop();
+    youtubeAudioEngine.stop(currentSessionId);
     this.activeEngine = 'html5';
     const resolvedUrl = formatMediaUrlWithQuality(targetSong.previewUrl, this._audioQuality);
+
+    if (currentSessionId !== this.playbackSessionId) return;
 
     // ── Set audio source and start playback ──
     targetSong.previewUrl = resolvedUrl;
@@ -1056,7 +1057,7 @@ class AudioPlayer {
     if (targetSeek > 0) {
       const applySeek = () => {
         try {
-          if (targetSeek > 0 && isFinite(targetSeek)) {
+          if (currentSessionId === this.playbackSessionId && targetSeek > 0 && isFinite(targetSeek)) {
             this.audio.currentTime = targetSeek;
           }
         } catch {}
@@ -1085,7 +1086,7 @@ class AudioPlayer {
       this.emit({ type: 'loading', isLoading: false });
     }
 
-    if (myGen !== this._playGeneration) return;
+    if (currentSessionId !== this.playbackSessionId) return;
 
     // ── Schedule pre-buffer of the next song in queue ──
     this.scheduleNextSongPreBuffer();
@@ -1095,18 +1096,18 @@ class AudioPlayer {
    * Ultra-fast YouTube Fallback Resolver.
    * Plays unavailable JioSaavn songs seamlessly via the Headless YouTube Audio Engine.
    */
-  private async playViaYouTubeFallback(targetSong: Song, seekSeconds = 0): Promise<boolean> {
+  private async playViaYouTubeFallback(targetSong: Song, sessionId: number, seekSeconds = 0): Promise<boolean> {
     if (!this.isUserInteracted) return false;
-    const myGen = this._playGeneration;
     this.emit({ type: 'loading', isLoading: true });
     try {
       const { resolveYouTubeVideoId } = await import('../../data/api/youtubeMusicApi');
       const ytMatch = await resolveYouTubeVideoId(targetSong.title, targetSong.artist, targetSong.duration);
-      if (myGen !== this._playGeneration) return false;
+      if (sessionId !== this.playbackSessionId) return false;
       if (ytMatch && ytMatch.videoId) {
         this.cancelCrossfade();
         this.audio.pause();
-        this.audio.src = '';
+        this.audio.removeAttribute('src');
+        this.audio.load();
         this.activeEngine = 'youtube';
         targetSong.provider = 'youtube';
         targetSong.id = `yt_${ytMatch.videoId}`;
@@ -1118,18 +1119,18 @@ class AudioPlayer {
         this.emit({ type: 'songchange', song: { ...targetSong } });
         this.updateMediaSession(targetSong);
         this.saveCurrentSession();
-        await youtubeAudioEngine.loadAndPlay(ytMatch.videoId, seekSeconds);
+        await youtubeAudioEngine.loadAndPlay(ytMatch.videoId, sessionId, seekSeconds);
         return true;
       }
     } catch (e) {
       console.warn('[AudioPlayer] YouTube fallback resolution error:', e);
     }
 
-    if (myGen !== this._playGeneration) return false;
+    if (sessionId !== this.playbackSessionId) return false;
     this.emit({ type: 'loading', isLoading: false });
     this.emit({ type: 'error', error: `Audio source unavailable for "${targetSong.title}".` });
     if (this._queue.length > 1 && this._queueIndex < this._queue.length - 1) {
-      setTimeout(() => { if (myGen === this._playGeneration && !this.isPlaying) this.next(); }, 1200);
+      setTimeout(() => { if (sessionId === this.playbackSessionId && !this.isPlaying) this.next(); }, 1200);
     }
     return false;
   }
@@ -1441,11 +1442,18 @@ class AudioPlayer {
       this.audio.pause();
       this.audio.removeAttribute('src');
       this.activeEngine = 'youtube';
+      if (this.savedResumeTrackId === current.id || !youtubeAudioEngine.getCurrentVideoId()) {
+        const resumePos = this.savedResumePosition || 0;
+        this.savedResumePosition = 0;
+        this.savedResumeTrackId = null;
+        this.play(current, this._queue, this._queueIndex, resumePos);
+        return;
+      }
       youtubeAudioEngine.resume();
       return;
     }
 
-    youtubeAudioEngine.stop();
+    youtubeAudioEngine.stop(this.playbackSessionId);
     this.activeEngine = 'html5';
 
     if (this.audio.paused) {
