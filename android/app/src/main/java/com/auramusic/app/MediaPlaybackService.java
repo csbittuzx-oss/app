@@ -168,7 +168,11 @@ public class MediaPlaybackService extends Service {
                 }
             });
 
-            mediaSession.setActive(true);
+            PlaybackStateCompat.Builder stateBuilder = new PlaybackStateCompat.Builder()
+                .setActions(PlaybackStateCompat.ACTION_PLAY | PlaybackStateCompat.ACTION_PLAY_PAUSE)
+                .setState(PlaybackStateCompat.STATE_PAUSED, 0, 0f);
+            mediaSession.setPlaybackState(stateBuilder.build());
+            mediaSession.setActive(false);
         }
     }
 
@@ -194,8 +198,7 @@ public class MediaPlaybackService extends Service {
                 return START_NOT_STICKY;
             }
         }
-        startForegroundSynchronously();
-        return START_STICKY;
+        return START_NOT_STICKY;
     }
 
     public void updateTrack(
@@ -294,7 +297,7 @@ public class MediaPlaybackService extends Service {
         }
 
         mediaSession.setMetadata(metaBuilder.build());
-        mediaSession.setActive(true);
+        mediaSession.setActive(playing);
 
         int flag = PendingIntent.FLAG_UPDATE_CURRENT;
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {

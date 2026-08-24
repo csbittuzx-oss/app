@@ -104,6 +104,7 @@ class AudioPlayer {
   private pendingSeekPosition = 0;
   private lastSavedPositionTime = 0;
   private isAutoRecovering = false;
+  private isUserInteracted = false;
 
   constructor() {
     this.audio = new Audio();
@@ -166,13 +167,12 @@ class AudioPlayer {
       this.savedResumeTrackId = session.trackId || session.song.id;
       this.savedResumePosition = session.playbackPosition || 0;
       this.pendingSeekPosition = 0;
+      this.isUserInteracted = false;
 
-      // DO NOT set this.audio.src here!
-      // Setting this.audio.src to an expired or cached URL causes the browser to immediately
-      // validate/fetch the URL, throwing a 403 Forbidden / network error before the user interacts,
-      // which produces "Playback failed. Tap to retry."
+      // DO NOT start playback or load audio source on launch
       this.audio.src = '';
       this.audio.pause();
+      youtubeAudioEngine.stop();
     } catch {
       // ignore
     }
@@ -262,14 +262,18 @@ class AudioPlayer {
     // Initialize Android native media notification & background lockscreen controls
     MediaNotificationService.init({
       onPlay: () => {
-        // Prevent spurious auto-play on app launch / initial service binding
-        if (this.currentSong && (this.audio.src || this.activeEngine === 'youtube')) {
+        // Strictly prevent automatic playback on app launch / service connection
+        if (this.isUserInteracted && (this.audio.src || this.activeEngine === 'youtube')) {
           this.resume();
         }
       },
       onPause: () => this.pause(),
-      onNext: () => this.next(),
-      onPrev: () => this.previous(),
+      onNext: () => {
+        if (this.isUserInteracted) this.next();
+      },
+      onPrev: () => {
+        if (this.isUserInteracted) this.previous();
+      },
       onSeekTo: (seconds) => this.seekToTime(seconds),
     });
 
@@ -845,6 +849,7 @@ class AudioPlayer {
     //    If a newer play() arrived while we were awaiting, we bail out.
     this._playGeneration = (this._playGeneration + 1) & 0x7fffffff;
     const myGen = this._playGeneration;
+    this.isUserInteracted = true;
 
     // ── Cancel all in-flight adaptive stream downloads immediately ──
     adaptiveStreaming.cancelAllExcept('');   // abort every pending download
@@ -1320,6 +1325,7 @@ class AudioPlayer {
   }
 
   togglePlay() {
+    this.isUserInteracted = true;
     if (this.activeEngine === 'youtube') {
       if (youtubeAudioEngine.isPlaying()) {
         this.pause();
@@ -1367,6 +1373,7 @@ class AudioPlayer {
   }
 
   resume() {
+    this.isUserInteracted = true;
     studioAudioEngine.resume();
     if (this.activeEngine === 'youtube') {
       youtubeAudioEngine.resume();
@@ -1653,10 +1660,18 @@ class AudioPlayer {
       ],
     });
 
-    navigator.mediaSession.setActionHandler('play', () => this.resume());
+    navigator.mediaSession.setActionHandler('play', () => {
+      if (this.isUserInteracted && (this.audio.src || this.activeEngine === 'youtube')) {
+        this.resume();
+      }
+    });
     navigator.mediaSession.setActionHandler('pause', () => this.pause());
-    navigator.mediaSession.setActionHandler('previoustrack', () => this.previous());
-    navigator.mediaSession.setActionHandler('nexttrack', () => this.next());
+    navigator.mediaSession.setActionHandler('previoustrack', () => {
+      if (this.isUserInteracted) this.previous();
+    });
+    navigator.mediaSession.setActionHandler('nexttrack', () => {
+      if (this.isUserInteracted) this.next();
+    });
     navigator.mediaSession.setActionHandler('seekto', (details) => {
       if (details.seekTime !== undefined && details.seekTime !== null) {
         this.seekToTime(details.seekTime);
