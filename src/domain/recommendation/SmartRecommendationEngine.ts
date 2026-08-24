@@ -850,9 +850,6 @@ class SmartRecommendationEngineService {
       }
 
       if (song.previewUrl && song.previewUrl.startsWith('http')) {
-        const preloadAudio = new Audio();
-        preloadAudio.preload = 'auto';
-        preloadAudio.src = song.previewUrl;
         this.preloadedTrackCache.set(song.id, { song, ts: Date.now() });
       }
     } catch {

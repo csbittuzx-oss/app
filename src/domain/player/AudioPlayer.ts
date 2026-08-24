@@ -830,7 +830,8 @@ class AudioPlayer {
     this.nextSongPreBuffered = null;
     this.crossfadeSongId = null;
 
-    // ── Immediately stop both playback engines ──
+    // ── Immediately cancel crossfade and stop both playback engines ──
+    this.cancelCrossfade();
     this.audio.pause();
     this.audio.src = '';
     youtubeAudioEngine.stop();
@@ -868,6 +869,7 @@ class AudioPlayer {
       if (offlineUrl) {
         targetSong.previewUrl = offlineUrl;
         targetSong.isDownloaded = true;
+        youtubeAudioEngine.stop();
         this.activeEngine = 'html5';
       } else {
         this.emit({ type: 'loading', isLoading: false });
@@ -880,6 +882,9 @@ class AudioPlayer {
     if (targetSong.id.startsWith('yt_') || targetSong.provider === 'youtube') {
       const cleanVideoId = targetSong.id.replace('yt_', '').trim();
       if (cleanVideoId.length === 11 && /^[a-zA-Z0-9_-]{11}$/.test(cleanVideoId)) {
+        this.cancelCrossfade();
+        this.audio.pause();
+        this.audio.src = '';
         this.activeEngine = 'youtube';
         this.saveCurrentSession();
         await youtubeAudioEngine.loadAndPlay(cleanVideoId, this.pendingSeekPosition);
@@ -943,6 +948,7 @@ class AudioPlayer {
     }
 
     // ── Switch to HTML5 Audio engine ──
+    youtubeAudioEngine.stop();
     this.activeEngine = 'html5';
     let resolvedUrl = formatMediaUrlWithQuality(targetSong.previewUrl, this._audioQuality);
 
@@ -1008,6 +1014,9 @@ class AudioPlayer {
       const ytMatch = await resolveYouTubeVideoId(targetSong.title, targetSong.artist, targetSong.duration);
       if (myGen !== this._playGeneration) return false;
       if (ytMatch && ytMatch.videoId) {
+        this.cancelCrossfade();
+        this.audio.pause();
+        this.audio.src = '';
         this.activeEngine = 'youtube';
         targetSong.provider = 'youtube';
         targetSong.id = `yt_${ytMatch.videoId}`;
@@ -1239,18 +1248,20 @@ class AudioPlayer {
       this.crossfadeTimer = null;
     }
 
-    // Stop and completely clean up old audio instance
-    this.audio.pause();
-    this.audio.src = '';
-    this.audio.volume = this._volume;
+    // Capture the state from crossfade audio
+    const nextCurrentTime = this.crossfadeAudio.currentTime || 0;
+    const nextSrc = this.crossfadeAudio.src;
 
-    // Swap audio element instances
-    const oldPrimary = this.audio;
-    this.audio = this.crossfadeAudio;
-    this.crossfadeAudio = oldPrimary;
-    this.crossfadeAudio.volume = 0;
+    // Silence and stop the secondary crossfade audio element
+    this.crossfadeAudio.pause();
     this.crossfadeAudio.src = '';
+    this.crossfadeAudio.volume = 0;
+
+    // Load and continue seamlessly on primary audio element (no duplicate bindEvents)
+    this.audio.src = nextSrc;
+    this.audio.currentTime = nextCurrentTime;
     this.audio.volume = this._volume;
+    this.audio.play().catch(() => {});
 
     this._queueIndex = newIndex;
     this.isCrossfading = false;
@@ -1258,9 +1269,6 @@ class AudioPlayer {
     this.crossfadeTargetSong = null;
     this.crossfadeProgress = 0;
     this.crossfadeSongId = null;
-
-    // Reattach event listeners to new primary audio element
-    this.bindEvents();
 
     this.emit({ type: 'songchange', song: nextSong });
     this.emit({ type: 'play' });
@@ -1426,31 +1434,22 @@ class AudioPlayer {
   // ─── Queue Navigation & Smart AutoPlay ────────────────────────────────────
 
   private handleEnded() {
-    // ── Premature short-preview cutoff detector:
+    // ── Premature short-preview cutoff detector for HTML5:
     // If playback ends in less than 35s on a track that is supposed to be full-length (>45s),
     // automatically re-resolve full stream via YouTube and continue uninterrupted.
     if (
+      this.activeEngine === 'html5' &&
       this.audio.currentTime > 0 &&
       this.audio.currentTime < 35 &&
       this.currentSong &&
       this.currentSong.duration > 45 &&
       navigator.onLine
     ) {
-      console.warn('Playback ended prematurely (<35s). Re-resolving full stream...');
+      console.warn('Playback ended prematurely (<35s). Re-resolving via YouTube fallback...');
       const target = this.currentSong;
-      import('../../data/api/youtubeMusicApi')
-        .then(({ resolveYouTubeFullAudioStream }) => {
-          return resolveYouTubeFullAudioStream(target.title, target.artist, target.duration);
-        })
-        .then((res) => {
-          if (res?.streamUrl && this.currentSong?.id === target.id) {
-            target.previewUrl = res.streamUrl;
-            this.audio.src = res.streamUrl;
-            this.audio.currentTime = 0;
-            this.audio.play().catch(() => {});
-            return;
-          }
-          this.proceedAfterEnded();
+      this.playViaYouTubeFallback(target, 0)
+        .then((handled) => {
+          if (!handled) this.proceedAfterEnded();
         })
         .catch(() => this.proceedAfterEnded());
       return;
@@ -1469,8 +1468,13 @@ class AudioPlayer {
     }
 
     if (this._repeat === 'one') {
-      this.audio.currentTime = 0;
-      this.audio.play().catch(() => {});
+      if (this.activeEngine === 'youtube') {
+        youtubeAudioEngine.seekTo(0);
+        youtubeAudioEngine.resume();
+      } else {
+        this.audio.currentTime = 0;
+        this.audio.play().catch(() => {});
+      }
     } else if (this._repeat === 'all' || this._queueIndex < this._queue.length - 1) {
       this.next();
     } else if (this._autoPlay) {
