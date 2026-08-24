@@ -68,56 +68,31 @@ export function UpdateModal({ updateInfo, isOpen, onClose }: UpdateModalProps) {
           borderTop: isForceUpdate ? '2px solid var(--color-accent)' : 'none',
         }}
       >
-        {/* Top App Logo & Badge */}
+        {/* Top App Logo & Title */}
         <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
           <div style={{ display: 'flex', alignItems: 'center', gap: 14 }}>
-            <div
+            <img
+              src="/favicon.png"
+              alt="Soundwave"
+              width={52}
+              height={52}
               style={{
                 width: 52,
                 height: 52,
-                borderRadius: 'var(--radius-lg, 14px)',
-                background: 'linear-gradient(135deg, var(--color-accent) 0%, #D97706 100%)',
-                display: 'flex',
-                alignItems: 'center',
-                justifyContent: 'center',
-                color: '#fff',
-                fontWeight: 800,
-                fontSize: 22,
-                boxShadow: '0 6px 18px rgba(245, 158, 11, 0.4)',
+                borderRadius: '14px',
+                objectFit: 'cover',
+                display: 'block',
                 flexShrink: 0,
-                overflow: 'hidden',
+                boxShadow: '0 4px 14px rgba(0, 0, 0, 0.25)',
               }}
-            >
-              <img
-                src="/favicon.png"
-                alt="Soundwave"
-                width={36}
-                height={36}
-                style={{ objectFit: 'contain' }}
-                onError={(e) => {
-                  (e.target as HTMLElement).style.display = 'none';
-                }}
-              />
-            </div>
+              onError={(e) => {
+                (e.target as HTMLElement).style.display = 'none';
+              }}
+            />
             <div>
-              <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-                <h3 style={{ margin: 0, fontSize: 'var(--text-lg)', fontWeight: 800, color: 'var(--color-text-primary)' }}>
-                  {isForceUpdate ? 'Update Required' : 'Update Available'}
-                </h3>
-                <span
-                  style={{
-                    fontSize: '10px',
-                    fontWeight: 800,
-                    padding: '2px 8px',
-                    borderRadius: 'var(--radius-full)',
-                    background: isForceUpdate ? 'rgba(239, 68, 68, 0.15)' : 'rgba(245, 158, 11, 0.15)',
-                    color: isForceUpdate ? 'var(--color-error)' : 'var(--color-accent)',
-                    letterSpacing: '0.02em',
-                  }}
-                >
-                  {isForceUpdate ? 'Mandatory' : 'New Release'}
-                </span>
-              </div>
+              <h3 style={{ margin: 0, fontSize: 'var(--text-lg)', fontWeight: 800, color: 'var(--color-text-primary)' }}>
+                {isForceUpdate ? 'Update Required' : 'Update Available'}
+              </h3>
               <p style={{ margin: '3px 0 0', fontSize: 'var(--text-xs)', color: 'var(--color-text-secondary)', fontWeight: 600 }}>
                 Installed: v{CURRENT_APP_VERSION} ➔ Latest: <strong style={{ color: 'var(--color-accent)' }}>v{updateInfo.version}</strong>
               </p>

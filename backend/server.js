@@ -637,12 +637,9 @@ app.get(['/', '/admin'], async (req, res) => {
           <div class="preview-box">
             <div class="phone-bar"></div>
             <div class="preview-header">
-              <div class="preview-logo">SW</div>
+              <div class="preview-logo" style="border-radius: 12px; overflow: hidden; background: #000; box-shadow: 0 4px 14px rgba(0,0,0,0.3);"><img src="/favicon.png" alt="SW" width="44" height="44" style="object-fit: cover; display: block;" onerror="this.style.display='none'"></div>
               <div>
-                <div style="display: flex; align-items: center; gap: 6px;">
-                  <span class="preview-title" id="p_headerTitle">Update Available</span>
-                  <span class="preview-badge" id="p_badge">New Release</span>
-                </div>
+                <span class="preview-title" id="p_headerTitle" style="font-size: 16px; font-weight: 800;">Update Available</span>
                 <p style="font-size: 11px; color: var(--text-muted); margin-top: 2px;">
                   Latest: <strong style="color: var(--accent);" id="p_versionBadge">v${currentRelease.version || '1.3.0'}</strong>
                 </p>
