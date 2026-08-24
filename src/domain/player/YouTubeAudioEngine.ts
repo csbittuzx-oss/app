@@ -186,6 +186,10 @@ class YouTubeAudioEngine {
     // -1: unstarted, 0: ended, 1: playing, 2: paused, 3: buffering, 5: video cued
     if (state === 1) { // PLAYING
       this.isEndedEmitted = false;
+      try {
+        this.player.unMute?.();
+        this.player.setVolume(Math.round(this.volume * 100));
+      } catch {}
       this.emit({ type: 'loading', isLoading: false, sessionId: sid });
       this.emit({ type: 'play', sessionId: sid });
       this.emit({ type: 'playing', sessionId: sid });
@@ -263,10 +267,6 @@ class YouTubeAudioEngine {
 
     try {
       this.emit({ type: 'loading', isLoading: true, sessionId });
-      if (typeof this.player.unMute === 'function') {
-        try { this.player.unMute(); } catch {}
-      }
-      this.player.setVolume(Math.round(this.volume * 100));
       if (typeof this.player.loadVideoById === 'function') {
         this.player.loadVideoById({
           videoId: cleanId,
@@ -278,14 +278,26 @@ class YouTubeAudioEngine {
         this.player.playVideo();
       }
 
+      // Pulse play & un-mute
       setTimeout(() => {
         if (this.activeSessionId === sessionId && this.player && typeof this.player.playVideo === 'function') {
           try {
             this.player.unMute?.();
+            this.player.setVolume(Math.round(this.volume * 100));
             this.player.playVideo();
           } catch {}
         }
-      }, 300);
+      }, 350);
+
+      // Loading dismissal watchdog
+      setTimeout(() => {
+        if (this.activeSessionId === sessionId) {
+          this.emit({ type: 'loading', isLoading: false, sessionId });
+          this.emit({ type: 'play', sessionId });
+          this.emit({ type: 'playing', sessionId });
+          this.startTimeUpdate(sessionId);
+        }
+      }, 2200);
     } catch (e) {
       console.warn('[YouTubeAudioEngine] loadAndPlay error:', e);
       if (this.activeSessionId === sessionId) {

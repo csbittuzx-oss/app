@@ -1042,6 +1042,24 @@ class AudioPlayer {
   private async playViaYouTubeFallback(targetSong: Song, sessionId: number, seekSeconds = 0): Promise<boolean> {
     if (!this.isUserInteracted) return false;
     this.emit({ type: 'loading', isLoading: true });
+
+    // 1. Direct Video ID if already a YouTube song
+    const directVid = targetSong.id.replace('yt_', '').replace('/watch?v=', '').trim();
+    if (directVid.length === 11 && /^[a-zA-Z0-9_-]{11}$/.test(directVid)) {
+      this.cancelCrossfade();
+      this.audio.pause();
+      this.audio.removeAttribute('src');
+      this.audio.load();
+      this.activeEngine = 'youtube';
+      targetSong.provider = 'youtube';
+      this.emit({ type: 'songchange', song: { ...targetSong } });
+      this.updateMediaSession(targetSong);
+      this.saveCurrentSession();
+      await youtubeAudioEngine.loadAndPlay(directVid, sessionId, seekSeconds);
+      return true;
+    }
+
+    // 2. Resolve YouTube video ID by Title & Artist
     try {
       const { resolveYouTubeVideoId } = await import('../../data/api/youtubeMusicApi');
       const ytMatch = await resolveYouTubeVideoId(targetSong.title, targetSong.artist, targetSong.duration);
