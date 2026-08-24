@@ -22,6 +22,7 @@ import { userProfileTracker } from '../recommendation/UserProfileTracker';
 import { aiTasteProfileEngine } from '../ai/AITasteProfileEngine';
 import { adaptiveStreaming } from '../../services/AdaptiveStreamingService';
 import { studioAudioEngine } from './StudioAudioEngine';
+import { youtubeAudioEngine } from './YouTubeAudioEngine';
 import { YouTubeQueueService } from '../../services/YouTubeQueue';
 import { BeatAnalyzer } from './BeatAnalyzer';
 
@@ -58,6 +59,7 @@ export type AudioPlayerEvent =
 class AudioPlayer {
   private audio: HTMLAudioElement;
   private crossfadeAudio: HTMLAudioElement;
+  private activeEngine: 'html5' | 'youtube' = 'html5';
   private _queue: Song[] = [];
   private _originalQueue: Song[] = [];
   private _queueIndex = 0;
@@ -365,10 +367,16 @@ class AudioPlayer {
       }
     });
 
-    this.audio.addEventListener('loadstart', () => this.emit({ type: 'loading', isLoading: true }));
+    this.audio.addEventListener('loadstart', () => {
+      if (this.activeEngine === 'html5') {
+        this.emit({ type: 'loading', isLoading: true });
+      }
+    });
     this.audio.addEventListener('canplay', () => {
-      this.emit({ type: 'loading', isLoading: false });
-      this.emit({ type: 'error', error: null });
+      if (this.activeEngine === 'html5') {
+        this.emit({ type: 'loading', isLoading: false });
+        this.emit({ type: 'error', error: null });
+      }
     });
     this.audio.addEventListener('error', () => {
       const err = this.audio.error;
@@ -377,17 +385,12 @@ class AudioPlayer {
         return;
       }
 
-      // If user was ACTIVELY playing when the stream error occurred, attempt in-flight auto-recovery
-      // NEVER start playing automatically if the audio was paused or app was just opened
-      const wasActivelyPlaying = !this.audio.paused;
-      if (wasActivelyPlaying && navigator.onLine && this.currentSong && !this.isAutoRecovering) {
+      // Automatic Instant YouTube Fallback if JioSaavn stream fails
+      if (navigator.onLine && this.currentSong && !this.isAutoRecovering) {
         this.isAutoRecovering = true;
         const songToRecover = this.currentSong;
         const resumePos = this.audio.currentTime || this.savedResumePosition || 0;
-        if (!songToRecover.previewUrl?.startsWith('blob:') && !songToRecover.isDownloaded) {
-          songToRecover.previewUrl = null; // force fresh stream resolution
-        }
-        this.play(songToRecover, this._queue, this._queueIndex, resumePos)
+        this.playViaYouTubeFallback(songToRecover, resumePos)
           .catch(() => {
             this.emit({ type: 'loading', isLoading: false });
             this.emit({ type: 'error', error: 'Playback failed. Tap to retry.' });
@@ -399,8 +402,53 @@ class AudioPlayer {
       }
 
       this.emit({ type: 'loading', isLoading: false });
-      if (wasActivelyPlaying) {
-        this.emit({ type: 'error', error: 'Playback failed. Tap to retry.' });
+      this.emit({ type: 'error', error: 'Playback failed. Tap to retry.' });
+    });
+
+    // ── Bind Headless YouTube Audio Engine Events ──
+    youtubeAudioEngine.subscribe((event) => {
+      if (this.activeEngine !== 'youtube') return;
+      if (event.type === 'play') {
+        this.emit({ type: 'play' });
+        this.emit({ type: 'error', error: null });
+        if (this.currentSong) {
+          MediaNotificationService.update(
+            this.currentSong,
+            true,
+            youtubeAudioEngine.getDuration() || this.currentSong.duration,
+            youtubeAudioEngine.getCurrentTime()
+          );
+        }
+      } else if (event.type === 'playing') {
+        this.emit({ type: 'loading', isLoading: false });
+        this.emit({ type: 'error', error: null });
+      } else if (event.type === 'pause') {
+        this.emit({ type: 'pause' });
+        this.saveCurrentSession();
+        if (this.currentSong) {
+          MediaNotificationService.update(
+            this.currentSong,
+            false,
+            youtubeAudioEngine.getDuration() || this.currentSong.duration,
+            youtubeAudioEngine.getCurrentTime()
+          );
+        }
+      } else if (event.type === 'ended') {
+        this.saveCurrentSession();
+        this.handleEnded();
+      } else if (event.type === 'timeupdate') {
+        const duration = event.duration || this.currentSong?.duration || 0;
+        const currentTime = event.currentTime;
+        const progress = duration > 0 ? currentTime / duration : 0;
+        this.emit({ type: 'timeupdate', currentTime, duration, progress });
+        this.updateMediaSessionPosition();
+      } else if (event.type === 'loading') {
+        this.emit({ type: 'loading', isLoading: event.isLoading });
+      } else if (event.type === 'error') {
+        this.emit({ type: 'loading', isLoading: false });
+        if (event.error) {
+          this.emit({ type: 'error', error: event.error });
+        }
       }
     });
 
@@ -518,7 +566,24 @@ class AudioPlayer {
   }
 
   get isPlaying(): boolean {
+    if (this.activeEngine === 'youtube') {
+      return youtubeAudioEngine.isPlaying();
+    }
     return !this.audio.paused;
+  }
+
+  get duration(): number {
+    if (this.activeEngine === 'youtube') {
+      return youtubeAudioEngine.getDuration() || this.currentSong?.duration || 0;
+    }
+    return this.audio.duration || this.currentSong?.duration || 0;
+  }
+
+  get currentTime(): number {
+    if (this.activeEngine === 'youtube') {
+      return youtubeAudioEngine.getCurrentTime() || 0;
+    }
+    return this.audio.currentTime || 0;
   }
 
   get volume(): number {
@@ -528,6 +593,7 @@ class AudioPlayer {
   set volume(v: number) {
     this._volume = Math.max(0, Math.min(1, v));
     this.audio.volume = this._volume;
+    youtubeAudioEngine.setVolume(this._volume);
   }
 
   get shuffle(): boolean {
@@ -764,10 +830,10 @@ class AudioPlayer {
     this.nextSongPreBuffered = null;
     this.crossfadeSongId = null;
 
-    // ── Immediately stop the old song and clear the audio element ──
-    //    This ensures the previous song stops playing RIGHT NOW, before any async work.
+    // ── Immediately stop both playback engines ──
     this.audio.pause();
     this.audio.src = '';
+    youtubeAudioEngine.stop();
 
     // ── Correct Playback State Rules ──
     if (seekToSeconds !== undefined) {
@@ -802,9 +868,22 @@ class AudioPlayer {
       if (offlineUrl) {
         targetSong.previewUrl = offlineUrl;
         targetSong.isDownloaded = true;
+        this.activeEngine = 'html5';
       } else {
         this.emit({ type: 'loading', isLoading: false });
         showToast("You're offline. This song isn't available for offline playback.", 'danger', 3200);
+        return;
+      }
+    }
+
+    // ── 0. Native YouTube Track Direct Playback ──
+    if (targetSong.id.startsWith('yt_') || targetSong.provider === 'youtube') {
+      const cleanVideoId = targetSong.id.replace('yt_', '').trim();
+      if (cleanVideoId.length === 11 && /^[a-zA-Z0-9_-]{11}$/.test(cleanVideoId)) {
+        this.activeEngine = 'youtube';
+        this.saveCurrentSession();
+        await youtubeAudioEngine.loadAndPlay(cleanVideoId, this.pendingSeekPosition);
+        this.pendingSeekPosition = 0;
         return;
       }
     }
@@ -813,26 +892,6 @@ class AudioPlayer {
     const isRestoredTrack = this.savedResumeTrackId === targetSong.id;
     if (isRestoredTrack && targetSong.previewUrl && !targetSong.previewUrl.startsWith('blob:') && !targetSong.isDownloaded) {
       targetSong.previewUrl = null;
-    }
-
-    // 0. Direct YouTube Video Stream: If song is a native YouTube track with valid 11-char ID
-    if (targetSong.id.startsWith('yt_') && (!targetSong.previewUrl || isPreviewAudioUrl(targetSong.previewUrl)) && navigator.onLine) {
-      const cleanVideoId = targetSong.id.replace('yt_', '').trim();
-      if (cleanVideoId.length === 11 && /^[a-zA-Z0-9_-]{11}$/.test(cleanVideoId)) {
-        try {
-          const { fetchAudioStreamFromYouTubeId } = await import('../../data/api/youtubeMusicApi');
-          const directStream = await fetchAudioStreamFromYouTubeId(cleanVideoId);
-          if (myGen !== this._playGeneration) return;
-          if (directStream?.streamUrl && !isPreviewAudioUrl(directStream.streamUrl)) {
-            targetSong.previewUrl = directStream.streamUrl;
-            if (directStream.duration) targetSong.duration = directStream.duration;
-            targetSong.provider = 'youtube';
-            this.emit({ type: 'songchange', song: { ...targetSong } });
-          }
-        } catch (e) {
-          console.warn('Direct YouTube stream fetch error:', e);
-        }
-      }
     }
 
     const isShortPreview = (!targetSong.previewUrl && navigator.onLine)
@@ -850,11 +909,10 @@ class AudioPlayer {
           targetSong.duration,
           isSpotifyImport
         );
-        if (myGen !== this._playGeneration) return;   // newer song selected, bail
+        if (myGen !== this._playGeneration) return;
         if (fullTrack?.streamUrl && !isPreviewAudioUrl(fullTrack.streamUrl)) {
           targetSong.previewUrl = fullTrack.streamUrl;
           if (fullTrack.duration > 0) targetSong.duration = fullTrack.duration;
-          // Strictly preserve the selected track's original artwork; only fallback if artwork is completely missing
           if (!targetSong.artwork && fullTrack.artwork) {
             targetSong.artwork = fullTrack.artwork;
             targetSong.artworkLg = fullTrack.artwork;
@@ -867,26 +925,10 @@ class AudioPlayer {
       }
     }
 
-    // ── Additional Full-Stream Guarantee: if previewUrl is STILL missing or a short preview clip
+    // ── If stream is STILL unavailable on JioSaavn, trigger Instant YouTube Fallback ──
     if ((!targetSong.previewUrl || isPreviewAudioUrl(targetSong.previewUrl)) && navigator.onLine) {
-      try {
-        const { resolveYouTubeFullAudioStream } = await import('../../data/api/youtubeMusicApi');
-        const ytStream = await resolveYouTubeFullAudioStream(targetSong.title, targetSong.artist, targetSong.duration);
-        if (myGen !== this._playGeneration) return;
-        if (ytStream?.streamUrl && !isPreviewAudioUrl(ytStream.streamUrl)) {
-          targetSong.previewUrl = ytStream.streamUrl;
-          if (ytStream.duration > 0) targetSong.duration = ytStream.duration;
-          // Strictly preserve the selected track's original artwork; only fallback if artwork is completely missing
-          if (!targetSong.artwork && ytStream.artwork) {
-            targetSong.artwork = ytStream.artwork;
-            targetSong.artworkLg = ytStream.artwork;
-          }
-          targetSong.provider = 'youtube';
-          this.emit({ type: 'songchange', song: { ...targetSong } });
-        }
-      } catch (e) {
-        console.warn('YouTube full stream resolve fallback:', e);
-      }
+      const handled = await this.playViaYouTubeFallback(targetSong, this.pendingSeekPosition);
+      if (handled) return;
     }
 
     if (myGen !== this._playGeneration) return;   // newer song selected, bail
@@ -901,27 +943,23 @@ class AudioPlayer {
       return;
     }
 
-    // ── Resolve stream URL ──
-    // Strategy: check cache first for instant play, then fall back to native streaming.
-    // We do NOT wait for a full download before setting audio.src — native streaming starts immediately.
+    // ── Switch to HTML5 Audio engine ──
+    this.activeEngine = 'html5';
     let resolvedUrl = formatMediaUrlWithQuality(targetSong.previewUrl, this._audioQuality);
 
     if (!targetSong.previewUrl.startsWith('blob:') && navigator.onLine) {
       try {
-        // Check cache synchronously-ish (IndexedDB lookup only, no download)
         const cachedUrl = await adaptiveStreaming.getCachedUrl(targetSong.id, resolvedUrl);
         if (myGen !== this._playGeneration) return;
         if (cachedUrl) {
-          resolvedUrl = cachedUrl;   // instant cache hit – use blob URL
+          resolvedUrl = cachedUrl;
         }
-        // If no cache hit, use the direct stream URL immediately.
-        // The adaptive service will cache it in the background for next time.
       } catch {
-        // cache lookup failed – use direct URL
+        // use direct URL
       }
     }
 
-    if (myGen !== this._playGeneration) return;   // newer song selected, bail
+    if (myGen !== this._playGeneration) return;
 
     // ── Set audio source and start playback ──
     targetSong.previewUrl = resolvedUrl;
@@ -940,7 +978,6 @@ class AudioPlayer {
     // Background-cache for offline backup (non-blocking)
     if (!resolvedUrl.startsWith('blob:')) {
       cacheSongForOfflineBackup(targetSong, resolvedUrl).catch(() => {});
-      // Also background-download into the adaptive streaming cache for future instant-play
       adaptiveStreaming.preBufferSong(targetSong.id, resolvedUrl, this._audioQuality);
     }
 
@@ -948,12 +985,10 @@ class AudioPlayer {
       const playPromise = this.audio.play();
       if (playPromise !== undefined) await playPromise;
     } catch {
-      // Retry once the browser has buffered enough data
-      const onCanPlay = () => {
-        this.audio.removeEventListener('canplay', onCanPlay);
-        if (myGen === this._playGeneration) this.audio.play().catch(() => {});
-      };
-      this.audio.addEventListener('canplay', onCanPlay, { once: true });
+      // If play failed on HTML5, seamlessly attempt YouTube Fallback
+      if (navigator.onLine && myGen === this._playGeneration) {
+        this.playViaYouTubeFallback(targetSong, this.pendingSeekPosition).catch(() => {});
+      }
     }
 
     if (myGen !== this._playGeneration) return;
@@ -962,6 +997,46 @@ class AudioPlayer {
     this.scheduleNextSongPreBuffer();
   }
 
+  /**
+   * Ultra-fast YouTube Fallback Resolver.
+   * Plays unavailable JioSaavn songs seamlessly via the Headless YouTube Audio Engine.
+   */
+  private async playViaYouTubeFallback(targetSong: Song, seekSeconds = 0): Promise<boolean> {
+    const myGen = this._playGeneration;
+    this.emit({ type: 'loading', isLoading: true });
+    try {
+      const { resolveYouTubeVideoId } = await import('../../data/api/youtubeMusicApi');
+      const ytMatch = await resolveYouTubeVideoId(targetSong.title, targetSong.artist, targetSong.duration);
+      if (myGen !== this._playGeneration) return false;
+      if (ytMatch && ytMatch.videoId) {
+        this.activeEngine = 'youtube';
+        targetSong.provider = 'youtube';
+        targetSong.id = `yt_${ytMatch.videoId}`;
+        if (ytMatch.duration > 0) targetSong.duration = ytMatch.duration;
+        if (!targetSong.artwork && ytMatch.artwork) {
+          targetSong.artwork = ytMatch.artwork;
+          targetSong.artworkLg = ytMatch.artwork;
+        }
+        this.emit({ type: 'songchange', song: { ...targetSong } });
+        this.updateMediaSession(targetSong);
+        this.saveCurrentSession();
+        await youtubeAudioEngine.loadAndPlay(ytMatch.videoId, seekSeconds);
+        showToast(`Playing "${targetSong.title}" via YouTube HD Stream`, 'info', 2000);
+        return true;
+      }
+    } catch (e) {
+      console.warn('[AudioPlayer] YouTube fallback resolution error:', e);
+    }
+
+    if (myGen !== this._playGeneration) return false;
+    this.emit({ type: 'loading', isLoading: false });
+    this.emit({ type: 'error', error: `Audio source unavailable for "${targetSong.title}".` });
+    showToast(`Audio unavailable for "${targetSong.title}". Skipping...`, 'info', 2000);
+    if (this._queue.length > 1 && this._queueIndex < this._queue.length - 1) {
+      setTimeout(() => { if (myGen === this._playGeneration && !this.isPlaying) this.next(); }, 1200);
+    }
+    return false;
+  }
 
   /**
    * Installs adaptive stall watching on the audio element.
@@ -1218,6 +1293,15 @@ class AudioPlayer {
   }
 
   togglePlay() {
+    if (this.activeEngine === 'youtube') {
+      if (youtubeAudioEngine.isPlaying()) {
+        this.pause();
+      } else {
+        this.resume();
+      }
+      return;
+    }
+
     if (this.isCrossfading) {
       if (this.isCrossfadePaused || this.audio.paused) {
         this.resume();
@@ -1235,6 +1319,13 @@ class AudioPlayer {
   }
 
   pause() {
+    if (this.activeEngine === 'youtube') {
+      youtubeAudioEngine.pause();
+      this.emit({ type: 'pause' });
+      this.saveCurrentSession();
+      return;
+    }
+
     if (this.isCrossfading) {
       this.isCrossfadePaused = true;
       this.audio.pause();
@@ -1250,6 +1341,11 @@ class AudioPlayer {
 
   resume() {
     studioAudioEngine.resume();
+    if (this.activeEngine === 'youtube') {
+      youtubeAudioEngine.resume();
+      return;
+    }
+
     if (this.isCrossfading && this.isCrossfadePaused) {
       this.isCrossfadePaused = false;
       this.audio.play().catch(() => {});
@@ -1290,9 +1386,20 @@ class AudioPlayer {
 
   seek(progress: number) {
     this.cancelCrossfade();
+    const p = Math.max(0, Math.min(1, progress));
+    if (this.activeEngine === 'youtube') {
+      const dur = youtubeAudioEngine.getDuration() || this.currentSong?.duration || 0;
+      youtubeAudioEngine.seekTo(p * dur);
+      this.pendingSeekPosition = 0;
+      this.savedResumePosition = 0;
+      this.savedResumeTrackId = null;
+      this.saveCurrentSession();
+      return;
+    }
+
     const dur = this.audio.duration;
     if (!isNaN(dur) && dur > 0) {
-      this.audio.currentTime = progress * dur;
+      this.audio.currentTime = p * dur;
       this.pendingSeekPosition = 0;
       this.savedResumePosition = 0;
       this.savedResumeTrackId = null;
@@ -1302,7 +1409,17 @@ class AudioPlayer {
 
   seekToTime(seconds: number) {
     this.cancelCrossfade();
-    this.audio.currentTime = seconds;
+    const s = Math.max(0, seconds);
+    if (this.activeEngine === 'youtube') {
+      youtubeAudioEngine.seekTo(s);
+      this.pendingSeekPosition = 0;
+      this.savedResumePosition = 0;
+      this.savedResumeTrackId = null;
+      this.saveCurrentSession();
+      return;
+    }
+
+    this.audio.currentTime = s;
     this.pendingSeekPosition = 0;
     this.savedResumePosition = 0;
     this.savedResumeTrackId = null;
