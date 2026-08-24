@@ -104,13 +104,13 @@ class YouTubeAudioEngine {
       container = document.createElement('div');
       container.id = 'headless-yt-audio-container';
       container.style.position = 'fixed';
-      container.style.top = '0px';
-      container.style.left = '0px';
-      container.style.width = '1px';
-      container.style.height = '1px';
-      container.style.opacity = '1';
+      container.style.bottom = '0px';
+      container.style.right = '0px';
+      container.style.width = '240px';
+      container.style.height = '180px';
+      container.style.opacity = '0.005';
       container.style.pointerEvents = 'none';
-      container.style.zIndex = '999999';
+      container.style.zIndex = '-9999';
       container.style.overflow = 'hidden';
       document.body.appendChild(container);
     }
@@ -121,8 +121,8 @@ class YouTubeAudioEngine {
 
     try {
       this.player = new window.YT.Player('headless-yt-player-target', {
-        height: '1',
-        width: '1',
+        height: '180',
+        width: '240',
         host: 'https://www.youtube.com',
         playerVars: {
           autoplay: 1,
@@ -134,7 +134,6 @@ class YouTubeAudioEngine {
           rel: 0,
           playsinline: 1,
           enablejsapi: 1,
-          origin: typeof window !== 'undefined' ? window.location.origin : undefined,
         },
         events: {
           onReady: () => {
@@ -197,6 +196,12 @@ class YouTubeAudioEngine {
       this.stopTimeUpdate();
     } else if (state === 3) { // BUFFERING
       this.emit({ type: 'loading', isLoading: true, sessionId: sid });
+      if (this.player && typeof this.player.playVideo === 'function') {
+        try {
+          this.player.unMute?.();
+          this.player.playVideo();
+        } catch {}
+      }
     } else if (state === 5 || state === -1) { // CUED or UNSTARTED
       if (this.player && typeof this.player.playVideo === 'function') {
         try {
@@ -272,6 +277,15 @@ class YouTubeAudioEngine {
         this.player.cueVideoById(cleanId, startSeconds || 0);
         this.player.playVideo();
       }
+
+      setTimeout(() => {
+        if (this.activeSessionId === sessionId && this.player && typeof this.player.playVideo === 'function') {
+          try {
+            this.player.unMute?.();
+            this.player.playVideo();
+          } catch {}
+        }
+      }, 300);
     } catch (e) {
       console.warn('[YouTubeAudioEngine] loadAndPlay error:', e);
       if (this.activeSessionId === sessionId) {
