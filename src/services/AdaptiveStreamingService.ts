@@ -679,12 +679,6 @@ class AdaptiveStreamingService {
   configureAudioElement(audio: HTMLAudioElement): void {
     // Native preload hint – browser decides how much to buffer
     audio.preload = 'auto';
-
-    // Allow CORS streaming
-    audio.crossOrigin = 'anonymous';
-
-    // When network is slow, prioritise uninterrupted playback
-    // by using a higher initial play target (handled by our stall watcher below).
   }
 
   /**
