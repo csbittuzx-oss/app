@@ -494,7 +494,7 @@ export async function resolveFullTrack(
   targetDuration?: number,
   _isSpotifyImport = false
 ): Promise<{ streamUrl: string; duration: number; artwork?: string } | null> {
-  const queryVariants = generateSearchVariants(title, artist);
+  const queryVariants = generateSearchVariants(title, artist).slice(0, 2);
 
   // 1. Tier 1: Search JioSaavn through prioritized query variants with strict score matching
   for (const q of queryVariants) {

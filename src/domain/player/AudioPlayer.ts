@@ -921,6 +921,13 @@ class AudioPlayer {
       targetSong.previewUrl = null;
     }
 
+    // Fast-path: If track is an explicit YouTube track, route immediately to YouTube playback without querying Saavn
+    const isExplicitYouTube = targetSong.provider === 'youtube' || targetSong.id.startsWith('yt_');
+    if (isExplicitYouTube && navigator.onLine && (!targetSong.previewUrl || isPreviewAudioUrl(targetSong.previewUrl))) {
+      const handled = await this.playViaYouTubeFallback(targetSong, currentSessionId, this.pendingSeekPosition);
+      if (handled) return;
+    }
+
     if ((!targetSong.previewUrl || isPreviewAudioUrl(targetSong.previewUrl)) && navigator.onLine) {
       // 1. Direct Saavn ID lookup if saavn_
       if (targetSong.id.startsWith('saavn_')) {
@@ -1025,6 +1032,10 @@ class AudioPlayer {
     try {
       const playPromise = this.audio.play();
       if (playPromise !== undefined) await playPromise;
+      if (currentSessionId === this.playbackSessionId) {
+        this.emit({ type: 'loading', isLoading: false });
+        this.emit({ type: 'play' });
+      }
     } catch {
       this.emit({ type: 'loading', isLoading: false });
     }
