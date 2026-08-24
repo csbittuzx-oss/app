@@ -55,13 +55,6 @@ export function getHomeScrollPosition() {
   return persistentHomeScrollTop;
 }
 
-function formatTime(seconds: number): string {
-  if (!seconds || isNaN(seconds)) return '0:00';
-  const mins = Math.floor(seconds / 60);
-  const secs = Math.floor(seconds % 60);
-  return `${mins}:${secs < 10 ? '0' : ''}${secs}`;
-}
-
 // ── Icons ───────────────────────────────────────────────────────────────────
 
 function PlayIcon({ size = 16, color = 'currentColor' }: { size?: number; color?: string }) {
@@ -178,7 +171,7 @@ function SectionHeader({
 
 export function HomeScreen({ isVisible = true }: { isVisible?: boolean }) {
   const { state: appState, nav: { navigate } } = useApp();
-  const { playSong, togglePlay, state: playerState } = usePlayer();
+  const { playSong, state: playerState } = usePlayer();
   const ytViewModel = useHomeViewModelAutoLoad();
 
   const scrollRef = useRef<HTMLDivElement>(null);
@@ -225,17 +218,6 @@ export function HomeScreen({ isVisible = true }: { isVisible?: boolean }) {
   // Context Bottom Sheet state for long-press
   const [selectedSongForMenu, setSelectedSongForMenu] = useState<Song | null>(null);
 
-  // ── 2. Top Now-Playing / Continue Listening State ─────────────────────────
-  const continueListeningSong = useMemo(() => {
-    if (playerState.currentSong) return playerState.currentSong;
-    if (appState.recentlyPlayed && appState.recentlyPlayed.length > 0) return appState.recentlyPlayed[0];
-    if (appState.favorites && appState.favorites.length > 0) return appState.favorites[0];
-    return null;
-  }, [playerState.currentSong, appState.recentlyPlayed, appState.favorites]);
-
-  const isContinueActive = playerState.currentSong?.id === continueListeningSong?.id;
-  const isContinuePlaying = isContinueActive && playerState.isPlaying;
-  const playerProgress = isContinueActive ? playerState.progress : 0;
   const recentlyPlayedList = useMemo(() => {
     const recents = appState.recentlyPlayed || [];
     const searchRecents = appState.searchRecentlyPlayed || [];
@@ -597,154 +579,6 @@ export function HomeScreen({ isVisible = true }: { isVisible?: boolean }) {
         <HomeShimmerSkeleton />
       ) : (
         <div style={{ animation: 'fadeIn 0.28s ease-out' }}>
-          {/* ═════════════════════════════════════════════════════════════════════
-              🌟 NOW-PLAYING / CONTINUE LISTENING (Top Card)
-          ═════════════════════════════════════════════════════════════════════ */}
-          {continueListeningSong && (
-            <section style={{ padding: '0 20px 4px' }}>
-          {/* Main Now-Playing Hero Card */}
-          <div
-            onClick={() => {
-              if (playerState.currentSong?.id === continueListeningSong.id) {
-                togglePlay();
-              } else {
-                playSong(continueListeningSong, appState.recentlyPlayed, 0);
-              }
-            }}
-            onContextMenu={(e) => {
-              e.preventDefault();
-              triggerLongPress(continueListeningSong);
-            }}
-            style={{
-              display: 'flex',
-              alignItems: 'center',
-              gap: 12,
-              padding: '12px 14px',
-              background: 'var(--color-surface)',
-              border: isContinueActive ? '1.5px solid var(--color-accent)' : '1px solid var(--color-border)',
-              borderRadius: 'var(--radius-lg, 16px)',
-              cursor: 'pointer',
-              position: 'relative',
-              boxShadow: 'var(--shadow-sm)',
-              transition: 'transform 120ms ease, border-color 150ms ease',
-            }}
-            onMouseDown={(e) => (e.currentTarget.style.transform = 'scale(0.985)')}
-            onMouseUp={(e) => (e.currentTarget.style.transform = 'scale(1)')}
-          >
-            {/* Album Artwork */}
-            <div style={{ position: 'relative', flexShrink: 0 }}>
-              <img
-                src={resizeImageUrl(continueListeningSong.artworkLg || continueListeningSong.artwork, 256, 256)}
-                alt={continueListeningSong.title}
-                width={56}
-                height={56}
-                style={{
-                  borderRadius: 'var(--radius-md, 10px)',
-                  objectFit: 'cover',
-                  display: 'block',
-                  border: '1px solid var(--color-border)',
-                }}
-                onError={(e) => {
-                  (e.target as HTMLImageElement).src = CONFIG.ARTWORK_PLACEHOLDER;
-                }}
-              />
-            </div>
-
-            {/* Song Title, Artist & Progress bar */}
-            <div style={{ flex: 1, minWidth: 0, display: 'flex', flexDirection: 'column', gap: 2 }}>
-              <p
-                style={{
-                  margin: 0,
-                  fontSize: '14.5px',
-                  fontWeight: 700,
-                  color: isContinueActive ? 'var(--color-accent)' : 'var(--color-text-primary)',
-                  overflow: 'hidden',
-                  textOverflow: 'ellipsis',
-                  whiteSpace: 'nowrap',
-                  lineHeight: 1.25,
-                }}
-              >
-                {continueListeningSong.title}
-              </p>
-
-              <p
-                style={{
-                  margin: 0,
-                  fontSize: '12px',
-                  color: 'var(--color-text-secondary)',
-                  overflow: 'hidden',
-                  textOverflow: 'ellipsis',
-                  whiteSpace: 'nowrap',
-                  lineHeight: 1.2,
-                }}
-              >
-                {continueListeningSong.artist}
-              </p>
-
-              {/* Progress bar & timestamp */}
-              <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginTop: 4 }}>
-                <div
-                  style={{
-                    flex: 1,
-                    height: 3.5,
-                    borderRadius: 2,
-                    background: 'var(--color-border)',
-                    overflow: 'hidden',
-                  }}
-                >
-                  <div
-                    style={{
-                      width: `${Math.min(100, Math.max(0, (playerProgress || 0) * 100))}%`,
-                      height: '100%',
-                      background: 'var(--color-accent)',
-                      borderRadius: 2,
-                    }}
-                  />
-                </div>
-                {playerState.currentTime > 0 && (
-                  <span style={{ fontSize: 10.5, color: 'var(--color-text-secondary)', fontWeight: 500, flexShrink: 0 }}>
-                    {formatTime(playerState.currentTime)}
-                  </span>
-                )}
-              </div>
-            </div>
-
-            {/* Circular Play / Pause Control Button */}
-            <div
-              onClick={(e) => {
-                e.stopPropagation();
-                if (playerState.currentSong?.id === continueListeningSong.id) {
-                  togglePlay();
-                } else {
-                  playSong(continueListeningSong, appState.recentlyPlayed, 0);
-                }
-              }}
-              style={{
-                width: 40,
-                height: 40,
-                borderRadius: '50%',
-                background: 'var(--color-accent)',
-                color: '#FFFFFF',
-                display: 'flex',
-                alignItems: 'center',
-                justifyContent: 'center',
-                flexShrink: 0,
-                boxShadow: 'var(--shadow-sm)',
-                cursor: 'pointer',
-                marginLeft: 4,
-              }}
-            >
-              {isContinuePlaying ? (
-                <EqBars color="#FFFFFF" />
-              ) : (
-                <svg width={16} height={16} viewBox="0 0 24 24" fill="#FFFFFF" style={{ marginLeft: 2 }}>
-                  <polygon points="5 3 19 12 5 21 5 3" />
-                </svg>
-              )}
-            </div>
-          </div>
-        </section>
-      )}
 
       {/* ═════════════════════════════════════════════════════════════════════
           1️⃣ SECTION: JUMP BACK IN
