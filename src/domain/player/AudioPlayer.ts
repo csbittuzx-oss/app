@@ -57,8 +57,17 @@ export type AudioPlayerEvent =
   | { type: 'ridingmodechange'; ridingMode: boolean };
 
 class AudioPlayer {
-  private audio: HTMLAudioElement;
-  private crossfadeAudio: HTMLAudioElement;
+  private primaryAudio: HTMLAudioElement;
+  private secondaryAudio: HTMLAudioElement;
+
+  get audio(): HTMLAudioElement {
+    return this.primaryAudio;
+  }
+
+  get crossfadeAudio(): HTMLAudioElement {
+    return this.secondaryAudio;
+  }
+
   private activeEngine: 'html5' | 'youtube' | 'none' = 'none';
   private playbackSessionId = 0;
   private _queue: Song[] = [];
@@ -106,14 +115,14 @@ class AudioPlayer {
   private isUserInteracted = false;
 
   constructor() {
-    this.audio = new Audio();
-    this.crossfadeAudio = new Audio();
-    this.audio.autoplay = false;
-    this.crossfadeAudio.autoplay = false;
-    this.audio.preload = 'none';
-    this.crossfadeAudio.preload = 'none';
-    adaptiveStreaming.configureAudioElement(this.audio);
-    adaptiveStreaming.configureAudioElement(this.crossfadeAudio);
+    this.primaryAudio = new Audio();
+    this.secondaryAudio = new Audio();
+    this.primaryAudio.autoplay = false;
+    this.secondaryAudio.autoplay = false;
+    this.primaryAudio.preload = 'none';
+    this.secondaryAudio.preload = 'none';
+    adaptiveStreaming.configureAudioElement(this.primaryAudio);
+    adaptiveStreaming.configureAudioElement(this.secondaryAudio);
     // Initialise network monitoring immediately
     adaptiveStreaming.initNetworkMonitor();
 
@@ -142,8 +151,8 @@ class AudioPlayer {
     this.bindEvents();
 
     // Attach high-definition DSP audio engine
-    studioAudioEngine.attachAudioElement(this.audio);
-    studioAudioEngine.attachAudioElement(this.crossfadeAudio);
+    studioAudioEngine.attachAudioElement(this.primaryAudio);
+    studioAudioEngine.attachAudioElement(this.secondaryAudio);
     studioAudioEngine.setQuality(this._audioQuality);
   }
 
@@ -276,111 +285,8 @@ class AudioPlayer {
       onSeekTo: (seconds) => this.seekToTime(seconds),
     });
 
-    this.audio.addEventListener('play', () => {
-      if (this.activeEngine !== 'html5') return;
-      this.emit({ type: 'loading', isLoading: false });
-      this.emit({ type: 'play' });
-      this.emit({ type: 'error', error: null });
-      if (this.currentSong) {
-        MediaNotificationService.update(
-          this.currentSong,
-          true,
-          this.audio.duration,
-          this.audio.currentTime
-        );
-      }
-    });
-
-    this.audio.addEventListener('playing', () => {
-      if (this.activeEngine !== 'html5') return;
-      this.emit({ type: 'loading', isLoading: false });
-      this.emit({ type: 'play' });
-      this.emit({ type: 'error', error: null });
-    });
-
-    this.audio.addEventListener('pause', () => {
-      if (this.activeEngine !== 'html5') return;
-      this.emit({ type: 'pause' });
-      this.saveCurrentSession();
-      if (this.currentSong) {
-        MediaNotificationService.update(
-          this.currentSong,
-          false,
-          this.audio.duration,
-          this.audio.currentTime
-        );
-      }
-    });
-
-    this.audio.addEventListener('ended', () => {
-      if (this.activeEngine !== 'html5') return;
-      this.saveCurrentSession();
-      this.handleEnded();
-    });
-
-    this.audio.addEventListener('timeupdate', () => {
-      if (this.activeEngine !== 'html5') return;
-      const duration = this.audio.duration || 0;
-      const currentTime = this.audio.currentTime;
-      const progress = duration > 0 ? currentTime / duration : 0;
-      this.emit({ type: 'timeupdate', currentTime, duration, progress });
-      this.updateMediaSessionPosition();
-
-      // Periodically persist playback position every 4 seconds
-      const now = Date.now();
-      if (now - this.lastSavedPositionTime > 4000) {
-        this.lastSavedPositionTime = now;
-        this.saveCurrentSession();
-      }
-
-      // Track listening duration in intelligence profile
-      const currentSec = Math.floor(currentTime);
-      if (currentSec > this.lastTimeUpdateSecond) {
-        userProfileTracker.recordListeningDuration(currentSec - this.lastTimeUpdateSecond);
-        this.lastTimeUpdateSecond = currentSec;
-      }
-
-      this.checkRidingModeAndAutomix(currentTime, duration, progress);
-    });
-
-    this.audio.addEventListener('loadstart', () => {
-      if (this.activeEngine === 'html5') {
-        this.emit({ type: 'loading', isLoading: true });
-      }
-    });
-    this.audio.addEventListener('canplay', () => {
-      if (this.activeEngine === 'html5') {
-        this.emit({ type: 'loading', isLoading: false });
-        this.emit({ type: 'error', error: null });
-      }
-    });
-    this.audio.addEventListener('error', () => {
-      if (this.activeEngine !== 'html5') return;
-      const err = this.audio.error;
-      // Filter out abort errors, empty src resets during song switching, or unmounted states
-      if (!this.audio.src || !this.currentSong || err?.code === MediaError.MEDIA_ERR_ABORTED || !this.isUserInteracted) {
-        return;
-      }
-
-      // Automatic Instant YouTube Fallback if JioSaavn stream fails
-      if (navigator.onLine && this.currentSong && !this.isAutoRecovering && this.isUserInteracted) {
-        this.isAutoRecovering = true;
-        const songToRecover = this.currentSong;
-        const resumePos = this.audio.currentTime || this.savedResumePosition || 0;
-        this.playViaYouTubeFallback(songToRecover, this.playbackSessionId, resumePos)
-          .catch(() => {
-            this.emit({ type: 'loading', isLoading: false });
-            this.emit({ type: 'error', error: 'Playback failed. Tap to retry.' });
-          })
-          .finally(() => {
-            this.isAutoRecovering = false;
-          });
-        return;
-      }
-
-      this.emit({ type: 'loading', isLoading: false });
-      this.emit({ type: 'error', error: 'Playback failed. Tap to retry.' });
-    });
+    this.bindAudioElement(this.primaryAudio);
+    this.bindAudioElement(this.secondaryAudio);
 
     // ── Bind Headless YouTube Audio Engine Events ──
     youtubeAudioEngine.subscribe((event) => {
@@ -446,6 +352,116 @@ class AudioPlayer {
         }
       });
     }
+  }
+
+  private bindAudioElement(el: HTMLAudioElement) {
+    el.addEventListener('play', () => {
+      if (el !== this.primaryAudio || this.activeEngine !== 'html5') return;
+      this.emit({ type: 'loading', isLoading: false });
+      this.emit({ type: 'play' });
+      this.emit({ type: 'error', error: null });
+      if (this.currentSong) {
+        MediaNotificationService.update(
+          this.currentSong,
+          true,
+          el.duration,
+          el.currentTime
+        );
+      }
+    });
+
+    el.addEventListener('playing', () => {
+      if (el !== this.primaryAudio || this.activeEngine !== 'html5') return;
+      this.emit({ type: 'loading', isLoading: false });
+      this.emit({ type: 'play' });
+      this.emit({ type: 'error', error: null });
+    });
+
+    el.addEventListener('pause', () => {
+      if (el !== this.primaryAudio || this.activeEngine !== 'html5') return;
+      this.emit({ type: 'pause' });
+      this.saveCurrentSession();
+      if (this.currentSong) {
+        MediaNotificationService.update(
+          this.currentSong,
+          false,
+          el.duration,
+          el.currentTime
+        );
+      }
+    });
+
+    el.addEventListener('ended', () => {
+      if (el !== this.primaryAudio || this.activeEngine !== 'html5') return;
+      this.saveCurrentSession();
+      this.handleEnded();
+    });
+
+    el.addEventListener('timeupdate', () => {
+      if (el !== this.primaryAudio || this.activeEngine !== 'html5') return;
+      const duration = el.duration || 0;
+      const currentTime = el.currentTime;
+      const progress = duration > 0 ? currentTime / duration : 0;
+      this.emit({ type: 'timeupdate', currentTime, duration, progress });
+      this.updateMediaSessionPosition();
+
+      // Periodically persist playback position every 4 seconds
+      const now = Date.now();
+      if (now - this.lastSavedPositionTime > 4000) {
+        this.lastSavedPositionTime = now;
+        this.saveCurrentSession();
+      }
+
+      // Track listening duration in intelligence profile
+      const currentSec = Math.floor(currentTime);
+      if (currentSec > this.lastTimeUpdateSecond) {
+        userProfileTracker.recordListeningDuration(currentSec - this.lastTimeUpdateSecond);
+        this.lastTimeUpdateSecond = currentSec;
+      }
+
+      this.checkRidingModeAndAutomix(currentTime, duration, progress);
+    });
+
+    el.addEventListener('loadstart', () => {
+      if (el === this.primaryAudio && this.activeEngine === 'html5') {
+        this.emit({ type: 'loading', isLoading: true });
+      }
+    });
+
+    el.addEventListener('canplay', () => {
+      if (el === this.primaryAudio && this.activeEngine === 'html5') {
+        this.emit({ type: 'loading', isLoading: false });
+        this.emit({ type: 'error', error: null });
+      }
+    });
+
+    el.addEventListener('error', () => {
+      if (el !== this.primaryAudio || this.activeEngine !== 'html5') return;
+      const err = el.error;
+      // Filter out abort errors, empty src resets during song switching, or unmounted states
+      if (!el.src || !this.currentSong || err?.code === MediaError.MEDIA_ERR_ABORTED || !this.isUserInteracted) {
+        return;
+      }
+
+      // Automatic Instant YouTube Fallback if JioSaavn stream fails
+      if (navigator.onLine && this.currentSong && !this.isAutoRecovering && this.isUserInteracted) {
+        this.isAutoRecovering = true;
+        const songToRecover = this.currentSong;
+        const resumePos = el.currentTime || this.savedResumePosition || 0;
+        this.playViaYouTubeFallback(songToRecover, this.playbackSessionId, resumePos)
+          .catch(() => {
+            this.emit({ type: 'loading', isLoading: false });
+            this.emit({ type: 'error', error: 'Playback failed. Tap to retry.' });
+          })
+          .finally(() => {
+            this.isAutoRecovering = false;
+          });
+        return;
+      }
+
+      this.emit({ type: 'loading', isLoading: false });
+      this.emit({ type: 'error', error: 'Playback failed. Tap to retry.' });
+    });
   }
 
   /**
@@ -1340,14 +1356,11 @@ class AudioPlayer {
       this.crossfadeTimer = null;
     }
 
-    // Capture the state from crossfade audio
-    const nextCurrentTime = this.crossfadeAudio.currentTime || 0;
-    const nextSrc = this.crossfadeAudio.src;
-
-    // Silence and stop the secondary crossfade audio element
-    this.crossfadeAudio.pause();
-    this.crossfadeAudio.src = '';
-    this.crossfadeAudio.volume = 0;
+    // Stop and reset the outgoing primary audio element
+    this.primaryAudio.pause();
+    this.primaryAudio.removeAttribute('src');
+    this.primaryAudio.load();
+    this.primaryAudio.volume = 0;
 
     // Stop YouTube engine if outgoing track was YouTube
     if (this.activeEngine === 'youtube') {
@@ -1355,11 +1368,13 @@ class AudioPlayer {
     }
     this.activeEngine = 'html5';
 
-    // Load and continue seamlessly on primary audio element
-    this.audio.src = nextSrc;
-    this.audio.currentTime = nextCurrentTime;
-    this.audio.volume = this._volume;
-    this.audio.play().catch(() => {});
+    // Seamlessly swap pointers: secondaryAudio (which is ALREADY playing the next song smoothly at ~8s at full volume) becomes primaryAudio!
+    const previousPrimary = this.primaryAudio;
+    this.primaryAudio = this.secondaryAudio;
+    this.secondaryAudio = previousPrimary;
+
+    // Ensure active primary audio volume is locked at target user volume
+    this.primaryAudio.volume = this._volume;
 
     this._queueIndex = newIndex;
     this.isCrossfading = false;
@@ -1380,15 +1395,16 @@ class AudioPlayer {
       clearInterval(this.crossfadeTimer);
       this.crossfadeTimer = null;
     }
-    if (this.crossfadeAudio) {
-      this.crossfadeAudio.pause();
-      this.crossfadeAudio.src = '';
-      this.crossfadeAudio.volume = 0;
+    if (this.secondaryAudio) {
+      this.secondaryAudio.pause();
+      this.secondaryAudio.removeAttribute('src');
+      this.secondaryAudio.load();
+      this.secondaryAudio.volume = 0;
     }
     if (this.activeEngine === 'youtube') {
       youtubeAudioEngine.setVolume(this._volume);
-    } else if (this.audio) {
-      this.audio.volume = this._volume;
+    } else if (this.primaryAudio) {
+      this.primaryAudio.volume = this._volume;
     }
     this.isCrossfading = false;
     this.isCrossfadePaused = false;
