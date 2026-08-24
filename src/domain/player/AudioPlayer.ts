@@ -435,6 +435,7 @@ class AudioPlayer {
     youtubeAudioEngine.subscribe((event) => {
       if (this.activeEngine !== 'youtube') return;
       if (event.type === 'play') {
+        this.emit({ type: 'loading', isLoading: false });
         this.emit({ type: 'play' });
         this.emit({ type: 'error', error: null });
         if (this.currentSong) {

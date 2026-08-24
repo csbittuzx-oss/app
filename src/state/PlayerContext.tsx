@@ -136,9 +136,11 @@ export function PlayerProvider({ children }: { children: React.ReactNode }) {
       switch (event.type) {
         case 'play':
           dispatch({ type: 'SET_PLAYING', payload: true });
+          dispatch({ type: 'SET_LOADING', payload: false });
           break;
         case 'pause':
           dispatch({ type: 'SET_PLAYING', payload: false });
+          dispatch({ type: 'SET_LOADING', payload: false });
           break;
         case 'ended':
           dispatch({ type: 'SET_PLAYING', payload: false });

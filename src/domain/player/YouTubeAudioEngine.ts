@@ -214,6 +214,9 @@ class YouTubeAudioEngine {
 
     try {
       this.emit({ type: 'loading', isLoading: true });
+      if (typeof this.player.unMute === 'function') {
+        try { this.player.unMute(); } catch {}
+      }
       if (typeof this.player.loadVideoById === 'function') {
         this.player.loadVideoById({
           videoId: cleanId,
