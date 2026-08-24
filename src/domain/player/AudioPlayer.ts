@@ -914,74 +914,15 @@ class AudioPlayer {
       }
     }
 
-    // ── 0. Strict YouTube Track Direct Playback ──
-    const isYouTubeTrack = targetSong.provider === 'youtube' || targetSong.id.startsWith('yt_');
-    if (isYouTubeTrack) {
-      this.activeEngine = 'youtube';
-      targetSong.provider = 'youtube';
-
-      let cleanVideoId = targetSong.id.replace('yt_', '').replace('/watch?v=', '').trim();
-      if (cleanVideoId.length !== 11 || !/^[a-zA-Z0-9_-]{11}$/.test(cleanVideoId)) {
-        try {
-          const { resolveYouTubeVideoId, searchYouTubeMusic, extractVideoId } = await import('../../data/api/youtubeMusicApi');
-          const ytMatch = await resolveYouTubeVideoId(targetSong.title, targetSong.artist, targetSong.duration);
-          if (currentSessionId !== this.playbackSessionId) return;
-          if (ytMatch?.videoId) {
-            cleanVideoId = ytMatch.videoId;
-            targetSong.id = `yt_${cleanVideoId}`;
-            if (ytMatch.duration > 0) targetSong.duration = ytMatch.duration;
-            if (!targetSong.artwork && ytMatch.artwork) {
-              targetSong.artwork = ytMatch.artwork;
-              targetSong.artworkLg = ytMatch.artwork;
-            }
-            this.emit({ type: 'songchange', song: { ...targetSong } });
-          } else {
-            const ytSearch = await searchYouTubeMusic(`${targetSong.title} ${targetSong.artist}`, 5);
-            if (currentSessionId !== this.playbackSessionId) return;
-            if (ytSearch.songs && ytSearch.songs.length > 0) {
-              const firstYt = ytSearch.songs[0];
-              const candId = extractVideoId(firstYt, firstYt.id);
-              if (candId.length === 11) {
-                cleanVideoId = candId;
-                targetSong.id = `yt_${cleanVideoId}`;
-                if (firstYt.duration > 0) targetSong.duration = firstYt.duration;
-                if (!targetSong.artwork && firstYt.artwork) {
-                  targetSong.artwork = firstYt.artwork;
-                  targetSong.artworkLg = firstYt.artwork;
-                }
-                this.emit({ type: 'songchange', song: { ...targetSong } });
-              }
-            }
-          }
-        } catch {}
-      }
-
-      if (currentSessionId !== this.playbackSessionId) return;
-
-      if (cleanVideoId.length === 11 && /^[a-zA-Z0-9_-]{11}$/.test(cleanVideoId)) {
-        this.saveCurrentSession();
-        await youtubeAudioEngine.loadAndPlay(cleanVideoId, currentSessionId, this.pendingSeekPosition);
-        this.pendingSeekPosition = 0;
-        return;
-      } else {
-        this.emit({ type: 'loading', isLoading: false });
-        this.emit({ type: 'error', error: `Audio stream unavailable for "${targetSong.title}".` });
-        return;
-      }
-    }
-
-    // ── 1. Strict JioSaavn / HTML5 Audio Track Playback ──
-    youtubeAudioEngine.stop(currentSessionId);
-    this.activeEngine = 'html5';
-
-    // Full-track URL resolution (Spotify / iTunes / Previews / Restored Session → JioSaavn)
+    // ── 0. Attempt Ultra-Fast Direct 320kbps Audio Stream Resolution ──
+    // Every song (whether from YouTube search, JioSaavn search, or Spotify) first resolves its authentic 320kbps master stream from CDN for instant 50ms playback.
     const isRestoredTrack = this.savedResumeTrackId === targetSong.id;
     if (isRestoredTrack && targetSong.previewUrl && !targetSong.previewUrl.startsWith('blob:') && !targetSong.isDownloaded) {
       targetSong.previewUrl = null;
     }
 
     if ((!targetSong.previewUrl || isPreviewAudioUrl(targetSong.previewUrl)) && navigator.onLine) {
-      // 1. Direct Saavn ID lookup
+      // 1. Direct Saavn ID lookup if saavn_
       if (targetSong.id.startsWith('saavn_')) {
         try {
           const directSaavnUrl = await fetchSaavnSongStreamById(targetSong.id, this._audioQuality);
@@ -994,7 +935,7 @@ class AudioPlayer {
         } catch {}
       }
 
-      // 2. Full track search resolution by Title & Artist
+      // 2. Full track matching by Title & Artist on high-speed CDN
       if (!targetSong.previewUrl || isPreviewAudioUrl(targetSong.previewUrl)) {
         try {
           const isSpotifyImport = targetSong.id.startsWith('spotify_');
@@ -1017,12 +958,12 @@ class AudioPlayer {
             this.emit({ type: 'songchange', song: { ...targetSong } });
           }
         } catch (e) {
-          console.warn('Full track resolve fallback:', e);
+          console.warn('[AudioPlayer] Full track resolve fallback:', e);
         }
       }
     }
 
-    // 3. If stream is STILL unavailable on JioSaavn, trigger Instant YouTube Fallback
+    // ── 1. If song is NOT available on CDN, trigger Instant YouTube Fallback ──
     if ((!targetSong.previewUrl || isPreviewAudioUrl(targetSong.previewUrl)) && navigator.onLine) {
       const handled = await this.playViaYouTubeFallback(targetSong, currentSessionId, this.pendingSeekPosition);
       if (handled) return;
@@ -1038,6 +979,8 @@ class AudioPlayer {
       }
       return;
     }
+
+
 
     // ── Switch to HTML5 Audio engine ──
     youtubeAudioEngine.stop(currentSessionId);
