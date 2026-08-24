@@ -320,6 +320,12 @@ class AudioPlayer {
           );
         }
       } else if (event.type === 'ended') {
+        if (this.isCrossfading) {
+          if (this.crossfadeTargetSong) {
+            this.completeCrossfade(this.crossfadeTargetSong, this.crossfadeTargetIndex);
+          }
+          return;
+        }
         this.saveCurrentSession();
         this.handleEnded();
       } else if (event.type === 'timeupdate') {
@@ -393,6 +399,12 @@ class AudioPlayer {
 
     el.addEventListener('ended', () => {
       if (el !== this.primaryAudio || this.activeEngine !== 'html5') return;
+      if (this.isCrossfading) {
+        if (this.crossfadeTargetSong) {
+          this.completeCrossfade(this.crossfadeTargetSong, this.crossfadeTargetIndex);
+        }
+        return;
+      }
       this.saveCurrentSession();
       this.handleEnded();
     });
