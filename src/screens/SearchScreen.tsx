@@ -51,7 +51,13 @@ function AnimatedSearchBar({ query, isActive, mode, onQueryChange, onActivate, o
         </button>
         <input
           ref={inputRef as React.RefObject<HTMLInputElement>}
-          type="search" inputMode="search" autoComplete="off" autoCorrect="off" autoCapitalize="off" spellCheck={false}
+          type="text"
+          inputMode="search"
+          enterKeyHint="search"
+          autoComplete="off"
+          autoCorrect="off"
+          autoCapitalize="off"
+          spellCheck={false}
           value={query}
           placeholder={mode === "online" ? "Search YouTube Music" : "Search Library"}
           aria-label="Search"

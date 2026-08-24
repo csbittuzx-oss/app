@@ -51,8 +51,9 @@ export function SearchBar({ value, onChange, onSubmit, onClear, placeholder = 'S
       <input
         ref={inputRef}
         id={id}
-        type="search"
+        type="text"
         inputMode="search"
+        enterKeyHint="search"
         autoComplete="off"
         autoCorrect="off"
         autoCapitalize="off"
