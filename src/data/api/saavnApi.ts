@@ -495,7 +495,6 @@ export async function resolveFullTrack(
   _isSpotifyImport = false
 ): Promise<{ streamUrl: string; duration: number; artwork?: string } | null> {
   const queryVariants = generateSearchVariants(title, artist);
-  const targetClean = cleanCoreTitle(title);
 
   // 1. Tier 1: Search JioSaavn through prioritized query variants with strict score matching
   for (const q of queryVariants) {
@@ -505,9 +504,7 @@ export async function resolveFullTrack(
         const scoredCandidates = res.songs
           .map((song) => {
             const decision = evaluateTrackMatch(title, artist, targetDuration, song, 'JioSaavn Tier 1');
-            const candClean = cleanCoreTitle(song.title);
-            const isDirectTitleMatch = targetClean && candClean && (targetClean === candClean || candClean.includes(targetClean) || targetClean.includes(candClean));
-            return { song, isMatch: decision.isMatch || isDirectTitleMatch, confidence: decision.confidence };
+            return { song, isMatch: decision.isMatch, confidence: decision.confidence };
           })
           .filter((item) => item.isMatch && item.song.previewUrl && item.song.previewUrl.startsWith('http'))
           .sort((a, b) => b.confidence - a.confidence);
@@ -572,9 +569,7 @@ export async function resolveFullTrack(
               duration: parseInt(item.duration, 10) || 0,
             };
             const decision = evaluateTrackMatch(title, artist, targetDuration, cand, 'JioSaavn Tier 2');
-            const candClean = cleanCoreTitle(cand.title);
-            const isDirectTitleMatch = targetClean && candClean && (targetClean === candClean || candClean.includes(targetClean) || targetClean.includes(candClean));
-            if (decision.isMatch || isDirectTitleMatch) {
+            if (decision.isMatch) {
               const dur = cand.duration || targetDuration || 180;
               return {
                 streamUrl: formatMediaUrlWithQuality(fullAudioUrl, quality),
