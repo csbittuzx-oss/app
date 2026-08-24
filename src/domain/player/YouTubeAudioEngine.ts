@@ -35,6 +35,7 @@ class YouTubeAudioEngine {
   private timeUpdateTimer: ReturnType<typeof setInterval> | null = null;
   private callbacks: Set<YouTubeEngineCallback> = new Set();
   private isEndedEmitted = false;
+  private _isPlaying = false;
 
   constructor() {
     if (typeof window !== 'undefined') {
@@ -108,12 +109,16 @@ class YouTubeAudioEngine {
       container.style.right = '0px';
       container.style.width = '240px';
       container.style.height = '180px';
-      container.style.opacity = '0.005';
+      container.style.opacity = '0.001';
       container.style.pointerEvents = 'none';
       container.style.zIndex = '-9999';
       container.style.overflow = 'hidden';
       document.body.appendChild(container);
     }
+
+    // Remove old player div if present
+    const oldDiv = document.getElementById('headless-yt-player-target');
+    if (oldDiv) oldDiv.remove();
 
     const playerDiv = document.createElement('div');
     playerDiv.id = 'headless-yt-player-target';
@@ -138,7 +143,10 @@ class YouTubeAudioEngine {
         events: {
           onReady: () => {
             this.isPlayerReady = true;
-            this.player.setVolume(Math.round(this.volume * 100));
+            try {
+              this.player.unMute?.();
+              this.player.setVolume(Math.round(this.volume * 100));
+            } catch {}
             if (this.pendingPlay && this.pendingSessionId === this.activeSessionId && this.pendingVideoId) {
               const vid = this.pendingVideoId;
               const start = this.pendingStartTime;
@@ -186,6 +194,7 @@ class YouTubeAudioEngine {
     // -1: unstarted, 0: ended, 1: playing, 2: paused, 3: buffering, 5: video cued
     if (state === 1) { // PLAYING
       this.isEndedEmitted = false;
+      this._isPlaying = true;
       try {
         this.player.unMute?.();
         this.player.setVolume(Math.round(this.volume * 100));
@@ -195,6 +204,7 @@ class YouTubeAudioEngine {
       this.emit({ type: 'playing', sessionId: sid });
       this.startTimeUpdate(sid);
     } else if (state === 2) { // PAUSED
+      this._isPlaying = false;
       this.emit({ type: 'loading', isLoading: false, sessionId: sid });
       this.emit({ type: 'pause', sessionId: sid });
       this.stopTimeUpdate();
@@ -213,9 +223,17 @@ class YouTubeAudioEngine {
           this.player.playVideo();
         } catch {}
       }
+    } else if (state === 5 || state === -1) { // CUED or UNSTARTED
+      if (this.player && typeof this.player.playVideo === 'function') {
+        try {
+          this.player.unMute?.();
+          this.player.playVideo();
+        } catch {}
+      }
     } else if (state === 0) { // ENDED
       if (!this.isEndedEmitted) {
         this.isEndedEmitted = true;
+        this._isPlaying = false;
         this.stopTimeUpdate();
         this.emit({ type: 'loading', isLoading: false, sessionId: sid });
         this.emit({ type: 'ended', sessionId: sid });
@@ -254,6 +272,7 @@ class YouTubeAudioEngine {
     this.activeSessionId = sessionId;
     this.currentVideoId = cleanId;
     this.isEndedEmitted = false;
+    this._isPlaying = false;
 
     if (!this.isPlayerReady || !this.player) {
       this.pendingVideoId = cleanId;
@@ -267,6 +286,11 @@ class YouTubeAudioEngine {
 
     try {
       this.emit({ type: 'loading', isLoading: true, sessionId });
+      try {
+        this.player.unMute?.();
+        this.player.setVolume(Math.round(this.volume * 100));
+      } catch {}
+
       if (typeof this.player.loadVideoById === 'function') {
         this.player.loadVideoById({
           videoId: cleanId,
@@ -278,7 +302,7 @@ class YouTubeAudioEngine {
         this.player.playVideo();
       }
 
-      // Pulse play & un-mute
+      // Pulse play & un-mute at 250ms
       setTimeout(() => {
         if (this.activeSessionId === sessionId && this.player && typeof this.player.playVideo === 'function') {
           try {
@@ -287,17 +311,29 @@ class YouTubeAudioEngine {
             this.player.playVideo();
           } catch {}
         }
-      }, 350);
+      }, 250);
 
-      // Loading dismissal watchdog
+      // Second pulse at 600ms
+      setTimeout(() => {
+        if (this.activeSessionId === sessionId && this.player && typeof this.player.playVideo === 'function') {
+          try {
+            this.player.unMute?.();
+            this.player.setVolume(Math.round(this.volume * 100));
+            this.player.playVideo();
+          } catch {}
+        }
+      }, 600);
+
+      // Loading dismissal watchdog (1200ms)
       setTimeout(() => {
         if (this.activeSessionId === sessionId) {
+          this._isPlaying = true;
           this.emit({ type: 'loading', isLoading: false, sessionId });
           this.emit({ type: 'play', sessionId });
           this.emit({ type: 'playing', sessionId });
           this.startTimeUpdate(sessionId);
         }
-      }, 2200);
+      }, 1200);
     } catch (e) {
       console.warn('[YouTubeAudioEngine] loadAndPlay error:', e);
       if (this.activeSessionId === sessionId) {
@@ -363,6 +399,7 @@ class YouTubeAudioEngine {
 
   isPlaying(): boolean {
     if (this.activeSessionId === 0) return false;
+    if (this._isPlaying) return true;
     if (this.player && this.isPlayerReady && typeof this.player.getPlayerState === 'function') {
       try {
         return this.player.getPlayerState() === 1; // 1 = PLAYING
@@ -373,6 +410,7 @@ class YouTubeAudioEngine {
 
   stop(newSessionId = 0): void {
     this.activeSessionId = newSessionId;
+    this._isPlaying = false;
     this.stopTimeUpdate();
     this.currentVideoId = null;
     this.pendingVideoId = null;

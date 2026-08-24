@@ -1037,17 +1037,13 @@ class AudioPlayer {
 
   /**
    * Ultra-fast YouTube Fallback Resolver.
-   * Strategy:
-   *   1. Get the YouTube video ID (from song or search)
-   *   2. Extract direct audio stream URL via Piped/Invidious API (no IFrame needed)
-   *   3. Play via native HTML5 <audio> element — instant, Android-native, no WebView issues
-   *   4. Fall back to IFrame engine only if Piped/Invidious both fail
+   * Resolves the correct YouTube video ID and plays seamlessly via Headless YouTube Audio Engine.
    */
   private async playViaYouTubeFallback(targetSong: Song, sessionId: number, seekSeconds = 0): Promise<boolean> {
     if (!this.isUserInteracted) return false;
     this.emit({ type: 'loading', isLoading: true });
 
-    const { fetchAudioStreamFromYouTubeId, resolveYouTubeVideoId } = await import('../../data/api/youtubeMusicApi');
+    const { resolveYouTubeVideoId } = await import('../../data/api/youtubeMusicApi');
     if (sessionId !== this.playbackSessionId) return false;
 
     // ── Step 1: Get Video ID ──────────────────────────────────────────────────
@@ -1082,21 +1078,14 @@ class AudioPlayer {
       }
     }
 
-    // ── Step 2: Extract direct audio stream URL via Piped/Invidious ───────────
-    // This bypasses the broken YouTube IFrame API on Android WebView entirely
-    let directStreamUrl: string | null = null;
-    try {
-      const streamData = await fetchAudioStreamFromYouTubeId(videoId);
-      if (sessionId !== this.playbackSessionId) return false;
-      if (streamData?.streamUrl) {
-        directStreamUrl = streamData.streamUrl;
-        if (streamData.duration && streamData.duration > 0) targetSong.duration = streamData.duration;
-      }
-    } catch (e) {
-      console.warn('[AudioPlayer] Piped/Invidious stream extraction failed:', e);
-    }
-
     if (sessionId !== this.playbackSessionId) return false;
+
+    // ── Step 2: Route cleanly to YouTube Audio Engine ────────────────────────
+    this.cancelCrossfade();
+    this.audio.pause();
+    this.audio.removeAttribute('src');
+    this.audio.load();
+    this.activeEngine = 'youtube';
 
     targetSong.provider = 'youtube';
     targetSong.id = `yt_${videoId}`;
@@ -1104,32 +1093,6 @@ class AudioPlayer {
     this.updateMediaSession(targetSong);
     this.saveCurrentSession();
 
-    // ── Step 3: Play via native HTML5 audio if we got a direct URL ────────────
-    if (directStreamUrl) {
-      console.log('[AudioPlayer] YouTube via native audio (Piped/Invidious):', directStreamUrl.slice(0, 80));
-      this.cancelCrossfade();
-      youtubeAudioEngine.stop(0); // ensure IFrame engine is silent
-      this.activeEngine = 'html5'; // native audio engine
-      this.audio.pause();
-      this.audio.src = directStreamUrl;
-      this.audio.load();
-      if (seekSeconds > 0) this.audio.currentTime = seekSeconds;
-      try {
-        await this.audio.play();
-      } catch (e) {
-        console.warn('[AudioPlayer] Native YouTube audio play() error:', e);
-      }
-      this.emit({ type: 'loading', isLoading: false });
-      return true;
-    }
-
-    // ── Step 4: Last resort — IFrame engine (desktop/browser only) ────────────
-    console.warn('[AudioPlayer] Piped/Invidious unavailable, falling back to IFrame engine');
-    this.cancelCrossfade();
-    this.audio.pause();
-    this.audio.removeAttribute('src');
-    this.audio.load();
-    this.activeEngine = 'youtube';
     await youtubeAudioEngine.loadAndPlay(videoId, sessionId, seekSeconds);
     return true;
   }
