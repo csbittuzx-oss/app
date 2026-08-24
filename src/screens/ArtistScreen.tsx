@@ -14,7 +14,8 @@ import { resizeImageUrl } from '../core/utils/imageUtils';
 
 export function ArtistScreen() {
   const { nav: { nav, goBack }, isFavoriteArtist, toggleFavoriteArtist } = useApp();
-  const { playSong: _playSong } = usePlayer();
+  const { playSong: _playSong, state: playerState } = usePlayer();
+  const hasMiniPlayer = Boolean(playerState.currentSong);
   const artistName = String(nav.params?.artistName || '');
   const initialArtist = nav.params?.artist as Artist | undefined;
 
@@ -63,7 +64,15 @@ export function ArtistScreen() {
         </button>
       </div>
 
-      <div className="scroll-area" style={{ flex: 1, paddingBottom: 'var(--content-bottom-pad)' }}>
+      <div
+        className="scroll-area"
+        style={{
+          flex: 1,
+          paddingBottom: hasMiniPlayer
+            ? 'calc(72px + env(safe-area-inset-bottom, 0px) + 12px)'
+            : 'calc(env(safe-area-inset-bottom, 0px) + 20px)',
+        }}
+      >
         {error ? (
           <ErrorState type="api" onRetry={() => { setError(false); setLoading(true); getArtistDetails(artistName).then(({ artist: a, topTracks: t, similarArtists: s }) => { setArtist(a); setTopTracks(t); setSimilarArtists(s); setLoading(false); }).catch(() => { setError(true); setLoading(false); }); }} />
         ) : (

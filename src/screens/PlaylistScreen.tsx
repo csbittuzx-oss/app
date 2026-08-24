@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef } from 'react';
+import { useState, useEffect } from 'react';
 import { useApp } from '../state/AppContext';
 import { usePlayer } from '../state/PlayerContext';
 import { SongCard } from '../components/cards/SongCard';
@@ -15,43 +15,18 @@ import type { Playlist } from '../data/models';
 
 export function PlaylistScreen() {
   const { nav: { nav, goBack }, state, updatePlaylistTracks } = useApp();
-  const { playSong } = usePlayer();
+  const { playSong, state: playerState } = usePlayer();
+  const hasMiniPlayer = Boolean(playerState.currentSong);
 
   const playlistId = String(nav.params?.playlistId || '');
   const playlistParam = nav.params?.playlist as Playlist | undefined;
   const [offlinePlaylist, setOfflinePlaylist] = useState<Playlist | null>(null);
-  const [scrollRatio, setScrollRatio] = useState(0);
-  const scrollAreaRef = useRef<HTMLDivElement | null>(null);
 
   useEffect(() => {
     if (playlistId === 'offline_backup_mix') {
       getOfflineBackupPlaylist().then(pl => setOfflinePlaylist(pl));
     }
   }, [playlistId]);
-
-  // Scroll listener for smooth collapsing top bar
-  useEffect(() => {
-    const el = scrollAreaRef.current;
-    if (!el) return;
-
-    let rafId: number | null = null;
-    const handleScroll = () => {
-      if (rafId !== null) return;
-      rafId = requestAnimationFrame(() => {
-        rafId = null;
-        const top = el.scrollTop;
-        // Smoothly collapse from 30px to 180px scroll offset
-        const ratio = Math.min(1, Math.max(0, (top - 30) / 150));
-        setScrollRatio(ratio);
-      });
-    };
-
-    el.addEventListener('scroll', handleScroll, { passive: true });
-    return () => {
-      el.removeEventListener('scroll', handleScroll);
-      if (rafId !== null) cancelAnimationFrame(rafId);
-    };
-  }, []);
 
   const playlist = playlistParam
     || state.userPlaylists.find(p => p.id === playlistId)
@@ -97,143 +72,52 @@ export function PlaylistScreen() {
   };
 
   return (
-    <div style={{ display: 'flex', flexDirection: 'column', height: '100%', position: 'relative' }}>
-      {/* ── Smooth Collapsing Top Bar ── */}
-      <div
-        style={{
-          position: 'absolute',
-          top: 0,
-          left: 0,
-          right: 0,
-          height: 'calc(56px + env(safe-area-inset-top, 0px))',
-          paddingTop: 'env(safe-area-inset-top, 0px)',
-          paddingLeft: 12,
-          paddingRight: 12,
-          display: 'flex',
-          alignItems: 'center',
-          zIndex: 50,
-          background: `rgba(18, 18, 20, ${scrollRatio * 0.96})`,
-          backdropFilter: scrollRatio > 0.05 ? `blur(${scrollRatio * 20}px)` : 'none',
-          WebkitBackdropFilter: scrollRatio > 0.05 ? `blur(${scrollRatio * 20}px)` : 'none',
-          borderBottom: `1px solid rgba(255, 255, 255, ${scrollRatio * 0.12})`,
-          boxShadow: scrollRatio > 0.8 ? '0 4px 20px rgba(0, 0, 0, 0.4)' : 'none',
-          transition: 'background 60ms linear, border-color 60ms linear',
-          pointerEvents: scrollRatio > 0.05 ? 'auto' : 'none',
-        }}
-      >
-        {/* Back button on the left */}
-        <button
-          id="playlist-back-btn"
-          aria-label="Go back"
-          onClick={goBack}
-          style={{
-            width: 38,
-            height: 38,
-            borderRadius: '50%',
-            background: `rgba(0, 0, 0, ${0.55 * (1 - scrollRatio)})`,
-            backdropFilter: scrollRatio < 0.8 ? 'blur(8px)' : 'none',
-            border: scrollRatio < 0.5 ? '1px solid rgba(255, 255, 255, 0.15)' : 'none',
-            display: 'flex',
-            alignItems: 'center',
-            justifyContent: 'center',
-            cursor: 'pointer',
-            color: '#fff',
-            flexShrink: 0,
-            zIndex: 2,
-            pointerEvents: 'auto',
-            transition: 'background 120ms ease, border 120ms ease',
-          }}
-        >
+    <div style={{ display: 'flex', flexDirection: 'column', height: '100%' }}>
+      {/* Back */}
+      <div style={{ position: 'absolute', top: 'calc(env(safe-area-inset-top,0px) + 8px)', left: 8, zIndex: 10 }}>
+        <button id="playlist-back-btn" aria-label="Go back" onClick={goBack} style={{
+          width: 40, height: 40, borderRadius: '50%',
+          background: 'rgba(0,0,0,0.5)', backdropFilter: 'blur(8px)',
+          border: '1px solid var(--color-border)',
+          display: 'flex', alignItems: 'center', justifyContent: 'center',
+          cursor: 'pointer', color: '#fff',
+        }}>
           <svg width="20" height="20" viewBox="0 0 24 24" fill="none" aria-hidden="true">
-            <polyline points="15 18 9 12 15 6" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round" />
+            <polyline points="15 18 9 12 15 6" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
           </svg>
         </button>
-
-        {/* Centered Playlist Name */}
-        <div
-          style={{
-            position: 'absolute',
-            left: 58,
-            right: 58,
-            top: 'env(safe-area-inset-top, 0px)',
-            bottom: 0,
-            display: 'flex',
-            alignItems: 'center',
-            justifyContent: 'center',
-            opacity: scrollRatio,
-            transform: `translateY(${(1 - scrollRatio) * 6}px)`,
-            pointerEvents: 'none',
-            transition: 'opacity 80ms linear, transform 80ms linear',
-          }}
-        >
-          <h2
-            style={{
-              margin: 0,
-              fontSize: '15px',
-              fontWeight: 700,
-              color: 'var(--color-text-primary)',
-              overflow: 'hidden',
-              textOverflow: 'ellipsis',
-              whiteSpace: 'nowrap',
-              textAlign: 'center',
-              fontFamily: 'var(--font-display, inherit)',
-            }}
-          >
-            {playlist.title}
-          </h2>
-        </div>
       </div>
 
       <div
-        ref={scrollAreaRef}
         className="scroll-area"
-        style={{ flex: 1, paddingBottom: 'calc(var(--content-bottom-pad) + 40px)' }}
+        style={{
+          flex: 1,
+          paddingBottom: hasMiniPlayer
+            ? 'calc(72px + env(safe-area-inset-bottom, 0px) + 12px)'
+            : 'calc(env(safe-area-inset-bottom, 0px) + 20px)',
+        }}
       >
-        {/* Large Header */}
-        <div
-          style={{
-            padding: '60px 20px 20px',
-            display: 'flex',
-            flexDirection: 'column',
-            alignItems: 'center',
-            gap: 14,
-            opacity: Math.max(0, 1 - scrollRatio * 1.15),
-            transform: `translateY(${scrollRatio * -8}px)`,
-            transition: 'opacity 80ms linear, transform 80ms linear',
-          }}
-        >
-          <div
-            style={{
-              width: 180,
-              height: 180,
-              borderRadius: 'var(--radius-xl)',
-              overflow: 'hidden',
-              flexShrink: 0,
-              boxShadow: '0 16px 48px rgba(0,0,0,0.5)',
-              border: '1px solid var(--color-border)',
-              background: 'var(--color-surface-2)',
-              display: 'flex',
-              alignItems: 'center',
-              justifyContent: 'center',
-            }}
-          >
+        {/* Header */}
+        <div style={{ padding: '60px 20px 20px', display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 14 }}>
+          <div style={{
+            width: 180, height: 180, borderRadius: 'var(--radius-xl)',
+            overflow: 'hidden', flexShrink: 0,
+            boxShadow: '0 16px 48px rgba(0,0,0,0.5)',
+            border: '1px solid var(--color-border)',
+            background: 'var(--color-surface-2)',
+            display: 'flex', alignItems: 'center', justifyContent: 'center',
+          }}>
             {verifiedTracks.length > 0 && artworkSrc ? (
-              <img
-                src={artworkSrc}
-                alt="Playlist artwork"
-                width={180}
-                height={180}
+              <img src={artworkSrc} alt="Playlist artwork" width={180} height={180}
                 loading="eager"
-                onError={(e) => {
-                  (e.target as HTMLImageElement).src = CONFIG.ARTWORK_PLACEHOLDER;
-                }}
+                onError={(e) => { (e.target as HTMLImageElement).src = CONFIG.ARTWORK_PLACEHOLDER; }}
                 style={{ objectFit: 'cover' }}
               />
             ) : (
               <svg width="56" height="56" viewBox="0 0 24 24" fill="none" aria-hidden="true">
-                <path d="M9 18V5l12-2v13" stroke="var(--color-text-muted)" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" />
-                <circle cx="6" cy="18" r="3" stroke="var(--color-text-muted)" strokeWidth="1.5" />
-                <circle cx="18" cy="16" r="3" stroke="var(--color-text-muted)" strokeWidth="1.5" />
+                <path d="M9 18V5l12-2v13" stroke="var(--color-text-muted)" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"/>
+                <circle cx="6" cy="18" r="3" stroke="var(--color-text-muted)" strokeWidth="1.5"/>
+                <circle cx="18" cy="16" r="3" stroke="var(--color-text-muted)" strokeWidth="1.5"/>
               </svg>
             )}
           </div>
@@ -261,9 +145,7 @@ export function PlaylistScreen() {
               className="btn btn-primary"
               style={{ flex: 1, padding: '12px 20px', borderRadius: 'var(--radius-full)', opacity: verifiedTracks.length ? 1 : 0.5 }}
             >
-              <svg width="18" height="18" viewBox="0 0 24 24" fill="currentColor">
-                <polygon points="5 3 19 12 5 21 5 3" />
-              </svg>
+              <svg width="18" height="18" viewBox="0 0 24 24" fill="currentColor"><polygon points="5 3 19 12 5 21 5 3"/></svg>
               Play
             </button>
             <button
@@ -273,13 +155,7 @@ export function PlaylistScreen() {
               className="btn btn-ghost"
               style={{ flex: 1, padding: '12px 20px', borderRadius: 'var(--radius-full)', opacity: verifiedTracks.length ? 1 : 0.5 }}
             >
-              <svg width="18" height="18" viewBox="0 0 24 24" fill="none">
-                <polyline points="16 3 21 3 21 8" />
-                <line x1="4" y1="20" x2="21" y2="3" />
-                <polyline points="21 16 21 21 16 21" />
-                <line x1="15" y1="15" x2="21" y2="21" />
-                <line x1="4" y1="4" x2="9" y2="9" />
-              </svg>
+              <svg width="18" height="18" viewBox="0 0 24 24" fill="none"><polyline points="16 3 21 3 21 8"/><line x1="4" y1="20" x2="21" y2="3"/><polyline points="21 16 21 21 16 21"/><line x1="15" y1="15" x2="21" y2="21"/><line x1="4" y1="4" x2="9" y2="9"/></svg>
               Shuffle
             </button>
           </div>

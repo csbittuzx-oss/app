@@ -14,7 +14,8 @@ import { resizeImageUrl } from '../core/utils/imageUtils';
 
 export function AlbumScreen() {
   const { nav: { nav, goBack } } = useApp();
-  const { playSong } = usePlayer();
+  const { playSong, state: playerState } = usePlayer();
+  const hasMiniPlayer = Boolean(playerState.currentSong);
 
   const albumId = String(nav.params?.albumId || '');
   const albumTitle = String(nav.params?.albumTitle || 'Album');
@@ -69,7 +70,15 @@ export function AlbumScreen() {
         </button>
       </div>
 
-      <div className="scroll-area" style={{ flex: 1, paddingBottom: 'var(--content-bottom-pad)' }}>
+      <div
+        className="scroll-area"
+        style={{
+          flex: 1,
+          paddingBottom: hasMiniPlayer
+            ? 'calc(72px + env(safe-area-inset-bottom, 0px) + 12px)'
+            : 'calc(env(safe-area-inset-bottom, 0px) + 20px)',
+        }}
+      >
         {/* Album header */}
         <div style={{ padding: '60px 20px 20px', display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 16 }}>
           <img
