@@ -415,7 +415,7 @@ class AudioPlayer {
         this.isAutoRecovering = true;
         const songToRecover = this.currentSong;
         const resumePos = this.audio.currentTime || this.savedResumePosition || 0;
-        this.playViaYouTubeFallback(songToRecover, resumePos)
+        this.playViaYouTubeFallback(songToRecover, this.playbackSessionId, resumePos)
           .catch(() => {
             this.emit({ type: 'loading', isLoading: false });
             this.emit({ type: 'error', error: 'Playback failed. Tap to retry.' });
