@@ -277,6 +277,8 @@ class AudioPlayer {
     });
 
     this.audio.addEventListener('play', () => {
+      if (this.activeEngine !== 'html5') return;
+      this.emit({ type: 'loading', isLoading: false });
       this.emit({ type: 'play' });
       this.emit({ type: 'error', error: null });
       if (this.currentSong) {
@@ -290,11 +292,14 @@ class AudioPlayer {
     });
 
     this.audio.addEventListener('playing', () => {
+      if (this.activeEngine !== 'html5') return;
       this.emit({ type: 'loading', isLoading: false });
+      this.emit({ type: 'play' });
       this.emit({ type: 'error', error: null });
     });
 
     this.audio.addEventListener('pause', () => {
+      if (this.activeEngine !== 'html5') return;
       this.emit({ type: 'pause' });
       this.saveCurrentSession();
       if (this.currentSong) {
@@ -308,11 +313,13 @@ class AudioPlayer {
     });
 
     this.audio.addEventListener('ended', () => {
+      if (this.activeEngine !== 'html5') return;
       this.saveCurrentSession();
       this.handleEnded();
     });
 
     this.audio.addEventListener('timeupdate', () => {
+      if (this.activeEngine !== 'html5') return;
       const duration = this.audio.duration || 0;
       const currentTime = this.audio.currentTime;
       const progress = duration > 0 ? currentTime / duration : 0;
@@ -404,6 +411,7 @@ class AudioPlayer {
       }
     });
     this.audio.addEventListener('error', () => {
+      if (this.activeEngine !== 'html5') return;
       const err = this.audio.error;
       // Filter out abort errors, empty src resets during song switching, or unmounted states
       if (!this.audio.src || !this.currentSong || err?.code === MediaError.MEDIA_ERR_ABORTED || !this.isUserInteracted) {
