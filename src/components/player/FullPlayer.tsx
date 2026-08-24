@@ -317,8 +317,16 @@ export function FullPlayer() {
 
   if (!currentSong) return null;
 
-  const displayProgress = isDragging ? dragProgress : progress;
-  const displayTime = isDragging ? dragProgress * duration : currentTime;
+  const effectiveDuration = (duration && !isNaN(duration) && isFinite(duration) && duration > 0)
+    ? duration
+    : (currentSong?.duration || 0);
+
+  const displayProgress = isDragging
+    ? dragProgress
+    : (effectiveDuration > 0 ? Math.min(1, Math.max(0, currentTime / effectiveDuration)) : (progress || 0));
+
+  const displayTime = isDragging ? dragProgress * effectiveDuration : currentTime;
+  const remainingTime = Math.max(0, effectiveDuration - displayTime);
 
   // ─── Progress bar drag handling ───────────────────────────────────────────
   const handleProgressInteraction = (e: React.MouseEvent | React.TouchEvent) => {
@@ -810,7 +818,7 @@ export function FullPlayer() {
               {formatDuration(displayTime)}
             </span>
             <span style={{ fontSize: 'var(--text-xs)', color: 'var(--color-text-muted)' }}>
-              {duration > 0 ? `-${formatDuration(duration - displayTime)}` : '0:00'}
+              {effectiveDuration > 0 ? `-${formatDuration(remainingTime)}` : '0:00'}
             </span>
           </div>
         </div>

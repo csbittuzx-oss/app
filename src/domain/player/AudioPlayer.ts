@@ -213,8 +213,25 @@ class AudioPlayer {
     const song = this.currentSong;
     if (!song) return;
 
-    const duration = this.audio.duration || song.duration || 0;
-    let currentTime = this.audio.currentTime || 0;
+    let rawDuration = 0;
+    let rawTime = 0;
+
+    if (this.activeEngine === 'youtube') {
+      rawDuration = youtubeAudioEngine.getDuration();
+      rawTime = youtubeAudioEngine.getCurrentTime();
+    } else {
+      rawDuration = this.audio.duration;
+      rawTime = this.audio.currentTime;
+    }
+
+    const duration = (rawDuration && !isNaN(rawDuration) && isFinite(rawDuration) && rawDuration > 0)
+      ? Math.round(rawDuration)
+      : (song.duration || 0);
+
+    let currentTime = (rawTime && !isNaN(rawTime) && isFinite(rawTime) && rawTime > 0)
+      ? Math.round(rawTime)
+      : 0;
+
     if (this.savedResumePosition > 0 && currentTime === 0 && this.savedResumeTrackId === song.id) {
       currentTime = this.savedResumePosition;
     }
@@ -244,7 +261,12 @@ class AudioPlayer {
   private bindEvents() {
     // Initialize Android native media notification & background lockscreen controls
     MediaNotificationService.init({
-      onPlay: () => this.resume(),
+      onPlay: () => {
+        // Prevent spurious auto-play on app launch / initial service binding
+        if (this.currentSong && (this.audio.src || this.activeEngine === 'youtube')) {
+          this.resume();
+        }
+      },
       onPause: () => this.pause(),
       onNext: () => this.next(),
       onPrev: () => this.previous(),
@@ -1447,7 +1469,8 @@ class AudioPlayer {
     ) {
       console.warn('Playback ended prematurely (<35s). Re-resolving via YouTube fallback...');
       const target = this.currentSong;
-      this.playViaYouTubeFallback(target, 0)
+      const currentEndPos = Math.floor(this.audio.currentTime || 0);
+      this.playViaYouTubeFallback(target, currentEndPos)
         .then((handled) => {
           if (!handled) this.proceedAfterEnded();
         })

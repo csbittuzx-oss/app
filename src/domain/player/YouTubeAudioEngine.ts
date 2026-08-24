@@ -107,7 +107,7 @@ class YouTubeAudioEngine {
         height: '1',
         width: '1',
         playerVars: {
-          autoplay: 1,
+          autoplay: 0,
           controls: 0,
           disablekb: 1,
           fs: 0,
@@ -122,14 +122,15 @@ class YouTubeAudioEngine {
           onReady: () => {
             this.isPlayerReady = true;
             this.player.setVolume(Math.round(this.volume * 100));
-            if (this.pendingVideoId) {
+            if (this.pendingVideoId && this.pendingPlay) {
               const vid = this.pendingVideoId;
               const start = this.pendingStartTime;
-              const autoPlay = this.pendingPlay;
               this.pendingVideoId = null;
-              if (autoPlay) {
-                this.loadAndPlay(vid, start);
-              }
+              this.pendingPlay = false;
+              this.loadAndPlay(vid, start);
+            } else {
+              this.pendingVideoId = null;
+              this.pendingPlay = false;
             }
           },
           onStateChange: (event: any) => {
