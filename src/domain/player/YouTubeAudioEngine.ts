@@ -88,10 +88,10 @@ class YouTubeAudioEngine {
       container = document.createElement('div');
       container.id = 'headless-yt-audio-container';
       container.style.position = 'fixed';
-      container.style.top = '-9999px';
-      container.style.left = '-9999px';
-      container.style.width = '1px';
-      container.style.height = '1px';
+      container.style.bottom = '0px';
+      container.style.right = '0px';
+      container.style.width = '200px';
+      container.style.height = '200px';
       container.style.opacity = '0.001';
       container.style.pointerEvents = 'none';
       container.style.zIndex = '-1';
@@ -104,8 +104,8 @@ class YouTubeAudioEngine {
 
     try {
       this.player = new window.YT.Player('headless-yt-player-target', {
-        height: '1',
-        width: '1',
+        height: '200',
+        width: '200',
         playerVars: {
           autoplay: 0,
           controls: 0,
@@ -157,14 +157,20 @@ class YouTubeAudioEngine {
       this.emit({ type: 'playing' });
       this.startTimeUpdate();
     } else if (state === 2) { // PAUSED
+      this.emit({ type: 'loading', isLoading: false });
       this.emit({ type: 'pause' });
       this.stopTimeUpdate();
     } else if (state === 3) { // BUFFERING
       this.emit({ type: 'loading', isLoading: true });
+    } else if (state === 5) { // CUED
+      if (this.player && typeof this.player.playVideo === 'function') {
+        this.player.playVideo();
+      }
     } else if (state === 0) { // ENDED
       if (!this.isEndedEmitted) {
         this.isEndedEmitted = true;
         this.stopTimeUpdate();
+        this.emit({ type: 'loading', isLoading: false });
         this.emit({ type: 'ended' });
       }
     }
