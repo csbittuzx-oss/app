@@ -161,7 +161,7 @@ function AppShell() {
     if (appState.config.autoUpdate !== false) {
       const timer = setTimeout(async () => {
         try {
-          const res = await updateService.checkForUpdates(true);
+          const res = await updateService.checkForUpdates(false);
           if (res.hasUpdate && res.latestUpdate) {
             setAvailableUpdate(res.latestUpdate);
             setShowUpdateModal(true);

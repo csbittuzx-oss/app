@@ -15,7 +15,11 @@ export function UpdateModal({ updateInfo, isOpen, onClose }: UpdateModalProps) {
     updateService.compareVersions(updateInfo.minSupportedVersion || '1.0.0', CURRENT_APP_VERSION) > 0;
 
   const handleUpdateClick = () => {
+    try {
+      localStorage.setItem('sw_last_updated_version', updateInfo.version);
+    } catch {}
     updateService.downloadAndInstallUpdate(updateInfo.apkUrl);
+    onClose();
   };
 
   const handleExitApp = async () => {

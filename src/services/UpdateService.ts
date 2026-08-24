@@ -1,8 +1,10 @@
 // ═══════════════════════════════════════════
-//  UpdateService — In-App Update Engine via Firebase Backend
+//  UpdateService — In-App Update Engine via Render & Firebase
 //  Checks for latest app releases, changelogs, critical security patches,
 //  and presents smooth update prompts to Soundwave users.
 // ═══════════════════════════════════════════
+
+import { App as CapApp } from '@capacitor/app';
 
 export interface AppUpdateInfo {
   version: string;
@@ -23,16 +25,18 @@ export interface UpdateCheckResult {
 }
 
 // Current App Version installed on device
-export const CURRENT_APP_VERSION = '1.2.1';
-export const CURRENT_BUILD_NUMBER = 20260817;
+export const CURRENT_APP_VERSION = '1.3.0';
+export const CURRENT_BUILD_NUMBER = 20260824;
 
 const DEFAULT_RENDER_BACKEND = 'https://app-oorz.onrender.com';
 const FIREBASE_RTDB_URL = 'https://soundwaves-b520c-default-rtdb.asia-southeast1.firebasedatabase.app';
 const UPDATE_CACHE_KEY = 'sw_latest_update_info';
+const LAST_UPDATED_VERSION_KEY = 'sw_last_updated_version';
 
 class UpdateService {
   private cachedUpdate: AppUpdateInfo | null = null;
   private isChecking = false;
+  private detectedVersion: string | null = null;
 
   constructor() {
     try {
@@ -47,6 +51,24 @@ class UpdateService {
 
   public getBackendUrl(): string {
     return DEFAULT_RENDER_BACKEND;
+  }
+
+  /**
+   * Dynamically retrieves the actual installed app version at runtime
+   */
+  public async getCurrentVersion(): Promise<string> {
+    if (this.detectedVersion) return this.detectedVersion;
+    try {
+      const info = await CapApp.getInfo();
+      if (info && info.version) {
+        this.detectedVersion = info.version;
+        return info.version;
+      }
+    } catch {
+      // fallback
+    }
+    this.detectedVersion = CURRENT_APP_VERSION;
+    return CURRENT_APP_VERSION;
   }
 
   /**
@@ -73,12 +95,14 @@ class UpdateService {
   /**
    * Fetches latest update metadata from Render Backend & Firebase Realtime Database
    */
-  public async checkForUpdates(_force = false): Promise<UpdateCheckResult> {
+  public async checkForUpdates(force = false): Promise<UpdateCheckResult> {
+    const currentVer = await this.getCurrentVersion();
+
     if (this.isChecking) {
       return {
         hasUpdate: false,
         forceUpdate: false,
-        currentVersion: CURRENT_APP_VERSION,
+        currentVersion: currentVer,
         latestUpdate: this.cachedUpdate,
       };
     }
@@ -91,7 +115,7 @@ class UpdateService {
 
       // 1. Try Configured Render Backend API
       try {
-        const renderUrl = `${backendBase}/api/updates/latest?version=${encodeURIComponent(CURRENT_APP_VERSION)}&t=${Date.now()}`;
+        const renderUrl = `${backendBase}/api/updates/latest?version=${encodeURIComponent(currentVer)}&t=${Date.now()}`;
         const res = await fetch(renderUrl, {
           headers: { 'Accept': 'application/json' },
           cache: 'no-store',
@@ -126,7 +150,7 @@ class UpdateService {
         return {
           hasUpdate: false,
           forceUpdate: false,
-          currentVersion: CURRENT_APP_VERSION,
+          currentVersion: currentVer,
           latestUpdate: null,
         };
       }
@@ -149,14 +173,21 @@ class UpdateService {
       this.cachedUpdate = updateInfo;
       localStorage.setItem(UPDATE_CACHE_KEY, JSON.stringify(updateInfo));
 
-      const hasUpdate = this.compareVersions(updateInfo.version, CURRENT_APP_VERSION) > 0;
+      // Check if installed version is already equal to or newer than update version
+      const isNewer = this.compareVersions(updateInfo.version, currentVer) > 0;
       const isForced = updateInfo.forceUpdate ||
-        this.compareVersions(updateInfo.minSupportedVersion, CURRENT_APP_VERSION) > 0;
+        this.compareVersions(updateInfo.minSupportedVersion, currentVer) > 0;
+
+      // If user already updated/downloaded this exact version, don't show popup on startup unless forced
+      const dismissedVer = localStorage.getItem(LAST_UPDATED_VERSION_KEY);
+      const isAlreadyHandled = !force && !isForced && dismissedVer && this.compareVersions(dismissedVer, updateInfo.version) >= 0;
+
+      const hasUpdate = isNewer && !isAlreadyHandled;
 
       return {
         hasUpdate,
         forceUpdate: isForced,
-        currentVersion: CURRENT_APP_VERSION,
+        currentVersion: currentVer,
         latestUpdate: updateInfo,
       };
     } catch (e) {
@@ -164,7 +195,7 @@ class UpdateService {
       return {
         hasUpdate: false,
         forceUpdate: false,
-        currentVersion: CURRENT_APP_VERSION,
+        currentVersion: currentVer,
         latestUpdate: this.cachedUpdate,
       };
     } finally {
@@ -178,7 +209,7 @@ class UpdateService {
   public downloadAndInstallUpdate(apkUrl: string) {
     if (!apkUrl) return;
     if (typeof window !== 'undefined') {
-      window.open(apkUrl, '_blank', 'noopener,noreferrer');
+      window.open(apkUrl, '_system');
     }
   }
 }
