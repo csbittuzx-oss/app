@@ -162,9 +162,12 @@ class YouTubeAudioEngine {
       this.stopTimeUpdate();
     } else if (state === 3) { // BUFFERING
       this.emit({ type: 'loading', isLoading: true });
-    } else if (state === 5) { // CUED
+    } else if (state === 5 || state === -1) { // CUED or UNSTARTED
       if (this.player && typeof this.player.playVideo === 'function') {
-        this.player.playVideo();
+        try {
+          this.player.unMute?.();
+          this.player.playVideo();
+        } catch {}
       }
     } else if (state === 0) { // ENDED
       if (!this.isEndedEmitted) {
@@ -223,6 +226,9 @@ class YouTubeAudioEngine {
           startSeconds: startSeconds || 0,
         });
         this.player.setVolume(Math.round(this.volume * 100));
+        this.player.playVideo();
+      } else if (typeof this.player.cueVideoById === 'function') {
+        this.player.cueVideoById(cleanId, startSeconds || 0);
         this.player.playVideo();
       }
     } catch (e) {
