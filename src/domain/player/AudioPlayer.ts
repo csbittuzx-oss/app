@@ -340,63 +340,7 @@ class AudioPlayer {
         this.lastTimeUpdateSecond = currentSec;
       }
 
-      // When Riding Mode is ON, continuously check remaining duration and trigger DJ crossfade 8-9s before track end
-      if (
-        this._ridingMode &&
-        !this.isCrossfading &&
-        !this.isResolvingCrossfade &&
-        !this.audio.paused &&
-        this.currentSong &&
-        this.crossfadeSongId !== this.currentSong.id &&
-        duration > 15 &&
-        currentTime > 0
-      ) {
-        const remaining = duration - currentTime;
-        if (remaining > 0 && remaining <= 9 && this._repeat !== 'one') {
-          const nextIndex = this._queueIndex + 1;
-          const hasNext = nextIndex < this._queue.length || (this._repeat === 'all' && this._queue.length > 0) || (this._autoPlay && (this._queue.length > 0 || this._automixQueue.length > 0));
-          if (hasNext) {
-            this.crossfadeSongId = this.currentSong.id;
-            this.startCrossfade();
-          }
-        }
-      }
-
-      // ── Non-Stop Playback AutoMix Auto-Injection ──
-      // When user is near the final track in queue (<= 16s remaining), pop next automix song and append
-      const remainingSec = duration - currentTime;
-      if (
-        this._autoPlay &&
-        duration > 20 &&
-        remainingSec > 0 &&
-        remainingSec <= 16 &&
-        this._queueIndex >= this._queue.length - 1 &&
-        this._automixQueue.length > 0
-      ) {
-        this.injectNextAutomixTrack();
-      }
-
-      // Proactively replenish automix buffer if it drops below 5 items
-      if (
-        this._autoPlay &&
-        this.currentSong &&
-        this._automixQueue.length < 5 &&
-        !this.isAutomixReplenishing
-      ) {
-        this.replenishAutomixQueue(this.currentSong);
-      }
-
-      // Proactively pre-fetch context-pure recommendations when 50% through the song and near queue end
-      if (
-        this._autoPlay &&
-        progress > 0.50 &&
-        this.currentSong &&
-        this.lastPrefetchedSongId !== this.currentSong.id &&
-        this._queueIndex >= this._queue.length - 2
-      ) {
-        this.lastPrefetchedSongId = this.currentSong.id;
-        this.triggerSmartPreload(this.currentSong);
-      }
+      this.checkRidingModeAndAutomix(currentTime, duration, progress);
     });
 
     this.audio.addEventListener('loadstart', () => {
@@ -478,6 +422,7 @@ class AudioPlayer {
         const progress = duration > 0 ? currentTime / duration : 0;
         this.emit({ type: 'timeupdate', currentTime, duration, progress });
         this.updateMediaSessionPosition();
+        this.checkRidingModeAndAutomix(currentTime, duration, progress);
       } else if (event.type === 'loading') {
         this.emit({ type: 'loading', isLoading: event.isLoading });
       } else if (event.type === 'error') {
@@ -1153,10 +1098,78 @@ class AudioPlayer {
     }, 8000);
   }
 
-  // ─── Riding Mode DJ Crossfade Engine ───────────────────────────────────────
+  // ─── Riding Mode DJ Crossfade & Automix Buffer Engine ───────────────────────
+
+  private checkRidingModeAndAutomix(currentTime: number, duration: number, progress: number) {
+    if (!this.currentSong || duration <= 15 || currentTime <= 0) return;
+
+    const isCurrentPlaying = this.activeEngine === 'youtube'
+      ? youtubeAudioEngine.isPlaying()
+      : (!this.audio.paused && !this.audio.ended);
+
+    if (!isCurrentPlaying) return;
+
+    // When Riding Mode is ON, continuously check remaining duration and trigger DJ crossfade 8-9s before track end
+    if (
+      this._ridingMode &&
+      !this.isCrossfading &&
+      !this.isResolvingCrossfade &&
+      this.crossfadeSongId !== this.currentSong.id
+    ) {
+      const remaining = duration - currentTime;
+      if (remaining > 0 && remaining <= 8.5 && this._repeat !== 'one') {
+        const nextIndex = this._queueIndex + 1;
+        const hasNext = nextIndex < this._queue.length || (this._repeat === 'all' && this._queue.length > 0) || (this._autoPlay && (this._queue.length > 0 || this._automixQueue.length > 0));
+        if (hasNext) {
+          this.crossfadeSongId = this.currentSong.id;
+          this.startCrossfade();
+        }
+      }
+    }
+
+    // ── Non-Stop Playback AutoMix Auto-Injection ──
+    // When user is near the final track in queue (<= 16s remaining), pop next automix song and append
+    const remainingSec = duration - currentTime;
+    if (
+      this._autoPlay &&
+      duration > 20 &&
+      remainingSec > 0 &&
+      remainingSec <= 16 &&
+      this._queueIndex >= this._queue.length - 1 &&
+      this._automixQueue.length > 0
+    ) {
+      this.injectNextAutomixTrack();
+    }
+
+    // Proactively replenish automix buffer if it drops below 5 items
+    if (
+      this._autoPlay &&
+      this.currentSong &&
+      this._automixQueue.length < 5 &&
+      !this.isAutomixReplenishing
+    ) {
+      this.replenishAutomixQueue(this.currentSong);
+    }
+
+    // Proactively pre-fetch context-pure recommendations when 50% through the song and near queue end
+    if (
+      this._autoPlay &&
+      progress > 0.50 &&
+      this.currentSong &&
+      this.lastPrefetchedSongId !== this.currentSong.id &&
+      this._queueIndex >= this._queue.length - 2
+    ) {
+      this.lastPrefetchedSongId = this.currentSong.id;
+      this.triggerSmartPreload(this.currentSong);
+    }
+  }
 
   private async startCrossfade(): Promise<void> {
-    if (this.isCrossfading || this.isResolvingCrossfade || !this._ridingMode || this.audio.paused) return;
+    const isCurrentPlaying = this.activeEngine === 'youtube'
+      ? youtubeAudioEngine.isPlaying()
+      : (!this.audio.paused && !this.audio.ended);
+
+    if (this.isCrossfading || this.isResolvingCrossfade || !this._ridingMode || !isCurrentPlaying) return;
 
     let nextIndex = this._queueIndex + 1;
     let nextSong: Song | null = null;
@@ -1227,7 +1240,11 @@ class AudioPlayer {
 
       this.isResolvingCrossfade = false;
 
-      if (!this._ridingMode || this.audio.paused || !streamUrl || isPreviewAudioUrl(streamUrl)) {
+      const stillPlaying = this.activeEngine === 'youtube'
+        ? youtubeAudioEngine.isPlaying()
+        : (!this.audio.paused && !this.audio.ended);
+
+      if (!this._ridingMode || !stillPlaying || !streamUrl || isPreviewAudioUrl(streamUrl)) {
         return;
       }
 
@@ -1241,7 +1258,7 @@ class AudioPlayer {
         }
       }
 
-      if (!this._ridingMode || this.audio.paused) return;
+      if (!this._ridingMode || (!this.activeEngine && this.audio.paused)) return;
 
       this.isCrossfading = true;
       this.isCrossfadePaused = false;
@@ -1296,7 +1313,11 @@ class AudioPlayer {
       const fadeOutVol = Math.max(0, Math.min(1, this._volume * gainOut));
       const fadeInVol = Math.max(0, Math.min(1, this._volume * gainIn));
 
-      if (this.audio) this.audio.volume = fadeOutVol;
+      if (this.activeEngine === 'youtube') {
+        youtubeAudioEngine.setVolume(fadeOutVol);
+      } else if (this.audio) {
+        this.audio.volume = fadeOutVol;
+      }
       if (this.crossfadeAudio) this.crossfadeAudio.volume = fadeInVol;
 
       if (p >= 1) {
@@ -1328,7 +1349,13 @@ class AudioPlayer {
     this.crossfadeAudio.src = '';
     this.crossfadeAudio.volume = 0;
 
-    // Load and continue seamlessly on primary audio element (no duplicate bindEvents)
+    // Stop YouTube engine if outgoing track was YouTube
+    if (this.activeEngine === 'youtube') {
+      youtubeAudioEngine.stop();
+    }
+    this.activeEngine = 'html5';
+
+    // Load and continue seamlessly on primary audio element
     this.audio.src = nextSrc;
     this.audio.currentTime = nextCurrentTime;
     this.audio.volume = this._volume;
@@ -1358,7 +1385,9 @@ class AudioPlayer {
       this.crossfadeAudio.src = '';
       this.crossfadeAudio.volume = 0;
     }
-    if (this.audio) {
+    if (this.activeEngine === 'youtube') {
+      youtubeAudioEngine.setVolume(this._volume);
+    } else if (this.audio) {
       this.audio.volume = this._volume;
     }
     this.isCrossfading = false;
