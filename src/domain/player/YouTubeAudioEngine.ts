@@ -106,6 +106,7 @@ class YouTubeAudioEngine {
       this.player = new window.YT.Player('headless-yt-player-target', {
         height: '200',
         width: '200',
+        host: 'https://www.youtube-nocookie.com',
         playerVars: {
           autoplay: 0,
           controls: 0,
@@ -116,7 +117,6 @@ class YouTubeAudioEngine {
           rel: 0,
           playsinline: 1,
           enablejsapi: 1,
-          origin: window.location.origin,
         },
         events: {
           onReady: () => {

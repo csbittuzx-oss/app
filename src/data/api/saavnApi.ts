@@ -64,6 +64,26 @@ export function decryptMediaUrl(encryptedUrl?: string, quality: AudioQuality = '
 }
 
 /**
+ * Directly fetches authentic high-quality media stream by Saavn song ID.
+ */
+export async function fetchSaavnSongStreamById(songId: string, quality: AudioQuality = 'high'): Promise<string | null> {
+  const cleanId = songId.replace('saavn_', '').trim();
+  if (!cleanId || !/^\d+$/.test(cleanId)) return null;
+  try {
+    const detailsUrl = `${BASE_URL}?__call=song.getDetails&pids=${cleanId}&_format=json&_marker=0&ctx=web6dot0`;
+    const detailsData = await universalGet(detailsUrl);
+    const songItem = Array.isArray(detailsData?.songs) ? detailsData.songs[0] : (detailsData?.[cleanId] || null);
+    if (songItem?.encrypted_media_url) {
+      const dec = decryptMediaUrl(songItem.encrypted_media_url, quality);
+      if (dec && !isPreviewAudioUrl(dec)) {
+        return formatMediaUrlWithQuality(dec, quality);
+      }
+    }
+  } catch {}
+  return null;
+}
+
+/**
  * Detects if a URL is a 30s preview clip rather than a full-length playable audio stream.
  */
 export function isPreviewAudioUrl(url?: string | null): boolean {

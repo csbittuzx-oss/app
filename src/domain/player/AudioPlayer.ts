@@ -8,7 +8,7 @@
 
 import type { Song, RepeatMode, AudioQuality } from '../../data/models';
 import { shuffle } from '../../core/utils';
-import { resolveFullTrack, formatMediaUrlWithQuality, isPreviewAudioUrl } from '../../data/api/saavnApi';
+import { resolveFullTrack, formatMediaUrlWithQuality, isPreviewAudioUrl, fetchSaavnSongStreamById } from '../../data/api/saavnApi';
 import { cacheSongForOfflineBackup, getOfflineSongStream } from '../../services/OfflineBackupService';
 import { showToast } from '../../core/utils/toast';
 import { MediaNotificationService } from '../../services/MediaNotificationService';
@@ -964,35 +964,52 @@ class AudioPlayer {
       targetSong.previewUrl = null;
     }
 
-    const isShortPreview = (!targetSong.previewUrl && navigator.onLine)
-      || targetSong.provider === 'itunes'
-      || targetSong.id.startsWith('spotify_')
-      || isPreviewAudioUrl(targetSong.previewUrl);
-
-    if (isShortPreview && navigator.onLine) {
-      try {
-        const isSpotifyImport = targetSong.id.startsWith('spotify_');
-        const fullTrack = await resolveFullTrack(
-          targetSong.title,
-          targetSong.artist,
-          this._audioQuality,
-          targetSong.duration,
-          isSpotifyImport
-        );
-        if (myGen !== this._playGeneration) return;
-        if (fullTrack?.streamUrl && !isPreviewAudioUrl(fullTrack.streamUrl)) {
-          targetSong.previewUrl = fullTrack.streamUrl;
-          if (fullTrack.duration > 0) targetSong.duration = fullTrack.duration;
-          if (!targetSong.artwork && fullTrack.artwork) {
-            targetSong.artwork = fullTrack.artwork;
-            targetSong.artworkLg = fullTrack.artwork;
+    if ((!targetSong.previewUrl || isPreviewAudioUrl(targetSong.previewUrl)) && navigator.onLine) {
+      // 1. Direct Saavn ID lookup
+      if (targetSong.id.startsWith('saavn_')) {
+        try {
+          const directSaavnUrl = await fetchSaavnSongStreamById(targetSong.id, this._audioQuality);
+          if (myGen !== this._playGeneration) return;
+          if (directSaavnUrl && !isPreviewAudioUrl(directSaavnUrl)) {
+            targetSong.previewUrl = directSaavnUrl;
+            targetSong.provider = 'saavn';
+            this.emit({ type: 'songchange', song: { ...targetSong } });
           }
-          targetSong.provider = 'saavn';
-          this.emit({ type: 'songchange', song: { ...targetSong } });
-        }
-      } catch (e) {
-        console.warn('Full track resolve fallback:', e);
+        } catch {}
       }
+
+      // 2. Full track search resolution by Title & Artist
+      if (!targetSong.previewUrl || isPreviewAudioUrl(targetSong.previewUrl)) {
+        try {
+          const isSpotifyImport = targetSong.id.startsWith('spotify_');
+          const fullTrack = await resolveFullTrack(
+            targetSong.title,
+            targetSong.artist,
+            this._audioQuality,
+            targetSong.duration,
+            isSpotifyImport
+          );
+          if (myGen !== this._playGeneration) return;
+          if (fullTrack?.streamUrl && !isPreviewAudioUrl(fullTrack.streamUrl)) {
+            targetSong.previewUrl = fullTrack.streamUrl;
+            if (fullTrack.duration > 0) targetSong.duration = fullTrack.duration;
+            if (!targetSong.artwork && fullTrack.artwork) {
+              targetSong.artwork = fullTrack.artwork;
+              targetSong.artworkLg = fullTrack.artwork;
+            }
+            targetSong.provider = 'saavn';
+            this.emit({ type: 'songchange', song: { ...targetSong } });
+          }
+        } catch (e) {
+          console.warn('Full track resolve fallback:', e);
+        }
+      }
+    }
+
+    // 3. If stream is STILL unavailable on JioSaavn, trigger Instant YouTube Fallback
+    if ((!targetSong.previewUrl || isPreviewAudioUrl(targetSong.previewUrl)) && navigator.onLine) {
+      const handled = await this.playViaYouTubeFallback(targetSong, this.pendingSeekPosition);
+      if (handled) return;
     }
 
     if (myGen !== this._playGeneration) return;
