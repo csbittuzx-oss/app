@@ -290,69 +290,99 @@ const PIPED_INSTANCES = [
   'https://pipedapi.in.projectsegfau.lt',
 ];
 
-const INVIDIOUS_INSTANCES = [
-  'https://inv.tux.pizza',
-  'https://invidious.projectsegfau.lt',
-  'https://invidious.nerdvpn.de',
-  'https://vid.puffyan.us',
-];
+
 
 /**
- * Extracts a high-bitrate full audio stream URL from a YouTube Video ID using Piped and Invidious instances.
+ * Extracts a direct audio stream URL from a YouTube Video ID.
+ * 
+ * Strategy:
+ *   1. Fetch the YouTube watch page (https://www.youtube.com/watch?v=ID)
+ *   2. Extract ytInitialPlayerResponse JSON embedded in the page
+ *   3. Pull the serverAbrStreamingUrl (direct googlevideo.com URL) with the itag=140 (AAC m4a) parameter
+ *   4. This URL is IP-locked to the device making the request — works perfectly with CapacitorHttp (native Android OkHttp)
+ * 
+ * Why this works on Android but Piped/Invidious doesn't:
+ *   - Piped/Invidious public instances are dead/blocked/returning 500s
+ *   - YouTube's own watch page always returns a valid signed stream URL for the device's IP
+ *   - CapacitorHttp makes native HTTP calls (not WebView), so the IP is stable and consistent
  */
 export async function fetchAudioStreamFromYouTubeId(videoId: string): Promise<{ streamUrl: string; duration?: number } | null> {
   if (!videoId) return null;
   const cleanId = videoId.replace('yt_', '').replace('/watch?v=', '').trim();
-  if (!cleanId) return null;
+  if (!cleanId || cleanId.length !== 11) return null;
 
-  const { isPreviewAudioUrl } = await import('./saavnApi');
+  try {
+    const { universalGetText } = await import('../../core/utils/http');
 
-  // 1. Try Piped instances
-  for (const instance of PIPED_INSTANCES) {
-    try {
-      const streamData = await universalGet(`${instance}/streams/${cleanId}`);
-      const audioStreams = streamData?.audioStreams;
-      if (Array.isArray(audioStreams) && audioStreams.length > 0) {
-        const sorted = audioStreams
-          .filter((s: any) => s.url && !s.videoOnly && !isPreviewAudioUrl(s.url))
-          .sort((a: any, b: any) => (b.bitrate || 0) - (a.bitrate || 0));
-
-        if (sorted.length > 0 && sorted[0].url) {
-          return {
-            streamUrl: sorted[0].url,
-            duration: streamData.duration || undefined,
-          };
-        }
+    // Fetch the YouTube watch page — CapacitorHttp uses native Android OkHttp,
+    // so the IP of this request matches the IP used when audio is streamed
+    const pageHtml = await universalGetText(
+      `https://www.youtube.com/watch?v=${cleanId}`,
+      {
+        'Accept-Language': 'en-US,en;q=0.9',
+        'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8',
+        'Cookie': 'CONSENT=YES+cb; GPS=1; VISITOR_INFO1_LIVE=',
       }
-    } catch {
-      // try next Piped instance
-    }
-  }
+    );
 
-  // 2. Try Invidious instances as secondary fallback
-  for (const invInstance of INVIDIOUS_INSTANCES) {
-    try {
-      const invData = await universalGet(`${invInstance}/api/v1/videos/${cleanId}`);
-      const formats = invData?.adaptiveFormats;
-      if (Array.isArray(formats) && formats.length > 0) {
-        const audioFormats = formats
-          .filter((f: any) => f.url && (f.type?.startsWith('audio/') || f.container === 'm4a' || f.container === 'webm') && !isPreviewAudioUrl(f.url))
-          .sort((a: any, b: any) => (parseInt(b.bitrate, 10) || 0) - (parseInt(a.bitrate, 10) || 0));
+    if (!pageHtml || typeof pageHtml !== 'string') return null;
 
-        if (audioFormats.length > 0 && audioFormats[0].url) {
-          return {
-            streamUrl: audioFormats[0].url,
-            duration: invData.lengthSeconds ? parseInt(invData.lengthSeconds, 10) : undefined,
-          };
-        }
+    // Extract ytInitialPlayerResponse JSON blob from the page
+    const startMarker = 'ytInitialPlayerResponse = ';
+    const startIdx = pageHtml.indexOf(startMarker);
+    if (startIdx === -1) return null;
+
+    // Walk forward to find the matching closing brace of the JSON object
+    let depth = 0;
+    let i = startIdx + startMarker.length;
+    const jsonStart = i;
+    while (i < pageHtml.length) {
+      if (pageHtml[i] === '{') depth++;
+      else if (pageHtml[i] === '}') {
+        depth--;
+        if (depth === 0) break;
       }
-    } catch {
-      // try next Invidious instance
+      i++;
     }
-  }
 
-  return null;
+    const playerResponse = JSON.parse(pageHtml.slice(jsonStart, i + 1));
+    const streamingData = playerResponse?.streamingData;
+    if (!streamingData) return null;
+
+    // Duration from video details
+    const durationMs = parseInt(
+      playerResponse?.videoDetails?.lengthSeconds ||
+      streamingData?.adaptiveFormats?.[0]?.approxDurationMs || '0',
+      10
+    );
+    const duration = durationMs > 1000 ? Math.round(durationMs) : (durationMs > 0 ? durationMs * 1000 : undefined);
+
+    // serverAbrStreamingUrl is the signed googlevideo.com URL for this device's IP
+    // Append itag=140 (AAC 128kbps m4a) to get audio-only stream
+    const abrBase = streamingData.serverAbrStreamingUrl;
+    if (abrBase && typeof abrBase === 'string') {
+      // Build audio stream URL: remove sabr/rqh params that are ABR-specific, add itag=140
+      let audioUrl = abrBase;
+      // Replace or add itag parameter for audio-only (itag 140 = audio/mp4 AAC 128kbps)
+      if (audioUrl.includes('&itag=')) {
+        audioUrl = audioUrl.replace(/&itag=\d+/, '&itag=140');
+      } else if (audioUrl.includes('?itag=')) {
+        audioUrl = audioUrl.replace(/\?itag=\d+/, '?itag=140');
+      } else {
+        audioUrl = audioUrl + '&itag=140';
+      }
+      // Remove ABR-only params that cause 403 on direct requests
+      audioUrl = audioUrl.replace(/[&?]sabr=[^&]*/g, '').replace(/[&?]rqh=[^&]*/g, '');
+
+      return { streamUrl: audioUrl, duration: duration || undefined };
+    }
+
+    return null;
+  } catch {
+    return null;
+  }
 }
+
 
 /**
  * Resolves a full-length playable audio stream from YouTube Music / Piped API.
