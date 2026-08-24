@@ -109,9 +109,9 @@ class YouTubeAudioEngine {
       container.style.right = '0px';
       container.style.width = '240px';
       container.style.height = '180px';
-      container.style.opacity = '0.001';
+      container.style.opacity = '0.01';
       container.style.pointerEvents = 'none';
-      container.style.zIndex = '-9999';
+      container.style.zIndex = '1';
       container.style.overflow = 'hidden';
       document.body.appendChild(container);
     }
@@ -139,11 +139,16 @@ class YouTubeAudioEngine {
           rel: 0,
           playsinline: 1,
           enablejsapi: 1,
+          origin: window.location.origin,
         },
         events: {
           onReady: () => {
             this.isPlayerReady = true;
             try {
+              const iframe = typeof this.player.getIframe === 'function' ? this.player.getIframe() : null;
+              if (iframe) {
+                iframe.setAttribute('allow', 'autoplay; encrypted-media; fullscreen; picture-in-picture');
+              }
               this.player.unMute?.();
               this.player.setVolume(Math.round(this.volume * 100));
             } catch {}
@@ -210,13 +215,6 @@ class YouTubeAudioEngine {
       this.stopTimeUpdate();
     } else if (state === 3) { // BUFFERING
       this.emit({ type: 'loading', isLoading: true, sessionId: sid });
-      if (this.player && typeof this.player.playVideo === 'function') {
-        try {
-          this.player.unMute?.();
-          this.player.playVideo();
-        } catch {}
-      }
-    } else if (state === 5 || state === -1) { // CUED or UNSTARTED
       if (this.player && typeof this.player.playVideo === 'function') {
         try {
           this.player.unMute?.();
