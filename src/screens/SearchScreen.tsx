@@ -180,7 +180,6 @@ export function SearchScreen() {
   const [smartIntent, setSmartIntent] = useState<AISmartSearchIntent | null>(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState(false);
-  const [hasSearched, setHasSearched] = useState(false);
   const [suggestions, setSuggestions] = useState<SearchSuggestionState>({ history: [], suggestions: [], items: [], isFromLink: false, isLoading: false });
 
   const searchReqIdRef = useRef<number>(0);
@@ -207,25 +206,69 @@ export function SearchScreen() {
     onlineSearchSuggestionViewModel.getSuggestions(q).then(s => { if (suggReqIdRef.current === id) setSuggestions(s); });
   }, [query, searchActive]);
 
-  // Layer 2: full search
+  // Layer 2: full search (Live debounced search + on submit)
   useEffect(() => {
     const trimmed = debouncedQuery.trim();
-    if (!trimmed || !hasSearched) { if (!trimmed) { setResults(null); setSmartIntent(null); setError(false); setHasSearched(false); } return; }
+    if (!trimmed) {
+      setResults(null);
+      setSmartIntent(null);
+      setError(false);
+      return;
+    }
     const id = ++searchReqIdRef.current;
-    setLoading(true); setError(false); setResultTab("all");
+    setLoading(true);
+    setError(false);
+    setResultTab("all");
     aiSmartSearchEngine.executeSearch(trimmed, 24)
-      .then(({ result, intent }) => { if (searchReqIdRef.current === id) { setResults(result); setSmartIntent(intent); setLoading(false); } })
-      .catch(() => { if (searchReqIdRef.current === id) { setError(true); setLoading(false); } });
-  }, [debouncedQuery, hasSearched]);
+      .then(({ result, intent }) => {
+        if (searchReqIdRef.current === id) {
+          setResults(result);
+          setSmartIntent(intent);
+          setLoading(false);
+        }
+      })
+      .catch(() => {
+        if (searchReqIdRef.current === id) {
+          setError(true);
+          setLoading(false);
+        }
+      });
+  }, [debouncedQuery]);
 
   const handleActivate = useCallback(() => { setSearchActive(true); setTimeout(() => inputRef.current?.focus(), 50); }, []);
-  const handleDeactivate = useCallback(() => { setSearchActive(false); setQuery(""); setResults(null); setHasSearched(false); setSmartIntent(null); setError(false); setSuggestions({ history: [], suggestions: [], items: [], isFromLink: false, isLoading: false }); inputRef.current?.blur(); }, []);
-  const handleSubmit = useCallback((q: string) => { const t = q.trim(); if (!t) return; insertSearchHistory(t); setHasSearched(true); setSearchActive(false); inputRef.current?.blur(); }, []);
+  const handleDeactivate = useCallback(() => { setSearchActive(false); setQuery(""); setResults(null); setSmartIntent(null); setError(false); setSuggestions({ history: [], suggestions: [], items: [], isFromLink: false, isLoading: false }); inputRef.current?.blur(); }, []);
+  const handleSubmit = useCallback((q: string) => {
+    const t = q.trim();
+    if (!t) return;
+    insertSearchHistory(t);
+    setQuery(t);
+    setSearchActive(false);
+    inputRef.current?.blur();
+
+    const id = ++searchReqIdRef.current;
+    setLoading(true);
+    setError(false);
+    setResultTab("all");
+    aiSmartSearchEngine.executeSearch(t, 24)
+      .then(({ result, intent }) => {
+        if (searchReqIdRef.current === id) {
+          setResults(result);
+          setSmartIntent(intent);
+          setLoading(false);
+        }
+      })
+      .catch(() => {
+        if (searchReqIdRef.current === id) {
+          setError(true);
+          setLoading(false);
+        }
+      });
+  }, []);
   const handleSuggestionSelect = useCallback((s: string) => { setQuery(s); handleSubmit(s); }, [handleSubmit]);
   const handleFill = useCallback((s: string) => { setQuery(s); setTimeout(() => inputRef.current?.focus(), 50); }, []);
   const handleHistoryDelete = useCallback((q: string) => { deleteSearchHistoryEntry(q); setSuggestions(prev => ({ ...prev, history: prev.history.filter(h => h.query !== q) })); }, []);
   const handleChipSelect = useCallback((q: string) => { setQuery(q); handleSubmit(q); }, [handleSubmit]);
-  const handleClear = useCallback(() => { setResults(null); setSmartIntent(null); setError(false); setHasSearched(false); setSuggestions({ history: [], suggestions: [], items: [], isFromLink: false, isLoading: false }); }, []);
+  const handleClear = useCallback(() => { setResults(null); setSmartIntent(null); setError(false); setSuggestions({ history: [], suggestions: [], items: [], isFromLink: false, isLoading: false }); }, []);
   const handleSongPlay = useCallback((song: Song) => {
     playSong(song, [song], 0);
     addSearchRecentPlayed(song);

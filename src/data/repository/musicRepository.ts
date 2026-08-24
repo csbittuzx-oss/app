@@ -16,7 +16,7 @@ import {
 import { searchItunes, getItunesAlbumTracks, getItunesTopCharts, searchItunesArtist } from '../api/itunesApi';
 import { getJamendoFeatured, getJamendoNewReleases, getJamendoByGenre, getJamendoAlbumTracks } from '../api/jamendoApi';
 import { getLastfmArtist, getSimilarArtists, getLastfmTopArtists } from '../api/lastfmApi';
-import { filterSpotifyAvailableTracks } from '../../services/SpotifyAvailabilityService';
+import { filterSpotifyAvailableTracks, filterSpotifyAvailableTracksSync } from '../../services/SpotifyAvailabilityService';
 import { getArtistProfileImage } from '../../services/ArtistProfileService';
 import { userProfileTracker } from '../../domain/recommendation/UserProfileTracker';
 import { CONFIG } from '../../config';
@@ -414,8 +414,8 @@ export async function searchMusic(query: string, limit = 20): Promise<SearchResu
     ...itunes.songs,
   ]);
   
-  // 2. Filter for catalog availability
-  const verifiedSongs = await filterSpotifyAvailableTracks(mergedSongs);
+  // 2. Filter for catalog availability and noise purging (fast sync filter)
+  const verifiedSongs = filterSpotifyAvailableTracksSync(mergedSongs);
 
   // 3. Rank results strictly with Spotify & YouTube ML relevance and view-count scoring
   const rankedSongs = [...verifiedSongs].sort((a, b) => {
