@@ -27,6 +27,40 @@ function parseViewCount(str?: string): number | undefined {
   return Math.round(num);
 }
 
+export function extractVideoId(rawObj: any, fallbackStr?: string): string {
+  if (!rawObj) return '';
+  // 1. Direct watchEndpoint videoId
+  if (rawObj.watchEndpoint?.videoId) return rawObj.watchEndpoint.videoId;
+  if (rawObj.onTap?.watchEndpoint?.videoId) return rawObj.onTap.watchEndpoint.videoId;
+  if (rawObj.playNavigationEndpoint?.watchEndpoint?.videoId) return rawObj.playNavigationEndpoint.watchEndpoint.videoId;
+  if (rawObj.doubleTapCommand?.watchEndpoint?.videoId) return rawObj.doubleTapCommand.watchEndpoint.videoId;
+  if (rawObj.navigationEndpoint?.watchEndpoint?.videoId) return rawObj.navigationEndpoint.watchEndpoint.videoId;
+  if (rawObj.playlistItemData?.videoId) return rawObj.playlistItemData.videoId;
+
+  // 2. Buttons / Overlays
+  const btnVid = rawObj.buttons?.[0]?.buttonRenderer?.command?.watchEndpoint?.videoId
+    || rawObj.overlay?.musicItemThumbnailOverlayRenderer?.content?.musicPlayButtonRenderer?.playNavigationEndpoint?.watchEndpoint?.videoId;
+  if (btnVid) return btnVid;
+
+  // 3. Stringified regex match for 11-character videoId
+  try {
+    const rawStr = typeof rawObj === 'string' ? rawObj : JSON.stringify(rawObj);
+    const m = rawStr.match(/"videoId":\s*"([a-zA-Z0-9_-]{11})"/);
+    if (m && m[1]) return m[1];
+
+    const thumbM = rawStr.match(/\/vi(?:_webp)?\/([a-zA-Z0-9_-]{11})\//);
+    if (thumbM && thumbM[1]) return thumbM[1];
+  } catch {}
+
+  // 4. Fallback string regex match
+  if (fallbackStr) {
+    const m = fallbackStr.match(/(?:v=|\/vi\/|\/vi_webp\/|youtu\.be\/|^yt_)([a-zA-Z0-9_-]{11})(?:[&?]|$)/);
+    if (m && m[1]) return m[1];
+  }
+
+  return '';
+}
+
 /**
  * Searches YouTube Music for songs, albums, and artists.
  */
@@ -71,11 +105,7 @@ export async function searchYouTubeMusic(query: string, limit = 20): Promise<Sea
             || card.thumbnail?.croppedSquareThumbnailRenderer?.thumbnail?.thumbnails?.slice(-1)[0]?.url || '';
           const cardThumb = resizeImageUrl(rawCardThumb, 1200, 1200);
           
-          const cardVideoId = card.onTap?.watchEndpoint?.videoId
-            || card.buttons?.[0]?.buttonRenderer?.command?.watchEndpoint?.videoId
-            || card.title?.runs?.[0]?.navigationEndpoint?.watchEndpoint?.videoId
-            || '';
-
+          const cardVideoId = extractVideoId(card, cardTitle);
           const cardBrowseId = card.title?.runs?.[0]?.navigationEndpoint?.browseEndpoint?.browseId || '';
           const cardViews = parseViewCount(cardSubtitleText) || 89_000_000;
 
@@ -171,11 +201,7 @@ export async function searchYouTubeMusic(query: string, limit = 20): Promise<Sea
           const artist = subRuns[2]?.text || subRuns[0]?.text || 'YouTube Music';
           const album = subRuns[4]?.text || '';
           const durStr = subRuns[subRuns.length - 1]?.text || '';
-          const playBtn = r.overlay?.musicItemThumbnailOverlayRenderer?.content?.musicPlayButtonRenderer;
-          const videoId = playBtn?.playNavigationEndpoint?.watchEndpoint?.videoId
-            || r.doubleTapCommand?.watchEndpoint?.videoId
-            || flex[0]?.musicResponsiveListItemFlexColumnRenderer?.text?.runs?.[0]?.navigationEndpoint?.watchEndpoint?.videoId
-            || '';
+          const videoId = extractVideoId(r, title);
           
           const rawThumb = r.thumbnail?.musicThumbnailRenderer?.thumbnail?.thumbnails?.slice(-1)[0]?.url
             || (videoId ? `https://i.ytimg.com/vi/${videoId}/hqdefault.jpg` : '');

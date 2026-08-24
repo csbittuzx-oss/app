@@ -923,7 +923,7 @@ class AudioPlayer {
       let cleanVideoId = targetSong.id.replace('yt_', '').replace('/watch?v=', '').trim();
       if (cleanVideoId.length !== 11 || !/^[a-zA-Z0-9_-]{11}$/.test(cleanVideoId)) {
         try {
-          const { resolveYouTubeVideoId, searchYouTubeMusic } = await import('../../data/api/youtubeMusicApi');
+          const { resolveYouTubeVideoId, searchYouTubeMusic, extractVideoId } = await import('../../data/api/youtubeMusicApi');
           const ytMatch = await resolveYouTubeVideoId(targetSong.title, targetSong.artist, targetSong.duration);
           if (currentSessionId !== this.playbackSessionId) return;
           if (ytMatch?.videoId) {
@@ -940,7 +940,7 @@ class AudioPlayer {
             if (currentSessionId !== this.playbackSessionId) return;
             if (ytSearch.songs && ytSearch.songs.length > 0) {
               const firstYt = ytSearch.songs[0];
-              const candId = firstYt.id.replace('yt_', '').trim();
+              const candId = extractVideoId(firstYt, firstYt.id);
               if (candId.length === 11) {
                 cleanVideoId = candId;
                 targetSong.id = `yt_${cleanVideoId}`;
