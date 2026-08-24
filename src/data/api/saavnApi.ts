@@ -495,6 +495,7 @@ export async function resolveFullTrack(
   _isSpotifyImport = false
 ): Promise<{ streamUrl: string; duration: number; artwork?: string } | null> {
   const queryVariants = generateSearchVariants(title, artist);
+  const targetClean = cleanCoreTitle(title);
 
   // 1. Tier 1: Search JioSaavn through prioritized query variants with strict score matching
   for (const q of queryVariants) {
@@ -504,7 +505,9 @@ export async function resolveFullTrack(
         const scoredCandidates = res.songs
           .map((song) => {
             const decision = evaluateTrackMatch(title, artist, targetDuration, song, 'JioSaavn Tier 1');
-            return { song, isMatch: decision.isMatch, confidence: decision.confidence };
+            const candClean = cleanCoreTitle(song.title);
+            const isDirectTitleMatch = targetClean && candClean && (targetClean === candClean || candClean.includes(targetClean) || targetClean.includes(candClean));
+            return { song, isMatch: decision.isMatch || isDirectTitleMatch, confidence: decision.confidence };
           })
           .filter((item) => item.isMatch && item.song.previewUrl && item.song.previewUrl.startsWith('http'))
           .sort((a, b) => b.confidence - a.confidence);
@@ -532,7 +535,7 @@ export async function resolveFullTrack(
           if (fullUrl && !isPreviewAudioUrl(fullUrl)) {
             return {
               streamUrl: formatMediaUrlWithQuality(fullUrl, quality),
-              duration: best.duration,
+              duration: best.duration || targetDuration || 180,
               artwork: best.artwork || best.artworkLg,
             };
           }
@@ -548,11 +551,11 @@ export async function resolveFullTrack(
     const cleanT = cleanCoreTitle(title);
     const primA = (artist || '').split(/[,&/]|feat\.|ft\./i)[0]?.trim() || '';
     const autoQuery = `${cleanT} ${primA}`.trim();
-    const autoUrl = `${BASE_URL}?__call=autocomplete.get&query=${encodeURIComponent(autoQuery)}&_format=json&_marker=0&ctx=web6dot0`;
+    const autoUrl = `${BASE_URL}?__call=autocomplete.get&query=${encodeURIComponent(autoQuery || cleanT)}&_format=json&_marker=0&ctx=web6dot0`;
     const autoData = await universalGet(autoUrl);
     
     if (Array.isArray(autoData?.songs?.data) && autoData.songs.data.length > 0) {
-      const topIds = autoData.songs.data.slice(0, 4).map((s: any) => s.id).filter(Boolean);
+      const topIds = autoData.songs.data.slice(0, 5).map((s: any) => s.id).filter(Boolean);
       if (topIds.length > 0) {
         const detailsUrl = `${BASE_URL}?__call=song.getDetails&pids=${topIds.join(',')}&_format=json&_marker=0&ctx=web6dot0`;
         const detailsData = await universalGet(detailsUrl);
@@ -569,7 +572,9 @@ export async function resolveFullTrack(
               duration: parseInt(item.duration, 10) || 0,
             };
             const decision = evaluateTrackMatch(title, artist, targetDuration, cand, 'JioSaavn Tier 2');
-            if (decision.isMatch) {
+            const candClean = cleanCoreTitle(cand.title);
+            const isDirectTitleMatch = targetClean && candClean && (targetClean === candClean || candClean.includes(targetClean) || targetClean.includes(candClean));
+            if (decision.isMatch || isDirectTitleMatch) {
               const dur = cand.duration || targetDuration || 180;
               return {
                 streamUrl: formatMediaUrlWithQuality(fullAudioUrl, quality),
