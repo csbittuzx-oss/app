@@ -977,30 +977,29 @@ class AudioPlayer {
     // ── Switch to HTML5 Audio engine ──
     youtubeAudioEngine.stop();
     this.activeEngine = 'html5';
-    let resolvedUrl = formatMediaUrlWithQuality(targetSong.previewUrl, this._audioQuality);
-
-    if (!targetSong.previewUrl.startsWith('blob:') && navigator.onLine) {
-      try {
-        const cachedUrl = await adaptiveStreaming.getCachedUrl(targetSong.id, resolvedUrl);
-        if (myGen !== this._playGeneration) return;
-        if (cachedUrl) {
-          resolvedUrl = cachedUrl;
-        }
-      } catch {
-        // use direct URL
-      }
-    }
-
-    if (myGen !== this._playGeneration) return;
+    const resolvedUrl = formatMediaUrlWithQuality(targetSong.previewUrl, this._audioQuality);
 
     // ── Set audio source and start playback ──
     targetSong.previewUrl = resolvedUrl;
     this.audio.src = resolvedUrl;
     this.audio.volume = this._volume;
 
-    if (this.pendingSeekPosition > 0) {
-      this.audio.currentTime = this.pendingSeekPosition;
-      this.pendingSeekPosition = 0;
+    const targetSeek = this.pendingSeekPosition;
+    this.pendingSeekPosition = 0;
+
+    if (targetSeek > 0) {
+      const applySeek = () => {
+        try {
+          if (targetSeek > 0 && isFinite(targetSeek)) {
+            this.audio.currentTime = targetSeek;
+          }
+        } catch {}
+      };
+      if (this.audio.readyState >= 1) {
+        applySeek();
+      } else {
+        this.audio.addEventListener('loadedmetadata', applySeek, { once: true });
+      }
     } else {
       this.audio.currentTime = 0;
     }
@@ -1400,6 +1399,9 @@ class AudioPlayer {
         const resumePos = this.savedResumePosition || 0;
         this.savedResumePosition = 0;
         this.savedResumeTrackId = null;
+        if (!current.isDownloaded && !current.previewUrl?.startsWith('blob:')) {
+          current.previewUrl = null;
+        }
         this.play(current, this._queue, this._queueIndex, resumePos);
         return;
       }

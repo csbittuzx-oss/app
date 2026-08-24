@@ -696,41 +696,19 @@ class AdaptiveStreamingService {
    */
   installStallWatcher(
     audio: HTMLAudioElement,
-    songId: () => string,
+    _songId: () => string,
     onStall: () => void,
     onRecover: () => void,
   ): () => void {
-    let stallTimer: ReturnType<typeof setTimeout> | null = null;
-    let recovering = false;
-
     const handleWaiting = () => {
-      this._networkCondition.unstable = true;
       onStall();
-      if (recovering) return;
-
-      const stallIdx = this.stallCount.get(songId()) || 0;
-      const delay = STALL_BACKOFF_MS[Math.min(stallIdx, STALL_BACKOFF_MS.length - 1)];
-
-      stallTimer = setTimeout(() => {
-        if (!audio.paused && audio.readyState < 3) {
-          recovering = true;
-          // Force browser to re-buffer by seeking to current time
-          const ct = audio.currentTime;
-          audio.currentTime = ct + 0.01 > audio.duration ? ct : ct + 0.01;
-          recovering = false;
-        }
-      }, delay);
     };
 
     const handlePlaying = () => {
-      if (stallTimer) { clearTimeout(stallTimer); stallTimer = null; }
-      this.stallCount.delete(songId());
-      this._networkCondition.unstable = false;
       onRecover();
     };
 
     const handleCanPlay = () => {
-      if (stallTimer) { clearTimeout(stallTimer); stallTimer = null; }
       onRecover();
     };
 
@@ -743,7 +721,6 @@ class AdaptiveStreamingService {
       audio.removeEventListener('waiting', handleWaiting);
       audio.removeEventListener('playing', handlePlaying);
       audio.removeEventListener('canplay', handleCanPlay);
-      if (stallTimer) clearTimeout(stallTimer);
     };
   }
 }
