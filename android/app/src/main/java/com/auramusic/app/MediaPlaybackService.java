@@ -17,6 +17,7 @@ import android.os.Binder;
 import android.os.Build;
 import android.os.IBinder;
 import android.os.PowerManager;
+import android.os.SystemClock;
 import android.support.v4.media.MediaMetadataCompat;
 import android.support.v4.media.session.MediaSessionCompat;
 import android.support.v4.media.session.PlaybackStateCompat;
@@ -49,7 +50,7 @@ public class MediaPlaybackService extends Service {
 
     private String currentTitle = "Soundwave";
     private String currentArtist = "Playing";
-    private String currentAlbum = "";
+    private String currentAlbum = "Soundwave";
     private String currentArtworkUrl = "";
     private Bitmap cachedArtwork = null;
     private boolean isPlaying = false;
@@ -81,36 +82,17 @@ public class MediaPlaybackService extends Service {
         initWakeLock();
     }
 
-    private void startForegroundSynchronously() {
-        try {
-            Notification notification = buildNotification(
-                currentTitle,
-                currentArtist,
-                currentAlbum,
-                currentDuration,
-                currentPosition,
-                isPlaying
-            );
-            int serviceType = 0;
-            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
-                serviceType = ServiceInfo.FOREGROUND_SERVICE_TYPE_MEDIA_PLAYBACK;
-            }
-            ServiceCompat.startForeground(this, NOTIFICATION_ID, notification, serviceType);
-        } catch (Exception e) {
-            // ignore
-        }
-    }
-
     private void createNotificationChannel() {
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
             NotificationChannel channel = new NotificationChannel(
                 CHANNEL_ID,
-                "Music Playback Service",
+                "Music Playback",
                 NotificationManager.IMPORTANCE_LOW
             );
             channel.setDescription("Controls for active background music playback");
             channel.setShowBadge(false);
             channel.setSound(null, null);
+            channel.setLockscreenVisibility(Notification.VISIBILITY_PUBLIC);
 
             NotificationManager manager = getSystemService(NotificationManager.class);
             if (manager != null) {
@@ -163,13 +145,28 @@ public class MediaPlaybackService extends Service {
                         MediaNotificationPlugin.instance.handleSeek(pos);
                     }
                 }
+
+                @Override
+                public void onStop() {
+                    stopPlayback();
+                    stopSelf();
+                }
             });
 
             PlaybackStateCompat.Builder stateBuilder = new PlaybackStateCompat.Builder()
-                .setActions(PlaybackStateCompat.ACTION_PLAY | PlaybackStateCompat.ACTION_PLAY_PAUSE)
-                .setState(PlaybackStateCompat.STATE_PAUSED, 0, 0f);
+                .setActions(
+                    PlaybackStateCompat.ACTION_PLAY |
+                    PlaybackStateCompat.ACTION_PAUSE |
+                    PlaybackStateCompat.ACTION_PLAY_PAUSE |
+                    PlaybackStateCompat.ACTION_SKIP_TO_NEXT |
+                    PlaybackStateCompat.ACTION_SKIP_TO_PREVIOUS |
+                    PlaybackStateCompat.ACTION_SEEK_TO |
+                    PlaybackStateCompat.ACTION_STOP
+                )
+                .setState(PlaybackStateCompat.STATE_PAUSED, 0, 0f, SystemClock.elapsedRealtime());
+
             mediaSession.setPlaybackState(stateBuilder.build());
-            mediaSession.setActive(false);
+            mediaSession.setActive(true);
         }
     }
 
@@ -209,7 +206,7 @@ public class MediaPlaybackService extends Service {
     ) {
         this.currentTitle = (title != null && !title.isEmpty()) ? title : "Soundwave";
         this.currentArtist = (artist != null && !artist.isEmpty()) ? artist : "Playing";
-        this.currentAlbum = album != null ? album : "";
+        this.currentAlbum = (album != null && !album.isEmpty()) ? album : "Soundwave";
         this.isPlaying = playing;
         this.currentDuration = duration;
         this.currentPosition = position;
@@ -268,18 +265,21 @@ public class MediaPlaybackService extends Service {
             initMediaSession();
         }
 
-        // Update MediaSession state
+        // Update MediaSession state with elapsedRealtime for smooth live seekbar rendering in Android 13+
         long playbackActions = PlaybackStateCompat.ACTION_PLAY
             | PlaybackStateCompat.ACTION_PAUSE
             | PlaybackStateCompat.ACTION_PLAY_PAUSE
             | PlaybackStateCompat.ACTION_SKIP_TO_NEXT
             | PlaybackStateCompat.ACTION_SKIP_TO_PREVIOUS
-            | PlaybackStateCompat.ACTION_SEEK_TO;
+            | PlaybackStateCompat.ACTION_SEEK_TO
+            | PlaybackStateCompat.ACTION_STOP;
 
         int state = playing ? PlaybackStateCompat.STATE_PLAYING : PlaybackStateCompat.STATE_PAUSED;
+        float speed = playing ? 1.0f : 0.0f;
+
         PlaybackStateCompat.Builder stateBuilder = new PlaybackStateCompat.Builder()
             .setActions(playbackActions)
-            .setState(state, positionSec * 1000L, 1.0f);
+            .setState(state, positionSec * 1000L, speed, SystemClock.elapsedRealtime());
 
         mediaSession.setPlaybackState(stateBuilder.build());
 
@@ -287,14 +287,19 @@ public class MediaPlaybackService extends Service {
             .putString(MediaMetadataCompat.METADATA_KEY_TITLE, title)
             .putString(MediaMetadataCompat.METADATA_KEY_ARTIST, artist)
             .putString(MediaMetadataCompat.METADATA_KEY_ALBUM, album)
+            .putString(MediaMetadataCompat.METADATA_KEY_DISPLAY_TITLE, title)
+            .putString(MediaMetadataCompat.METADATA_KEY_DISPLAY_SUBTITLE, artist)
+            .putString(MediaMetadataCompat.METADATA_KEY_DISPLAY_DESCRIPTION, album)
             .putLong(MediaMetadataCompat.METADATA_KEY_DURATION, durationSec * 1000L);
 
         if (cachedArtwork != null) {
             metaBuilder.putBitmap(MediaMetadataCompat.METADATA_KEY_ALBUM_ART, cachedArtwork);
+            metaBuilder.putBitmap(MediaMetadataCompat.METADATA_KEY_ART, cachedArtwork);
+            metaBuilder.putBitmap(MediaMetadataCompat.METADATA_KEY_DISPLAY_ICON, cachedArtwork);
         }
 
         mediaSession.setMetadata(metaBuilder.build());
-        mediaSession.setActive(playing);
+        mediaSession.setActive(true);
 
         int flag = PendingIntent.FLAG_UPDATE_CURRENT;
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {
@@ -328,6 +333,8 @@ public class MediaPlaybackService extends Service {
             .setVisibility(NotificationCompat.VISIBILITY_PUBLIC)
             .setOngoing(playing)
             .setSilent(true)
+            .setOnlyAlertOnce(true)
+            .setPriority(NotificationCompat.PRIORITY_LOW)
             .addAction(android.R.drawable.ic_media_previous, "Previous", prevPendingIntent)
             .addAction(playPauseIcon, playPauseTitle, togglePendingIntent)
             .addAction(android.R.drawable.ic_media_next, "Next", nextPendingIntent)
@@ -360,7 +367,7 @@ public class MediaPlaybackService extends Service {
 
     private void acquireWakeLock() {
         if (wakeLock != null && !wakeLock.isHeld()) {
-            wakeLock.acquire(12 * 60 * 60 * 1000L); // Max 12 hours safety
+            wakeLock.acquire(12 * 60 * 60 * 1000L); // 12 hours safety lock
         }
     }
 
@@ -372,8 +379,10 @@ public class MediaPlaybackService extends Service {
 
     private void registerNoisyReceiver() {
         if (!isBecomingNoisyRegistered) {
-            registerReceiver(becomingNoisyReceiver, new IntentFilter(AudioManager.ACTION_AUDIO_BECOMING_NOISY));
-            isBecomingNoisyRegistered = true;
+            try {
+                registerReceiver(becomingNoisyReceiver, new IntentFilter(AudioManager.ACTION_AUDIO_BECOMING_NOISY));
+                isBecomingNoisyRegistered = true;
+            } catch (Exception ignored) {}
         }
     }
 
@@ -381,9 +390,7 @@ public class MediaPlaybackService extends Service {
         if (isBecomingNoisyRegistered) {
             try {
                 unregisterReceiver(becomingNoisyReceiver);
-            } catch (Exception e) {
-                // ignore
-            }
+            } catch (Exception ignored) {}
             isBecomingNoisyRegistered = false;
         }
     }
@@ -393,14 +400,35 @@ public class MediaPlaybackService extends Service {
             URL url = new URL(urlStr);
             HttpURLConnection connection = (HttpURLConnection) url.openConnection();
             connection.setDoInput(true);
-            connection.setConnectTimeout(4000);
-            connection.setReadTimeout(4000);
+            connection.setInstanceFollowRedirects(true);
+            connection.setRequestProperty("User-Agent", "Mozilla/5.0 (Linux; Android 10)");
+            connection.setConnectTimeout(5000);
+            connection.setReadTimeout(5000);
             connection.connect();
             InputStream input = connection.getInputStream();
-            return BitmapFactory.decodeStream(input);
+            Bitmap bitmap = BitmapFactory.decodeStream(input);
+            if (bitmap != null) {
+                // Ensure max dimensions of 512x512 to avoid Binder transaction limit
+                int maxDim = 512;
+                if (bitmap.getWidth() > maxDim || bitmap.getHeight() > maxDim) {
+                    float ratio = Math.min((float) maxDim / bitmap.getWidth(), (float) maxDim / bitmap.getHeight());
+                    int width = Math.round(ratio * bitmap.getWidth());
+                    int height = Math.round(ratio * bitmap.getHeight());
+                    return Bitmap.createScaledBitmap(bitmap, width, height, true);
+                }
+            }
+            return bitmap;
         } catch (Exception e) {
             return null;
         }
+    }
+
+    @Override
+    public void onTaskRemoved(Intent rootIntent) {
+        // When the user completely closes/swipes away the app from Recents, stop playback completely
+        stopPlayback();
+        stopSelf();
+        super.onTaskRemoved(rootIntent);
     }
 
     @Override

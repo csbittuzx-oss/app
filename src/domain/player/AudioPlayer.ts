@@ -275,17 +275,16 @@ class AudioPlayer {
     // Initialize Android native media notification & background lockscreen controls
     MediaNotificationService.init({
       onPlay: () => {
-        // Strictly prevent automatic playback on app launch / service connection
-        if (this.isUserInteracted && (this.audio.src || this.activeEngine === 'youtube')) {
+        if (this.currentSong && (this.audio.src || this.activeEngine === 'youtube')) {
           this.resume();
         }
       },
       onPause: () => this.pause(),
       onNext: () => {
-        if (this.isUserInteracted) this.next();
+        this.next();
       },
       onPrev: () => {
-        if (this.isUserInteracted) this.previous();
+        this.previous();
       },
       onSeekTo: (seconds) => this.seekToTime(seconds),
     });
@@ -881,6 +880,7 @@ class AudioPlayer {
     this.emit({ type: 'songchange', song: targetSong });
     this.emit({ type: 'loading', isLoading: true });
     this.updateMediaSession(targetSong);
+    MediaNotificationService.update(targetSong, true, targetSong.duration, this.pendingSeekPosition || 0);
 
     // ── Offline check ──
     if (!navigator.onLine) {
@@ -1781,16 +1781,16 @@ class AudioPlayer {
     });
 
     navigator.mediaSession.setActionHandler('play', () => {
-      if (this.isUserInteracted && (this.audio.src || this.activeEngine === 'youtube')) {
+      if (this.currentSong && (this.audio.src || this.activeEngine === 'youtube')) {
         this.resume();
       }
     });
     navigator.mediaSession.setActionHandler('pause', () => this.pause());
     navigator.mediaSession.setActionHandler('previoustrack', () => {
-      if (this.isUserInteracted) this.previous();
+      this.previous();
     });
     navigator.mediaSession.setActionHandler('nexttrack', () => {
-      if (this.isUserInteracted) this.next();
+      this.next();
     });
     navigator.mediaSession.setActionHandler('seekto', (details) => {
       if (details.seekTime !== undefined && details.seekTime !== null) {
