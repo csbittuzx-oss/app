@@ -924,7 +924,7 @@ class AudioPlayer {
       let cleanVideoId = targetSong.id.replace('yt_', '').replace('/watch?v=', '').trim();
       if (cleanVideoId.length !== 11 || !/^[a-zA-Z0-9_-]{11}$/.test(cleanVideoId)) {
         try {
-          const { resolveYouTubeVideoId } = await import('../../data/api/youtubeMusicApi');
+          const { resolveYouTubeVideoId, searchYouTubeMusic } = await import('../../data/api/youtubeMusicApi');
           const ytMatch = await resolveYouTubeVideoId(targetSong.title, targetSong.artist, targetSong.duration);
           if (myGen !== this._playGeneration) return;
           if (ytMatch?.videoId) {
@@ -936,6 +936,23 @@ class AudioPlayer {
               targetSong.artworkLg = ytMatch.artwork;
             }
             this.emit({ type: 'songchange', song: { ...targetSong } });
+          } else {
+            const ytSearch = await searchYouTubeMusic(`${targetSong.title} ${targetSong.artist}`, 5);
+            if (myGen !== this._playGeneration) return;
+            if (ytSearch.songs && ytSearch.songs.length > 0) {
+              const firstYt = ytSearch.songs[0];
+              const candId = firstYt.id.replace('yt_', '').trim();
+              if (candId.length === 11) {
+                cleanVideoId = candId;
+                targetSong.id = `yt_${cleanVideoId}`;
+                if (firstYt.duration > 0) targetSong.duration = firstYt.duration;
+                if (!targetSong.artwork && firstYt.artwork) {
+                  targetSong.artwork = firstYt.artwork;
+                  targetSong.artworkLg = firstYt.artwork;
+                }
+                this.emit({ type: 'songchange', song: { ...targetSong } });
+              }
+            }
           }
         } catch {}
       }

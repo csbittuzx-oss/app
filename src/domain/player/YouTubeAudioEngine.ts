@@ -63,6 +63,16 @@ class YouTubeAudioEngine {
       this.createPlayer();
     };
 
+    // Polling fallback in case onYouTubeIframeAPIReady already fired
+    const pollTimer = setInterval(() => {
+      if (window.YT && window.YT.Player) {
+        clearInterval(pollTimer);
+        this.isApiReady = true;
+        this.createPlayer();
+      }
+    }, 150);
+    setTimeout(() => clearInterval(pollTimer), 10000);
+
     if (!document.getElementById('youtube-iframe-api-script')) {
       const tag = document.createElement('script');
       tag.id = 'youtube-iframe-api-script';
@@ -88,13 +98,14 @@ class YouTubeAudioEngine {
       container = document.createElement('div');
       container.id = 'headless-yt-audio-container';
       container.style.position = 'fixed';
-      container.style.bottom = '0px';
-      container.style.right = '0px';
-      container.style.width = '200px';
-      container.style.height = '200px';
-      container.style.opacity = '0.001';
+      container.style.top = '0px';
+      container.style.left = '0px';
+      container.style.width = '1px';
+      container.style.height = '1px';
+      container.style.opacity = '1';
       container.style.pointerEvents = 'none';
-      container.style.zIndex = '-1';
+      container.style.zIndex = '999999';
+      container.style.overflow = 'hidden';
       document.body.appendChild(container);
     }
 
@@ -104,11 +115,11 @@ class YouTubeAudioEngine {
 
     try {
       this.player = new window.YT.Player('headless-yt-player-target', {
-        height: '200',
-        width: '200',
+        height: '1',
+        width: '1',
         host: 'https://www.youtube-nocookie.com',
         playerVars: {
-          autoplay: 0,
+          autoplay: 1,
           controls: 0,
           disablekb: 1,
           fs: 0,
@@ -211,6 +222,7 @@ class YouTubeAudioEngine {
       this.pendingVideoId = cleanId;
       this.pendingStartTime = startSeconds;
       this.pendingPlay = true;
+      this.initIframeApi();
       this.emit({ type: 'loading', isLoading: true });
       return;
     }
@@ -220,6 +232,7 @@ class YouTubeAudioEngine {
       if (typeof this.player.unMute === 'function') {
         try { this.player.unMute(); } catch {}
       }
+      this.player.setVolume(Math.round(this.volume * 100));
       if (typeof this.player.loadVideoById === 'function') {
         this.player.loadVideoById({
           videoId: cleanId,
