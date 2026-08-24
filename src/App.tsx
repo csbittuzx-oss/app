@@ -161,7 +161,7 @@ function AppShell() {
     if (appState.config.autoUpdate !== false) {
       const timer = setTimeout(async () => {
         try {
-          const res = await updateService.checkForUpdates();
+          const res = await updateService.checkForUpdates(true);
           if (res.hasUpdate && res.latestUpdate) {
             setAvailableUpdate(res.latestUpdate);
             setShowUpdateModal(true);
@@ -169,7 +169,7 @@ function AppShell() {
         } catch {
           // non-blocking
         }
-      }, 3500);
+      }, 800);
       return () => clearTimeout(timer);
     }
   }, [appState.config.autoUpdate]);

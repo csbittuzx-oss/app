@@ -83,26 +83,33 @@ function compareVersions(v1, v2) {
 
 // ── 1. Client Endpoint: Soundwave App checks this URL ──
 async function handleGetLatestUpdate(req, res) {
+  res.setHeader('Cache-Control', 'no-store, no-cache, must-revalidate, proxy-revalidate');
+  res.setHeader('Pragma', 'no-cache');
+  res.setHeader('Expires', '0');
+
   try {
     const clientVersion = req.query.version || '1.0.0';
-    let updateData = null;
+    
+    // 1. Primary: Use local server update data (written by Admin Panel)
+    let updateData = getLocalUpdate();
 
-    // Try Firebase first if available
-    try {
-      const fbResponse = await fetch(`${FIREBASE_DB_URL}/app_updates/latest.json`, {
-        headers: { 'Accept': 'application/json' },
-        cache: 'no-cache',
-        signal: AbortSignal.timeout(3000)
-      });
-      if (fbResponse.ok) {
-        updateData = await fbResponse.json();
+    // 2. Secondary: If no local data or default, check Firebase
+    if (!updateData || !updateData.version || updateData.version === '1.0.0') {
+      try {
+        const fbResponse = await fetch(`${FIREBASE_DB_URL}/app_updates/latest.json`, {
+          headers: { 'Accept': 'application/json' },
+          cache: 'no-cache',
+          signal: AbortSignal.timeout(2500)
+        });
+        if (fbResponse.ok) {
+          const fbData = await fbResponse.json();
+          if (fbData && fbData.version) {
+            updateData = fbData;
+          }
+        }
+      } catch (e) {
+        // ignore
       }
-    } catch (e) {
-      // Fallback to local storage
-    }
-
-    if (!updateData || !updateData.version) {
-      updateData = getLocalUpdate();
     }
 
     const hasUpdate = compareVersions(updateData.version, clientVersion) > 0;

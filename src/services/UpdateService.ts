@@ -26,10 +26,10 @@ export interface UpdateCheckResult {
 export const CURRENT_APP_VERSION = '1.2.1';
 export const CURRENT_BUILD_NUMBER = 20260817;
 
-const RENDER_BACKEND_URL = (import.meta as any).env?.VITE_BACKEND_URL || 'https://soundwave-backend.onrender.com';
+const DEFAULT_RENDER_BACKEND = (import.meta as any).env?.VITE_BACKEND_URL || 'https://soundwave-backend.onrender.com';
 const FIREBASE_RTDB_URL = 'https://soundwaves-b520c-default-rtdb.asia-southeast1.firebasedatabase.app';
 const UPDATE_CACHE_KEY = 'sw_latest_update_info';
-const LAST_CHECK_KEY = 'sw_last_update_check_time';
+const BACKEND_URL_KEY = 'sw_backend_url';
 
 class UpdateService {
   private cachedUpdate: AppUpdateInfo | null = null;
@@ -46,8 +46,20 @@ class UpdateService {
     }
   }
 
+  public getBackendUrl(): string {
+    return localStorage.getItem(BACKEND_URL_KEY) || DEFAULT_RENDER_BACKEND;
+  }
+
+  public setBackendUrl(url: string) {
+    if (!url) {
+      localStorage.removeItem(BACKEND_URL_KEY);
+    } else {
+      localStorage.setItem(BACKEND_URL_KEY, url.trim().replace(/\/+$/, ''));
+    }
+  }
+
   /**
-   * Compares semantic version strings (e.g., "1.3.0" vs "1.2.0")
+   * Compares semantic version strings (e.g., "1.3.0" vs "1.2.1")
    * Returns:
    *  1 if v1 > v2 (Newer version available)
    * -1 if v1 < v2
@@ -70,24 +82,7 @@ class UpdateService {
   /**
    * Fetches latest update metadata from Render Backend & Firebase Realtime Database
    */
-  public async checkForUpdates(force = false): Promise<UpdateCheckResult> {
-    const now = Date.now();
-    const lastCheck = parseInt(localStorage.getItem(LAST_CHECK_KEY) || '0', 10);
-
-    // Throttle checks to once every 15 minutes unless forced manually by user
-    if (!force && now - lastCheck < 15 * 60 * 1000 && this.cachedUpdate) {
-      const hasUpdate = this.compareVersions(this.cachedUpdate.version, CURRENT_APP_VERSION) > 0;
-      const isForced = this.cachedUpdate.forceUpdate ||
-        this.compareVersions(this.cachedUpdate.minSupportedVersion || '1.0.0', CURRENT_APP_VERSION) > 0;
-
-      return {
-        hasUpdate,
-        forceUpdate: isForced,
-        currentVersion: CURRENT_APP_VERSION,
-        latestUpdate: this.cachedUpdate,
-      };
-    }
-
+  public async checkForUpdates(_force = false): Promise<UpdateCheckResult> {
     if (this.isChecking) {
       return {
         hasUpdate: false,
@@ -101,14 +96,15 @@ class UpdateService {
 
     try {
       let raw: any = null;
+      const backendBase = this.getBackendUrl();
 
-      // 1. Try Render Backend API
+      // 1. Try Configured Render Backend API
       try {
-        const renderUrl = `${RENDER_BACKEND_URL}/api/updates/latest?version=${encodeURIComponent(CURRENT_APP_VERSION)}`;
+        const renderUrl = `${backendBase}/api/updates/latest?version=${encodeURIComponent(CURRENT_APP_VERSION)}&t=${Date.now()}`;
         const res = await fetch(renderUrl, {
           headers: { 'Accept': 'application/json' },
-          cache: 'no-cache',
-          signal: AbortSignal.timeout(3500),
+          cache: 'no-store',
+          signal: AbortSignal.timeout(4000),
         });
         if (res.ok) {
           const resData = await res.json();
@@ -116,15 +112,17 @@ class UpdateService {
             raw = resData.update;
           }
         }
-      } catch {}
+      } catch (err) {
+        console.warn('Backend update check skipped:', err);
+      }
 
       // 2. Fallback to Firebase Realtime Database directly
       if (!raw || !raw.version) {
         try {
-          const fbUrl = `${FIREBASE_RTDB_URL}/app_updates/latest.json`;
+          const fbUrl = `${FIREBASE_RTDB_URL}/app_updates/latest.json?t=${Date.now()}`;
           const fbRes = await fetch(fbUrl, {
             headers: { 'Accept': 'application/json' },
-            cache: 'no-cache',
+            cache: 'no-store',
             signal: AbortSignal.timeout(4000),
           });
           if (fbRes.ok) {
@@ -159,7 +157,6 @@ class UpdateService {
 
       this.cachedUpdate = updateInfo;
       localStorage.setItem(UPDATE_CACHE_KEY, JSON.stringify(updateInfo));
-      localStorage.setItem(LAST_CHECK_KEY, String(now));
 
       const hasUpdate = this.compareVersions(updateInfo.version, CURRENT_APP_VERSION) > 0;
       const isForced = updateInfo.forceUpdate ||
