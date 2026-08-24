@@ -26,10 +26,9 @@ export interface UpdateCheckResult {
 export const CURRENT_APP_VERSION = '1.2.1';
 export const CURRENT_BUILD_NUMBER = 20260817;
 
-const DEFAULT_RENDER_BACKEND = (import.meta as any).env?.VITE_BACKEND_URL || 'https://soundwave-backend.onrender.com';
+const DEFAULT_RENDER_BACKEND = 'https://app-oorz.onrender.com';
 const FIREBASE_RTDB_URL = 'https://soundwaves-b520c-default-rtdb.asia-southeast1.firebasedatabase.app';
 const UPDATE_CACHE_KEY = 'sw_latest_update_info';
-const BACKEND_URL_KEY = 'sw_backend_url';
 
 class UpdateService {
   private cachedUpdate: AppUpdateInfo | null = null;
@@ -47,15 +46,7 @@ class UpdateService {
   }
 
   public getBackendUrl(): string {
-    return localStorage.getItem(BACKEND_URL_KEY) || DEFAULT_RENDER_BACKEND;
-  }
-
-  public setBackendUrl(url: string) {
-    if (!url) {
-      localStorage.removeItem(BACKEND_URL_KEY);
-    } else {
-      localStorage.setItem(BACKEND_URL_KEY, url.trim().replace(/\/+$/, ''));
-    }
+    return DEFAULT_RENDER_BACKEND;
   }
 
   /**

@@ -14,7 +14,6 @@ export function SettingsScreen() {
   const [showTermsModal, setShowTermsModal] = useState(false);
   const [isCheckingUpdate, setIsCheckingUpdate] = useState(false);
   const [updateModalInfo, setUpdateModalInfo] = useState<AppUpdateInfo | null>(null);
-  const [backendUrlInput, setBackendUrlInput] = useState(updateService.getBackendUrl());
   const [selectedLangs, setSelectedLangs] = useState<string[]>(state.musicLanguages || ['Hindi', 'International']);
   const [toastMessage, setToastMessage] = useState<string | null>(null);
 
@@ -423,52 +422,6 @@ export function SettingsScreen() {
                     <span>Check Now</span>
                   )}
                 </button>
-              </div>
-
-              {/* Render Backend Server URL Config */}
-              <div style={{ borderTop: '1px solid var(--color-border)', paddingTop: 10, display: 'flex', flexDirection: 'column', gap: 6 }}>
-                <span style={{ fontSize: '11px', fontWeight: 600, color: 'var(--color-text-muted)', textTransform: 'uppercase', letterSpacing: '0.04em' }}>
-                  Render Backend Server URL
-                </span>
-                <div style={{ display: 'flex', gap: 8 }}>
-                  <input
-                    type="url"
-                    value={backendUrlInput}
-                    onChange={(e) => setBackendUrlInput(e.target.value)}
-                    placeholder="https://your-backend.onrender.com"
-                    style={{
-                      flex: 1,
-                      background: 'var(--color-surface-2)',
-                      border: '1px solid var(--color-border)',
-                      borderRadius: 'var(--radius-sm)',
-                      padding: '8px 12px',
-                      color: 'var(--color-text-primary)',
-                      fontSize: 'var(--text-xs)',
-                      outline: 'none',
-                    }}
-                  />
-                  <button
-                    type="button"
-                    onClick={() => {
-                      updateService.setBackendUrl(backendUrlInput);
-                      showToast('Backend Server URL saved');
-                      handleCheckForUpdates();
-                    }}
-                    style={{
-                      background: 'var(--color-surface-2)',
-                      color: 'var(--color-text-primary)',
-                      border: '1px solid var(--color-border)',
-                      borderRadius: 'var(--radius-sm)',
-                      padding: '8px 12px',
-                      fontSize: 'var(--text-xs)',
-                      fontWeight: 600,
-                      cursor: 'pointer',
-                      flexShrink: 0,
-                    }}
-                  >
-                    Save & Test
-                  </button>
-                </div>
               </div>
             </div>
           </section>
