@@ -15,8 +15,7 @@ import type { Playlist } from '../data/models';
 
 export function PlaylistScreen() {
   const { nav: { nav, goBack }, state, updatePlaylistTracks } = useApp();
-  const { playSong, state: playerState } = usePlayer();
-  const hasMiniPlayer = Boolean(playerState.currentSong);
+  const { playSong } = usePlayer();
 
   const playlistId = String(nav.params?.playlistId || '');
   const playlistParam = nav.params?.playlist as Playlist | undefined;
@@ -92,9 +91,7 @@ export function PlaylistScreen() {
         className="scroll-area"
         style={{
           flex: 1,
-          paddingBottom: hasMiniPlayer
-            ? 'calc(72px + env(safe-area-inset-bottom, 0px) + 12px)'
-            : 'calc(env(safe-area-inset-bottom, 0px) + 20px)',
+          paddingBottom: 8,
         }}
       >
         {/* Header */}
