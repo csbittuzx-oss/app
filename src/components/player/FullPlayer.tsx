@@ -688,8 +688,10 @@ export function FullPlayer() {
           <div style={{ flex: 1, minWidth: 0, marginRight: 12 }}>
             <h2 style={{
               margin: 0,
-              fontSize: 'var(--text-xl)',
+              fontSize: 'clamp(1.1rem, 4.2vw, 1.25rem)',
               fontWeight: 700,
+              lineHeight: 1.25,
+              letterSpacing: '-0.015em',
               color: 'var(--color-text-primary)',
               overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap',
               fontFamily: 'var(--font-body)',
@@ -697,8 +699,8 @@ export function FullPlayer() {
               {currentSong.title}
             </h2>
             <p style={{
-              margin: '2px 0 0',
-              fontSize: 'var(--text-base)',
+              margin: '3px 0 0',
+              fontSize: 'var(--text-sm)',
               color: 'var(--color-text-secondary)',
               overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap',
             }}>
@@ -911,24 +913,6 @@ export function FullPlayer() {
             Queue
           </button>
         </div>
-
-        {/* Provider note */}
-        {currentSong.provider === 'youtube' && (
-          <p style={{ textAlign: 'center', fontSize: 'var(--text-xs)', color: 'var(--color-accent)', paddingBottom: 8, opacity: 0.9 }}>
-            YouTube Music HD Stream
-          </p>
-        )}
-
-        {currentSong.provider === 'itunes' && (
-          <p style={{ textAlign: 'center', fontSize: 'var(--text-xs)', color: 'var(--color-text-muted)', paddingBottom: 8 }}>
-            30s preview via iTunes
-          </p>
-        )}
-        {currentSong.provider === 'jamendo' && (
-          <p style={{ textAlign: 'center', fontSize: 'var(--text-xs)', color: 'var(--color-text-muted)', paddingBottom: 8 }}>
-            Full track — Creative Commons via Jamendo
-          </p>
-        )}
       </div>
 
       {/* ── Half-Screen Track Options & Sleep Timer Bottom Sheet ── */}

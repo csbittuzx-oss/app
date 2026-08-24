@@ -1021,7 +1021,6 @@ class AudioPlayer {
         this.updateMediaSession(targetSong);
         this.saveCurrentSession();
         await youtubeAudioEngine.loadAndPlay(ytMatch.videoId, seekSeconds);
-        showToast(`Playing "${targetSong.title}" via YouTube HD Stream`, 'info', 2000);
         return true;
       }
     } catch (e) {
