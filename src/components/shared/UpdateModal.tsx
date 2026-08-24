@@ -68,28 +68,36 @@ export function UpdateModal({ updateInfo, isOpen, onClose }: UpdateModalProps) {
           borderTop: isForceUpdate ? '2px solid var(--color-accent)' : 'none',
         }}
       >
-        {/* Top Icon & Badge */}
+        {/* Top App Logo & Badge */}
         <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
           <div style={{ display: 'flex', alignItems: 'center', gap: 14 }}>
             <div
               style={{
-                width: 48,
-                height: 48,
-                borderRadius: 'var(--radius-lg)',
+                width: 52,
+                height: 52,
+                borderRadius: 'var(--radius-lg, 14px)',
                 background: 'linear-gradient(135deg, var(--color-accent) 0%, #D97706 100%)',
                 display: 'flex',
                 alignItems: 'center',
                 justifyContent: 'center',
                 color: '#fff',
-                boxShadow: '0 6px 16px rgba(245, 158, 11, 0.35)',
+                fontWeight: 800,
+                fontSize: 22,
+                boxShadow: '0 6px 18px rgba(245, 158, 11, 0.4)',
                 flexShrink: 0,
+                overflow: 'hidden',
               }}
             >
-              <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round">
-                <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" />
-                <polyline points="7 10 12 15 17 10" />
-                <line x1="12" y1="15" x2="12" y2="3" />
-              </svg>
+              <img
+                src="/favicon.png"
+                alt="Soundwave"
+                width={36}
+                height={36}
+                style={{ objectFit: 'contain' }}
+                onError={(e) => {
+                  (e.target as HTMLElement).style.display = 'none';
+                }}
+              />
             </div>
             <div>
               <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>

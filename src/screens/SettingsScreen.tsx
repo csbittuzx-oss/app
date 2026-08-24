@@ -2,6 +2,8 @@ import { useState } from 'react';
 import { useApp } from '../state/AppContext';
 import { usePlayer } from '../state/PlayerContext';
 import { aiTasteProfileEngine } from '../domain/ai/AITasteProfileEngine';
+import { updateService, type AppUpdateInfo, CURRENT_APP_VERSION } from '../services/UpdateService';
+import { UpdateModal } from '../components/shared/UpdateModal';
 import type { AudioQuality } from '../data/models';
 
 export function SettingsScreen() {
@@ -10,6 +12,8 @@ export function SettingsScreen() {
   const [showLangModal, setShowLangModal] = useState(false);
   const [showPrivacyModal, setShowPrivacyModal] = useState(false);
   const [showTermsModal, setShowTermsModal] = useState(false);
+  const [isCheckingUpdate, setIsCheckingUpdate] = useState(false);
+  const [updateModalInfo, setUpdateModalInfo] = useState<AppUpdateInfo | null>(null);
   const [selectedLangs, setSelectedLangs] = useState<string[]>(state.musicLanguages || ['Hindi', 'International']);
   const [toastMessage, setToastMessage] = useState<string | null>(null);
 
@@ -47,9 +51,26 @@ export function SettingsScreen() {
     showToast(`Audio quality switched to ${label}`);
   };
 
+  const handleCheckForUpdates = async () => {
+    setIsCheckingUpdate(true);
+    try {
+      const res = await updateService.checkForUpdates(true);
+      if (res.hasUpdate && res.latestUpdate) {
+        setUpdateModalInfo(res.latestUpdate);
+      } else {
+        showToast(`You are on the latest version of Soundwave (v${CURRENT_APP_VERSION})`);
+      }
+    } catch {
+      showToast('Could not check for updates. Please try again later.');
+    } finally {
+      setIsCheckingUpdate(false);
+    }
+  };
+
   const handleAutoUpdateToggle = () => {
-    dispatch({ type: 'SET_CONFIG', payload: { autoUpdate: !autoUpdate } });
-    showToast(autoUpdate ? 'Automatic updates disabled' : 'Automatic updates enabled');
+    const next = !autoUpdate;
+    dispatch({ type: 'SET_CONFIG', payload: { autoUpdate: next } });
+    showToast(next ? 'Automatic update checks enabled' : 'Automatic update checks disabled');
   };
 
   return (
@@ -317,7 +338,7 @@ export function SettingsScreen() {
               textTransform: 'uppercase',
               letterSpacing: '0.08em',
             }}>
-              Updates
+              Updates & Releases
             </h2>
             <div style={{
               background: 'var(--color-surface)',
@@ -325,40 +346,83 @@ export function SettingsScreen() {
               borderRadius: 'var(--radius-lg)',
               padding: '14px 16px',
               display: 'flex',
-              alignItems: 'center',
-              justifyContent: 'space-between',
+              flexDirection: 'column',
+              gap: 14,
             }}>
-              <div style={{ display: 'flex', alignItems: 'center', gap: 14 }}>
-                <div style={{
-                  width: 40,
-                  height: 40,
-                  borderRadius: 'var(--radius-md)',
-                  background: 'var(--color-surface-2)',
-                  display: 'flex',
-                  alignItems: 'center',
-                  justifyContent: 'center',
-                  color: 'var(--color-success)',
-                  flexShrink: 0,
-                }}>
-                  <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                    <path d="M21.5 2v6h-6M21.34 15.57a10 10 0 1 1-.57-8.38l5.67-5.67"/>
-                  </svg>
+              <div style={{
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'space-between',
+              }}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: 14 }}>
+                  <div style={{
+                    width: 40,
+                    height: 40,
+                    borderRadius: 'var(--radius-md)',
+                    background: 'var(--color-surface-2)',
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                    color: 'var(--color-success)',
+                    flexShrink: 0,
+                  }}>
+                    <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                      <path d="M21.5 2v6h-6M21.34 15.57a10 10 0 1 1-.57-8.38l5.67-5.67"/>
+                    </svg>
+                  </div>
+                  <div>
+                    <p style={{ margin: 0, fontWeight: 600, fontSize: 'var(--text-md)', color: 'var(--color-text-primary)' }}>
+                      Automatically Update
+                    </p>
+                    <p style={{ margin: '2px 0 0', fontSize: 'var(--text-xs)', color: 'var(--color-text-secondary)' }}>
+                      Check and alert for new releases on startup
+                    </p>
+                  </div>
                 </div>
-                <div>
-                  <p style={{ margin: 0, fontWeight: 600, fontSize: 'var(--text-md)', color: 'var(--color-text-primary)' }}>
-                    Automatically Update
-                  </p>
-                  <p style={{ margin: '2px 0 0', fontSize: 'var(--text-xs)', color: 'var(--color-text-secondary)' }}>
-                    Check and alert for new releases on startup
-                  </p>
-                </div>
+                <ToggleSwitch
+                  id="auto-update-toggle"
+                  checked={autoUpdate}
+                  onChange={handleAutoUpdateToggle}
+                  label="Automatically Update"
+                />
               </div>
-              <ToggleSwitch
-                id="auto-update-toggle"
-                checked={autoUpdate}
-                onChange={handleAutoUpdateToggle}
-                label="Automatically Update"
-              />
+
+              {/* Manual Check for Updates Button */}
+              <div style={{ borderTop: '1px solid var(--color-border)', paddingTop: 12, display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                <div>
+                  <p style={{ margin: 0, fontSize: 'var(--text-sm)', fontWeight: 600, color: 'var(--color-text-primary)' }}>
+                    Check for Updates
+                  </p>
+                  <p style={{ margin: '2px 0 0', fontSize: 'var(--text-xs)', color: 'var(--color-text-muted)' }}>
+                    Current Version: <strong style={{ color: 'var(--color-accent)' }}>v{CURRENT_APP_VERSION}</strong>
+                  </p>
+                </div>
+                <button
+                  type="button"
+                  onClick={handleCheckForUpdates}
+                  disabled={isCheckingUpdate}
+                  style={{
+                    background: 'var(--color-accent)',
+                    color: 'var(--color-accent-on)',
+                    border: 'none',
+                    borderRadius: 'var(--radius-md)',
+                    padding: '8px 16px',
+                    fontSize: 'var(--text-xs)',
+                    fontWeight: 700,
+                    cursor: isCheckingUpdate ? 'default' : 'pointer',
+                    opacity: isCheckingUpdate ? 0.7 : 1,
+                    display: 'flex',
+                    alignItems: 'center',
+                    gap: 6,
+                  }}
+                >
+                  {isCheckingUpdate ? (
+                    <span>Checking...</span>
+                  ) : (
+                    <span>Check Now</span>
+                  )}
+                </button>
+              </div>
             </div>
           </section>
 
@@ -1196,6 +1260,14 @@ export function SettingsScreen() {
             </div>
           </div>
         </div>
+      )}
+
+      {updateModalInfo && (
+        <UpdateModal
+          updateInfo={updateModalInfo}
+          isOpen={Boolean(updateModalInfo)}
+          onClose={() => setUpdateModalInfo(null)}
+        />
       )}
     </div>
   );

@@ -26,6 +26,7 @@ export interface UpdateCheckResult {
 export const CURRENT_APP_VERSION = '1.2.1';
 export const CURRENT_BUILD_NUMBER = 20260817;
 
+const RENDER_BACKEND_URL = (import.meta as any).env?.VITE_BACKEND_URL || 'https://soundwave-backend.onrender.com';
 const FIREBASE_RTDB_URL = 'https://soundwaves-b520c-default-rtdb.asia-southeast1.firebasedatabase.app';
 const UPDATE_CACHE_KEY = 'sw_latest_update_info';
 const LAST_CHECK_KEY = 'sw_last_update_check_time';
@@ -67,7 +68,7 @@ class UpdateService {
   }
 
   /**
-   * Fetches latest update metadata from Firebase Realtime Database
+   * Fetches latest update metadata from Render Backend & Firebase Realtime Database
    */
   public async checkForUpdates(force = false): Promise<UpdateCheckResult> {
     const now = Date.now();
@@ -99,18 +100,39 @@ class UpdateService {
     this.isChecking = true;
 
     try {
-      // Connect to Firebase Realtime Database
-      const url = `${FIREBASE_RTDB_URL}/app_updates/latest.json`;
-      const response = await fetch(url, {
-        headers: { 'Accept': 'application/json' },
-        cache: 'no-cache',
-      });
+      let raw: any = null;
 
-      if (!response.ok) {
-        throw new Error(`Firebase returned status ${response.status}`);
+      // 1. Try Render Backend API
+      try {
+        const renderUrl = `${RENDER_BACKEND_URL}/api/updates/latest?version=${encodeURIComponent(CURRENT_APP_VERSION)}`;
+        const res = await fetch(renderUrl, {
+          headers: { 'Accept': 'application/json' },
+          cache: 'no-cache',
+          signal: AbortSignal.timeout(3500),
+        });
+        if (res.ok) {
+          const resData = await res.json();
+          if (resData?.update?.version) {
+            raw = resData.update;
+          }
+        }
+      } catch {}
+
+      // 2. Fallback to Firebase Realtime Database directly
+      if (!raw || !raw.version) {
+        try {
+          const fbUrl = `${FIREBASE_RTDB_URL}/app_updates/latest.json`;
+          const fbRes = await fetch(fbUrl, {
+            headers: { 'Accept': 'application/json' },
+            cache: 'no-cache',
+            signal: AbortSignal.timeout(4000),
+          });
+          if (fbRes.ok) {
+            raw = await fbRes.json();
+          }
+        } catch {}
       }
 
-      const raw = await response.json();
       if (!raw || !raw.version) {
         return {
           hasUpdate: false,

@@ -1,0 +1,14 @@
+services:
+  - type: web
+    name: soundwave-backend
+    env: node
+    plan: free
+    buildCommand: npm install
+    startCommand: node server.js
+    envVars:
+      - key: PORT
+        value: 10000
+      - key: ADMIN_SECRET_KEY
+        value: soundwave_admin_2026
+      - key: FIREBASE_DB_URL
+        value: https://soundwaves-b520c-default-rtdb.asia-southeast1.firebasedatabase.app
