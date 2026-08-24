@@ -95,12 +95,10 @@ function EqBars({ color = 'var(--color-accent)' }: { color?: string }) {
 function SectionHeader({
   title,
   subtitle,
-  badge,
   onPlayAll,
 }: {
   title: string;
   subtitle?: string;
-  badge?: string;
   onPlayAll?: () => void;
 }) {
   return (
@@ -113,46 +111,30 @@ function SectionHeader({
       }}
     >
       <div style={{ flex: 1, minWidth: 0, paddingRight: 12 }}>
-        <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-          <h2
-            style={{
-              margin: 0,
-              fontSize: 'var(--text-lg, 18px)',
-              fontWeight: 700,
-              color: 'var(--color-text-primary)',
-              fontFamily: 'var(--font-display)',
-              letterSpacing: '-0.02em',
-            }}
-          >
-            {title}
-          </h2>
-          {badge && (
-            <span
-              style={{
-                fontSize: 10,
-                fontWeight: 700,
-                textTransform: 'uppercase',
-                letterSpacing: '0.06em',
-                padding: '2px 7px',
-                borderRadius: 'var(--radius-full, 9999px)',
-                background: 'var(--color-accent-subtle, rgba(249, 115, 22, 0.16))',
-                color: 'var(--color-accent)',
-              }}
-            >
-              {badge}
-            </span>
-          )}
-        </div>
+        <h2
+          style={{
+            margin: 0,
+            fontSize: 'var(--text-lg, 18px)',
+            fontWeight: 700,
+            color: 'var(--color-text-primary)',
+            fontFamily: 'var(--font-display)',
+            letterSpacing: '-0.02em',
+            lineHeight: 1.25,
+          }}
+        >
+          {title}
+        </h2>
         {subtitle && (
           <p
             style={{
-              margin: '3px 0 0',
+              margin: '4px 0 0',
               fontSize: 'var(--text-xs, 12px)',
               color: 'var(--color-text-secondary)',
               fontWeight: 400,
               overflow: 'hidden',
               textOverflow: 'ellipsis',
               whiteSpace: 'nowrap',
+              lineHeight: 1.3,
             }}
           >
             {subtitle}
@@ -772,7 +754,6 @@ export function HomeScreen({ isVisible = true }: { isVisible?: boolean }) {
           <SectionHeader
             title="Jump back in"
             subtitle="Pick up right where you left off"
-            badge="Resume"
             onPlayAll={() => playSong(jumpBackInTracks[0], jumpBackInTracks, 0)}
           />
 
@@ -910,7 +891,6 @@ export function HomeScreen({ isVisible = true }: { isVisible?: boolean }) {
           <SectionHeader
             title="Your top mixes"
             subtitle="Personalized mixes tailored to your favorite genres and moods"
-            badge="Top Mixes"
           />
 
           <div
@@ -1126,7 +1106,6 @@ export function HomeScreen({ isVisible = true }: { isVisible?: boolean }) {
           <SectionHeader
             title="Made for you"
             subtitle="Curated discovery playlists tuned to your unique taste profile"
-            badge="For You"
           />
 
           <div
@@ -1260,7 +1239,6 @@ export function HomeScreen({ isVisible = true }: { isVisible?: boolean }) {
           <SectionHeader
             title="Charts"
             subtitle={dynamicLanguages.length > 1 ? `Top trending songs across ${languagesSubtitle}` : `Top trending songs in ${primaryLanguage} & India`}
-            badge="Top 100"
             onPlayAll={() => {
               const list = chartsTracks.length > 0 ? chartsTracks : ytViewModel.getTrendingSongs();
               if (list.length > 0) playSong(list[0], list, 0);
@@ -1378,7 +1356,6 @@ export function HomeScreen({ isVisible = true }: { isVisible?: boolean }) {
           <SectionHeader
             title="New releases for you"
             subtitle={dynamicLanguages.length > 1 ? `Fresh tracks and singles across ${languagesSubtitle}` : `Fresh tracks and singles just dropped in ${primaryLanguage}`}
-            badge="New"
             onPlayAll={() => playSong(newReleasesList[0], newReleasesList, 0)}
           />
 
@@ -1422,7 +1399,6 @@ export function HomeScreen({ isVisible = true }: { isVisible?: boolean }) {
           <SectionHeader
             title="Recommended for today"
             subtitle="Handpicked tracks for your daily listening flow"
-            badge="Today"
             onPlayAll={() => playSong(recommendedTodayTracks[0], recommendedTodayTracks, 0)}
           />
 
@@ -1466,7 +1442,6 @@ export function HomeScreen({ isVisible = true }: { isVisible?: boolean }) {
           <SectionHeader
             title="Based on your recent listening"
             subtitle={`Inspired by "${basedOnRecentTracks.seedTitle}"`}
-            badge="Inspired"
             onPlayAll={() => playSong(basedOnRecentTracks.songs[0], basedOnRecentTracks.songs, 0)}
           />
 
@@ -1510,7 +1485,6 @@ export function HomeScreen({ isVisible = true }: { isVisible?: boolean }) {
           <SectionHeader
             title={`More like ${moreLikeArtistData.artistName}`}
             subtitle={`Fans of ${moreLikeArtistData.artistName} also love these tracks`}
-            badge="Artist Mix"
             onPlayAll={() => playSong(moreLikeArtistData.songs[0], moreLikeArtistData.songs, 0)}
           />
 
@@ -1554,7 +1528,6 @@ export function HomeScreen({ isVisible = true }: { isVisible?: boolean }) {
           <SectionHeader
             title="Albums featuring songs you like"
             subtitle="Full albums containing your top tracks"
-            badge="Albums"
           />
 
           <div
@@ -1584,7 +1557,6 @@ export function HomeScreen({ isVisible = true }: { isVisible?: boolean }) {
           <SectionHeader
             title="Happy"
             subtitle="Upbeat and feel-good tracks to brighten your mood"
-            badge="Feel-Good"
             onPlayAll={() => playSong(happyTracks[0], happyTracks, 0)}
           />
 
@@ -1628,7 +1600,6 @@ export function HomeScreen({ isVisible = true }: { isVisible?: boolean }) {
           <SectionHeader
             title="Today's Biggest Hits"
             subtitle="The hottest chartbusters and viral anthems right now"
-            badge="Top Hits"
             onPlayAll={() => playSong(todayBiggestHits[0], todayBiggestHits, 0)}
           />
 
@@ -1672,7 +1643,6 @@ export function HomeScreen({ isVisible = true }: { isVisible?: boolean }) {
           <SectionHeader
             title="Popular Albums"
             subtitle="Top trending full albums and featured releases"
-            badge="Trending"
           />
 
           <div
@@ -1702,7 +1672,6 @@ export function HomeScreen({ isVisible = true }: { isVisible?: boolean }) {
           <SectionHeader
             title="Party"
             subtitle="High-energy club bangers and dance floor chartbusters"
-            badge="Party"
             onPlayAll={() => playSong(partyTracks[0], partyTracks, 0)}
           />
 
@@ -1746,7 +1715,6 @@ export function HomeScreen({ isVisible = true }: { isVisible?: boolean }) {
           <SectionHeader
             title="Workout"
             subtitle="Pumping bass and high-energy motivation for your fitness session"
-            badge="Pumping"
             onPlayAll={() => playSong(workoutTracks[0], workoutTracks, 0)}
           />
 
@@ -1790,7 +1758,6 @@ export function HomeScreen({ isVisible = true }: { isVisible?: boolean }) {
           <SectionHeader
             title={shelf.title}
             subtitle={shelf.subtitle}
-            badge={shelf.badge}
             onPlayAll={() => playSong(shelf.songs[0], shelf.songs, 0)}
           />
 
