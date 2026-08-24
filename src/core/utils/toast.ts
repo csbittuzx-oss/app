@@ -11,7 +11,7 @@ const listeners = new Set<ToastListener>();
 
 let currentTimeout: ReturnType<typeof setTimeout> | null = null;
 
-export function showToast(message: string, type: ToastType = 'success', duration = 2200) {
+export function showToast(message: string, type: ToastType = 'success', _duration = 2000) {
   if (currentTimeout) clearTimeout(currentTimeout);
   const payload: ToastPayload = {
     id: String(Date.now()),
@@ -19,9 +19,10 @@ export function showToast(message: string, type: ToastType = 'success', duration
     type,
   };
   listeners.forEach((l) => l(payload));
+  // Every toast auto hides after 2 seconds
   currentTimeout = setTimeout(() => {
     listeners.forEach((l) => l(null));
-  }, duration);
+  }, 2000);
 }
 
 export function subscribeToast(listener: ToastListener): () => void {

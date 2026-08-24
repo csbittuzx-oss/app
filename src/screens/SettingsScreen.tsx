@@ -5,6 +5,7 @@ import { aiTasteProfileEngine } from '../domain/ai/AITasteProfileEngine';
 import { updateService, type AppUpdateInfo, CURRENT_APP_VERSION } from '../services/UpdateService';
 import { UpdateModal } from '../components/shared/UpdateModal';
 import { dolbyAudioService } from '../services/DolbyAudioService';
+import { showToast } from '../core/utils/toast';
 import type { AudioQuality } from '../data/models';
 
 export function SettingsScreen() {
@@ -16,7 +17,6 @@ export function SettingsScreen() {
   const [isCheckingUpdate, setIsCheckingUpdate] = useState(false);
   const [updateModalInfo, setUpdateModalInfo] = useState<AppUpdateInfo | null>(null);
   const [selectedLangs, setSelectedLangs] = useState<string[]>(state.musicLanguages || ['Hindi', 'International']);
-  const [toastMessage, setToastMessage] = useState<string | null>(null);
 
   const isDark = state.theme === 'dark';
   const audioQuality: AudioQuality = state.config.audioQuality || 'high';
@@ -29,11 +29,6 @@ export function SettingsScreen() {
     'Kashmiri', 'Sindhi', 'Konkani', 'Maithili', 'Chhattisgarhi',
     'Garhwali', 'Kumaoni', 'Manipuri', 'Nagpuri', 'Braj', 'Awadhi', 'Marwari',
   ];
-
-  const showToast = (msg: string) => {
-    setToastMessage(msg);
-    setTimeout(() => setToastMessage(null), 2500);
-  };
 
   const handleSaveLanguages = () => {
     if (selectedLangs.length === 0) {
@@ -83,37 +78,6 @@ export function SettingsScreen() {
 
   return (
     <div style={{ display: 'flex', flexDirection: 'column', height: '100%', position: 'relative' }}>
-      {/* Settings Bottom Toast Notification */}
-      {toastMessage && (
-        <div style={{
-          position: 'fixed',
-          bottom: playerState.currentSong
-            ? 'calc(64px + 56px + env(safe-area-inset-bottom, 0px) + 16px)'
-            : 'calc(56px + env(safe-area-inset-bottom, 0px) + 16px)',
-          left: '50%',
-          transform: 'translateX(-50%)',
-          zIndex: 800,
-          background: '#1A1D2B',
-          border: '1px solid rgba(255, 255, 255, 0.15)',
-          color: '#F3F4F6',
-          padding: '10px 20px',
-          borderRadius: 'var(--radius-full)',
-          fontSize: 'var(--text-sm)',
-          fontWeight: 600,
-          boxShadow: '0 8px 30px rgba(0, 0, 0, 0.6)',
-          animation: 'slideUp 200ms cubic-bezier(0, 0, 0.2, 1)',
-          textAlign: 'center',
-          maxWidth: '85%',
-          display: 'flex',
-          alignItems: 'center',
-          gap: 8,
-          pointerEvents: 'none',
-        }}>
-          <span style={{ width: 6, height: 6, borderRadius: '50%', background: 'var(--color-accent)' }} />
-          <span>{toastMessage}</span>
-        </div>
-      )}
-
       {/* Main Content */}
       <div className="scroll-area" style={{ flex: 1, paddingBottom: 'var(--content-bottom-pad)' }}>
         {/* Header */}

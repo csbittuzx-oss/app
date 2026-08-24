@@ -65,10 +65,10 @@ function GlobalToast({ isFullPlayer, hasMiniPlayer }: { isFullPlayer: boolean; h
 
   // Calculate bottom offset to avoid overlapping mini-player, full-player, or bottom nav
   const bottomOffset = isFullPlayer
-    ? 'calc(env(safe-area-inset-bottom, 0px) + 28px)'
+    ? 'calc(env(safe-area-inset-bottom, 0px) + 24px)'
     : hasMiniPlayer
-    ? 'calc(var(--bottom-nav-height, 64px) + 68px + env(safe-area-inset-bottom, 0px) + 12px)'
-    : 'calc(var(--bottom-nav-height, 64px) + env(safe-area-inset-bottom, 0px) + 16px)';
+    ? 'calc(var(--bottom-nav-height, 64px) + 64px + env(safe-area-inset-bottom, 0px) + 8px)'
+    : 'calc(var(--bottom-nav-height, 64px) + env(safe-area-inset-bottom, 0px) + 12px)';
 
   return (
     <div
@@ -78,32 +78,29 @@ function GlobalToast({ isFullPlayer, hasMiniPlayer }: { isFullPlayer: boolean; h
         left: '50%',
         transform: 'translateX(-50%)',
         zIndex: 99999,
-        background: 'rgba(24, 24, 27, 0.94)',
-        backdropFilter: 'blur(20px) saturate(180%)',
-        WebkitBackdropFilter: 'blur(20px) saturate(180%)',
-        border: '1px solid rgba(255, 255, 255, 0.12)',
-        color: '#FFFFFF',
-        padding: '10px 18px',
-        borderRadius: 'var(--radius-full)',
-        boxShadow: '0 12px 32px rgba(0, 0, 0, 0.45), 0 2px 8px rgba(0, 0, 0, 0.25)',
-        fontSize: '13.5px',
-        fontWeight: 600,
-        letterSpacing: '-0.01em',
+        background: 'rgba(18, 18, 20, 0.95)',
+        backdropFilter: 'blur(16px)',
+        WebkitBackdropFilter: 'blur(16px)',
+        border: '1px solid rgba(255, 255, 255, 0.1)',
+        color: '#F4F4F5',
+        padding: '6px 14px',
+        borderRadius: '9999px',
+        boxShadow: '0 4px 16px rgba(0, 0, 0, 0.35)',
+        fontSize: '12px',
+        fontWeight: 500,
         display: 'flex',
         alignItems: 'center',
-        gap: 10,
+        gap: 7,
         pointerEvents: 'none',
-        animation: 'toastBottomSlide 320ms cubic-bezier(0.16, 1, 0.3, 1)',
-        maxWidth: 'min(380px, calc(100vw - 32px))',
+        maxWidth: 'min(340px, calc(100vw - 32px))',
         fontFamily: 'var(--font-body)',
-        transition: 'bottom 250ms cubic-bezier(0.2, 0.8, 0.2, 1)',
       }}
     >
-      {/* Icon Badge */}
+      {/* Crisp SVG Icon Badge */}
       <div
         style={{
-          width: 22,
-          height: 22,
+          width: 16,
+          height: 16,
           borderRadius: '50%',
           display: 'flex',
           alignItems: 'center',
@@ -114,18 +111,18 @@ function GlobalToast({ isFullPlayer, hasMiniPlayer }: { isFullPlayer: boolean; h
         }}
       >
         {isSuccess && (
-          <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round">
+          <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round">
             <polyline points="20 6 9 17 4 12" />
           </svg>
         )}
         {isDanger && (
-          <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
-            <polyline points="3 6 5 6 21 6" />
-            <path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6" />
+          <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round">
+            <line x1="18" y1="6" x2="6" y2="18" />
+            <line x1="6" y1="6" x2="18" y2="18" />
           </svg>
         )}
         {!isSuccess && !isDanger && (
-          <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+          <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
             <circle cx="12" cy="12" r="10" />
             <line x1="12" y1="16" x2="12" y2="12" />
             <line x1="12" y1="8" x2="12.01" y2="8" />

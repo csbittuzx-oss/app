@@ -19,9 +19,9 @@ export function CreateMenuSheet({ isOpen, onClose }: CreateMenuSheetProps) {
     toggleRidingMode();
     const nextState = !isRidingOn;
     if (nextState) {
-      showToast('🏍️ Riding Mode ON — DJ Crossfade active', 'success', 2500);
+      showToast('Riding Mode ON — DJ Crossfade active', 'success');
     } else {
-      showToast('Riding Mode OFF — Standard playback', 'info', 2000);
+      showToast('Riding Mode OFF — Standard playback', 'info');
     }
   };
 
