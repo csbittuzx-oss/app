@@ -72,6 +72,8 @@ export function FullPlayer() {
   const [lyricsError, setLyricsError] = useState(false);
   const [isDragging, setIsDragging] = useState(false);
   const [dragProgress, setDragProgress] = useState(0);
+  const dragProgressRef = useRef(0);
+  const isDraggingRef = useRef(false);
   const progressRef = useRef<HTMLDivElement>(null);
   const lineRefs = useRef<(HTMLParagraphElement | null)[]>([]);
   const lyricsContainerRef = useRef<HTMLDivElement | null>(null);
@@ -325,18 +327,62 @@ export function FullPlayer() {
     ? dragProgress
     : (effectiveDuration > 0 ? Math.min(1, Math.max(0, currentTime / effectiveDuration)) : (progress || 0));
 
+  const getPointerProgress = React.useCallback((clientX: number) => {
+    if (!progressRef.current) return 0;
+    const rect = progressRef.current.getBoundingClientRect();
+    if (rect.width <= 0) return 0;
+    return Math.max(0, Math.min(1, (clientX - rect.left) / rect.width));
+  }, []);
+
+  const handleProgressStart = (e: React.MouseEvent | React.TouchEvent) => {
+    const clientX = 'touches' in e ? e.touches[0].clientX : e.clientX;
+    const p = getPointerProgress(clientX);
+    dragProgressRef.current = p;
+    setDragProgress(p);
+    setIsDragging(true);
+    isDraggingRef.current = true;
+  };
+
+  useEffect(() => {
+    if (!isDragging) return;
+
+    const handlePointerMove = (e: MouseEvent | TouchEvent) => {
+      if (!isDraggingRef.current) return;
+      const clientX = 'touches' in e && e.touches.length ? e.touches[0].clientX : (e as MouseEvent).clientX;
+      if (clientX !== undefined) {
+        const p = getPointerProgress(clientX);
+        dragProgressRef.current = p;
+        setDragProgress(p);
+      }
+    };
+
+    const handlePointerUp = (e: MouseEvent | TouchEvent) => {
+      if (isDraggingRef.current) {
+        isDraggingRef.current = false;
+        setIsDragging(false);
+        const clientX = 'changedTouches' in e && e.changedTouches.length ? e.changedTouches[0].clientX : (e as MouseEvent).clientX;
+        const finalP = clientX !== undefined ? getPointerProgress(clientX) : dragProgressRef.current;
+        seek(finalP);
+      }
+    };
+
+    window.addEventListener('mousemove', handlePointerMove, { passive: true });
+    window.addEventListener('touchmove', handlePointerMove, { passive: true });
+    window.addEventListener('mouseup', handlePointerUp);
+    window.addEventListener('touchend', handlePointerUp);
+    window.addEventListener('touchcancel', handlePointerUp);
+
+    return () => {
+      window.removeEventListener('mousemove', handlePointerMove);
+      window.removeEventListener('touchmove', handlePointerMove);
+      window.removeEventListener('mouseup', handlePointerUp);
+      window.removeEventListener('touchend', handlePointerUp);
+      window.removeEventListener('touchcancel', handlePointerUp);
+    };
+  }, [isDragging, getPointerProgress, seek]);
+
   const displayTime = isDragging ? dragProgress * effectiveDuration : currentTime;
   const remainingTime = Math.max(0, effectiveDuration - displayTime);
-
-  // ─── Progress bar drag handling ───────────────────────────────────────────
-  const handleProgressInteraction = (e: React.MouseEvent | React.TouchEvent) => {
-    if (!progressRef.current) return;
-    const rect = progressRef.current.getBoundingClientRect();
-    const clientX = 'touches' in e ? e.touches[0].clientX : e.clientX;
-    const p = Math.max(0, Math.min(1, (clientX - rect.left) / rect.width));
-    setDragProgress(p);
-    seek(p);
-  };
 
   return (
     <div
@@ -451,11 +497,12 @@ export function FullPlayer() {
                     : 'border-radius 420ms cubic-bezier(0.2, 0.8, 0.2, 1), transform 420ms cubic-bezier(0.2, 0.8, 0.2, 1), box-shadow 420ms cubic-bezier(0.2, 0.8, 0.2, 1)',
                   cursor: isDraggingArtwork ? 'grabbing' : 'pointer',
                   userSelect: 'none',
+                  willChange: 'transform, border-radius, box-shadow',
                 }}
               >
                 <img
                   key={currentSong.id}
-                  src={resizeImageUrl(currentSong.artworkLg || currentSong.artwork, 1200, 1200)}
+                  src={resizeImageUrl(currentSong.artworkLg || currentSong.artwork, 600, 600)}
                   alt={`${currentSong.album} artwork`}
                   loading="eager"
                   onError={(e) => { (e.target as HTMLImageElement).src = CONFIG.ARTWORK_PLACEHOLDER; }}
@@ -785,19 +832,21 @@ export function FullPlayer() {
               cursor: 'pointer', position: 'relative',
               touchAction: 'none',
             }}
-            onMouseDown={(e) => { setIsDragging(true); handleProgressInteraction(e); }}
-            onMouseMove={(e) => { if (isDragging) handleProgressInteraction(e); }}
-            onMouseUp={() => setIsDragging(false)}
-            onTouchStart={(e) => { setIsDragging(true); handleProgressInteraction(e); }}
-            onTouchMove={(e) => { if (isDragging) handleProgressInteraction(e); }}
-            onTouchEnd={() => setIsDragging(false)}
+            onMouseDown={handleProgressStart}
+            onTouchStart={handleProgressStart}
+            onClick={(e) => {
+              if (!isDragging) {
+                const p = getPointerProgress(e.clientX);
+                seek(p);
+              }
+            }}
           >
             <div style={{
               height: '100%',
               width: `${displayProgress * 100}%`,
               background: 'var(--color-accent)',
               borderRadius: 2,
-              transition: isDragging ? 'none' : 'width 1s linear',
+              transition: isDragging ? 'none' : 'width 200ms linear',
             }} />
             {/* Scrubber thumb */}
             <div style={{
@@ -809,7 +858,7 @@ export function FullPlayer() {
               height: isDragging ? 16 : 12,
               borderRadius: '50%',
               background: 'var(--color-accent)',
-              transition: isDragging ? 'none' : 'width 200ms var(--ease-standard), height 200ms var(--ease-standard)',
+              transition: isDragging ? 'none' : 'left 200ms linear, width 200ms var(--ease-standard), height 200ms var(--ease-standard)',
               boxShadow: 'var(--shadow-sm)',
             }} />
           </div>
