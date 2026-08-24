@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState } from 'react';
 import { useApp } from '../state/AppContext';
 import { usePlayer } from '../state/PlayerContext';
 import { aiTasteProfileEngine } from '../domain/ai/AITasteProfileEngine';
@@ -17,13 +17,6 @@ export function SettingsScreen() {
   const [updateModalInfo, setUpdateModalInfo] = useState<AppUpdateInfo | null>(null);
   const [selectedLangs, setSelectedLangs] = useState<string[]>(state.musicLanguages || ['Hindi', 'International']);
   const [toastMessage, setToastMessage] = useState<string | null>(null);
-  const [isDolbySupported, setIsDolbySupported] = useState(false);
-
-  useEffect(() => {
-    dolbyAudioService.checkSupport().then((supported) => {
-      setIsDolbySupported(supported);
-    });
-  }, []);
 
   const isDark = state.theme === 'dark';
   const audioQuality: AudioQuality = state.config.audioQuality || 'high';
@@ -52,10 +45,17 @@ export function SettingsScreen() {
     showToast('Music recommendation preferences updated');
   };
 
-  const handleQualityChange = (q: AudioQuality) => {
+  const handleQualityChange = async (q: AudioQuality) => {
+    if (q === 'dolby') {
+      const status = await dolbyAudioService.getStatus();
+      if (!status.canEnable) {
+        showToast('Connect earphones, earbuds, or a speaker to enable Dolby Atmos');
+        return;
+      }
+    }
     dispatch({ type: 'SET_CONFIG', payload: { audioQuality: q } });
     setAudioQuality(q);
-    const label = q === 'dolby' ? 'Dolby Audio (Hardware Dolby Atmos)' : q === 'high' ? 'High (320 kbps Studio HD)' : q === 'medium' ? 'Medium (192 kbps)' : 'Low (96 kbps Data Saver)';
+    const label = q === 'dolby' ? 'Dolby Audio (Dolby Atmos)' : q === 'high' ? 'High (320 kbps Studio HD)' : q === 'medium' ? 'Medium (192 kbps)' : 'Low (96 kbps Data Saver)';
     showToast(`Audio quality switched to ${label}`);
   };
 
@@ -207,12 +207,12 @@ export function SettingsScreen() {
               overflow: 'hidden',
             }}>
               {[
-                ...(isDolbySupported ? [{
+                {
                   id: 'dolby' as AudioQuality,
                   title: 'Dolby Audio',
                   bitrate: 'Dolby Atmos',
-                  desc: 'Hardware-accelerated Dolby Atmos spatial surround sound',
-                }] : []),
+                  desc: 'Hardware Dolby Atmos & 3D Spatial Audio (Supported device, earphones, earbuds, or speaker)',
+                },
                 { id: 'high' as AudioQuality, title: 'High Quality', bitrate: '320 kbps', desc: 'Best sound quality & crystal clear audio (Recommended)' },
                 { id: 'medium' as AudioQuality, title: 'Medium Quality', bitrate: '192 kbps', desc: 'Balanced streaming with moderate data usage' },
                 { id: 'low' as AudioQuality, title: 'Low Quality', bitrate: '96 kbps', desc: 'Data saver mode for slower connections' },
