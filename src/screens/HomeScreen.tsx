@@ -38,6 +38,7 @@ import { SongSquareCard } from '../components/cards/SongCard';
 import { AlbumCard } from '../components/cards/AlbumCard';
 import { SongOptionsBottomSheet } from '../components/shared/SongOptionsBottomSheet';
 import { HomeShimmerSkeleton } from '../components/shared/SkeletonCard';
+import { aiExperienceShelfEngine, type AIExperienceShelf } from '../domain/ai/AIExperienceShelfEngine';
 import { getGreeting } from '../core/utils';
 import { CONFIG } from '../config';
 import { resizeImageUrl } from '../core/utils/imageUtils';
@@ -280,6 +281,7 @@ export function HomeScreen({ isVisible = true }: { isVisible?: boolean }) {
   const [popularAlbumsList, setPopularAlbumsList] = useState<Album[]>([]);
   const [partyTracks, setPartyTracks] = useState<Song[]>([]);
   const [workoutTracks, setWorkoutTracks] = useState<Song[]>([]);
+  const [aiExperienceShelves, setAiExperienceShelves] = useState<AIExperienceShelf[]>(() => aiExperienceShelfEngine.getCachedShelves());
   const [isInitialLoading, setIsInitialLoading] = useState(true);
 
   const topArtistName = useMemo(() => {
@@ -485,7 +487,21 @@ export function HomeScreen({ isVisible = true }: { isVisible?: boolean }) {
         })
         .catch(() => {});
 
-      await Promise.allSettled([p1, p2, p3, p4, p5, p6, p7, p8, p9]);
+      const p10 = aiExperienceShelfEngine
+        .generateAIExperienceShelves({
+          recentlyPlayed,
+          favorites,
+          languages: dynamicLanguages,
+          shelfCount: 3,
+        })
+        .then((shelves) => {
+          if (shelves && shelves.length > 0) {
+            setAiExperienceShelves(shelves);
+          }
+        })
+        .catch(() => {});
+
+      await Promise.allSettled([p1, p2, p3, p4, p5, p6, p7, p8, p9, p10]);
     } catch (e) {
       console.warn('[HomeScreen] Pipeline network fetch error:', e);
     } finally {
@@ -1765,6 +1781,50 @@ export function HomeScreen({ isVisible = true }: { isVisible?: boolean }) {
           </div>
         </section>
       )}
+
+      {/* ═════════════════════════════════════════════════════════════════════
+          🤖 AI PERSONALIZED EXPERIENCE SHELVES (Downside)
+      ═════════════════════════════════════════════════════════════════════ */}
+      {aiExperienceShelves && aiExperienceShelves.length > 0 && aiExperienceShelves.map((shelf) => (
+        <section key={shelf.id} style={{ marginBottom: 8 }}>
+          <SectionHeader
+            title={shelf.title}
+            subtitle={shelf.subtitle}
+            badge={shelf.badge}
+            onPlayAll={() => playSong(shelf.songs[0], shelf.songs, 0)}
+          />
+
+          <div
+            style={{
+              display: 'flex',
+              gap: 14,
+              overflowX: 'auto',
+              padding: '4px 20px 14px',
+              scrollPadding: '0 20px',
+              WebkitOverflowScrolling: 'touch',
+              scrollbarWidth: 'none',
+              boxSizing: 'border-box',
+            }}
+          >
+            {shelf.songs.map((song, i) => (
+              <div
+                key={song.id}
+                onContextMenu={(e) => {
+                  e.preventDefault();
+                  triggerLongPress(song);
+                }}
+              >
+                <SongSquareCard
+                  song={song}
+                  queue={shelf.songs}
+                  index={i}
+                  size={144}
+                />
+              </div>
+            ))}
+          </div>
+        </section>
+      ))}
         </div>
       )}
 
