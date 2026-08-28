@@ -139,7 +139,7 @@ class YouTubeAudioEngine {
           rel: 0,
           playsinline: 1,
           enablejsapi: 1,
-          origin: window.location.origin,
+          widget_referrer: 'https://music.youtube.com',
         },
         events: {
           onReady: () => {

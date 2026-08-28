@@ -281,14 +281,6 @@ export async function getYouTubeMusicTrending(limit = 20): Promise<Song[]> {
   return res.songs;
 }
 
-const PIPED_INSTANCES = [
-  'https://api.piped.private.coffee',
-  'https://pipedapi.drgns.space',
-  'https://pipedapi.adminforge.de',
-  'https://pipedapi.astartes.nl',
-  'https://piped-api.garudalinux.org',
-  'https://pipedapi.in.projectsegfau.lt',
-];
 
 
 
@@ -405,6 +397,8 @@ export async function resolveYouTubeFullAudioStream(
   const { isPreviewAudioUrl } = await import('./saavnApi');
 
   // Strategy 1: Direct YouTube Music InnerTube search (Google's native ML search - highest accuracy)
+  let bestCandidate: { videoId: string; duration: number; artwork: string } | null = null;
+
   for (const q of queries) {
     try {
       const ytResult = await searchYouTubeMusic(q, 8);
@@ -424,6 +418,15 @@ export async function resolveYouTubeFullAudioStream(
           .filter((c) => c.isMatch && c.videoId)
           .sort((a, b) => b.confidence - a.confidence);
 
+        if (matchingCandidates.length > 0 && !bestCandidate) {
+          const top = matchingCandidates[0];
+          bestCandidate = {
+            videoId: top.videoId,
+            duration: top.song.duration || targetDuration || 180,
+            artwork: top.song.artwork || top.song.artworkLg || `https://i.ytimg.com/vi/${top.videoId}/hqdefault.jpg`,
+          };
+        }
+
         for (const candidate of matchingCandidates) {
           const stream = await fetchAudioStreamFromYouTubeId(candidate.videoId);
           if (stream?.streamUrl && !isPreviewAudioUrl(stream.streamUrl)) {
@@ -441,44 +444,28 @@ export async function resolveYouTubeFullAudioStream(
     }
   }
 
-  // Strategy 2: Piped Music Songs search fallback
-  for (const q of queries) {
-    for (const instance of PIPED_INSTANCES.slice(0, 3)) {
-      try {
-        const searchUrl = `${instance}/search?q=${encodeURIComponent(q)}&filter=music_songs`;
-        const data = await universalGet(searchUrl);
-        if (Array.isArray(data?.items) && data.items.length > 0) {
-          const verifiedCandidates = data.items
-            .map((item: any) => {
-              const cand = {
-                title: item.title || '',
-                artist: item.uploaderName || item.artist || '',
-                duration: item.duration || 0,
-              };
-              const decision = evaluateTrackMatch(title, artist, targetDuration, cand, 'Piped Music Fallback');
-              return { item, isMatch: decision.isMatch, confidence: decision.confidence };
-            })
-            .filter((x: any) => x.isMatch && x.item.url)
-            .sort((a: any, b: any) => b.confidence - a.confidence);
-
-          for (const cand of verifiedCandidates.slice(0, 3)) {
-            const videoId = cand.item.url.replace('/watch?v=', '');
-            const stream = await fetchAudioStreamFromYouTubeId(videoId);
-            if (stream?.streamUrl && !isPreviewAudioUrl(stream.streamUrl)) {
-              return {
-                streamUrl: stream.streamUrl,
-                duration: stream.duration || cand.item.duration || targetDuration || 180,
-                artwork: cand.item.thumbnail || `https://i.ytimg.com/vi/${videoId}/hqdefault.jpg`,
-                videoId,
-              };
-            }
-          }
-        }
-      } catch {
-        // try next instance
-      }
-    }
+  // Strategy 2: If we found the verified YouTube video ID, return it as YouTube stream target
+  if (bestCandidate && bestCandidate.videoId) {
+    return {
+      streamUrl: `yt_${bestCandidate.videoId}`,
+      duration: bestCandidate.duration,
+      artwork: bestCandidate.artwork,
+      videoId: bestCandidate.videoId,
+    };
   }
+
+  // Strategy 3: Fast Video ID resolver fallback
+  try {
+    const directResolved = await resolveYouTubeVideoId(title, artist, targetDuration);
+    if (directResolved && directResolved.videoId) {
+      return {
+        streamUrl: `yt_${directResolved.videoId}`,
+        duration: directResolved.duration || targetDuration || 180,
+        artwork: directResolved.artwork,
+        videoId: directResolved.videoId,
+      };
+    }
+  } catch {}
 
   return null;
 }

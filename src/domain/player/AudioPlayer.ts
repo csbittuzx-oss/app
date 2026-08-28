@@ -1134,8 +1134,9 @@ class AudioPlayer {
       }
     }
 
-    // ── 1. If song is NOT available on CDN, trigger Instant YouTube Fallback ──
-    if ((!targetSong.previewUrl || isPreviewAudioUrl(targetSong.previewUrl)) && navigator.onLine) {
+    // ── 1. If song is NOT available on CDN or is a YouTube marker, trigger Instant YouTube Fallback ──
+    const isYtMarker = targetSong.previewUrl?.startsWith('yt_') || targetSong.id.startsWith('yt_') || targetSong.provider === 'youtube';
+    if ((isYtMarker || !targetSong.previewUrl || isPreviewAudioUrl(targetSong.previewUrl)) && navigator.onLine) {
       const handled = await this.playViaYouTubeFallback(targetSong, currentSessionId, this.pendingSeekPosition);
       if (handled) return;
     }
@@ -1150,8 +1151,6 @@ class AudioPlayer {
       }
       return;
     }
-
-
 
     // ── Switch to HTML5 Audio engine ──
     youtubeAudioEngine.stop();
@@ -1212,7 +1211,7 @@ class AudioPlayer {
    * Resolves the correct YouTube video ID and plays seamlessly via Headless YouTube Audio Engine.
    */
   private async playViaYouTubeFallback(targetSong: Song, sessionId: number, seekSeconds = 0): Promise<boolean> {
-    if (!this.isUserInteracted) return false;
+    this.isUserInteracted = true;
     this.emit({ type: 'loading', isLoading: true });
 
     const { resolveYouTubeVideoId } = await import('../../data/api/youtubeMusicApi');

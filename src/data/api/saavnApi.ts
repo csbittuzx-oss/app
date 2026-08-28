@@ -89,7 +89,7 @@ export async function fetchSaavnSongStreamById(songId: string, quality: AudioQua
  */
 export function isPreviewAudioUrl(url?: string | null): boolean {
   if (!url || typeof url !== 'string') return true;
-  if (url.startsWith('blob:')) return false;
+  if (url.startsWith('blob:') || url.startsWith('yt_')) return false;
   if (!url.startsWith('http')) return true;
   const lower = url.toLowerCase();
   return (
