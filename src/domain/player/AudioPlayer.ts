@@ -111,6 +111,8 @@ class AudioPlayer {
   private currentStreamSongId: string | null = null;
   private stallWatcherCleanup: (() => void) | null = null;
   private nextSongPreBuffered: string | null = null;
+  private retryCount = 0;
+  private stallRecoveryTimer: ReturnType<typeof setTimeout> | null = null;
 
   // Continue Listening & Resume state (Restored from previous session exclusively for resume)
   private savedResumeTrackId: string | null = null;
@@ -131,6 +133,10 @@ class AudioPlayer {
     adaptiveStreaming.configureAudioElement(this.secondaryAudio);
     // Initialise network monitoring immediately
     adaptiveStreaming.initNetworkMonitor();
+
+    if (typeof window !== 'undefined') {
+      window.addEventListener('online', () => this.handleNetworkRestored());
+    }
 
     // Retrieve saved configuration from localStorage if available
     try {
@@ -372,6 +378,7 @@ class AudioPlayer {
   private bindAudioElement(el: HTMLAudioElement) {
     el.addEventListener('play', () => {
       if (el !== this.primaryAudio || this.activeEngine !== 'html5') return;
+      this.clearStallRecovery();
       this.emit({ type: 'loading', isLoading: false });
       this.emit({ type: 'play' });
       this.emit({ type: 'error', error: null });
@@ -387,6 +394,8 @@ class AudioPlayer {
 
     el.addEventListener('playing', () => {
       if (el !== this.primaryAudio || this.activeEngine !== 'html5') return;
+      this.clearStallRecovery();
+      this.retryCount = 0;
       this.emit({ type: 'loading', isLoading: false });
       this.emit({ type: 'play' });
       this.emit({ type: 'error', error: null });
@@ -394,6 +403,7 @@ class AudioPlayer {
 
     el.addEventListener('pause', () => {
       if (el !== this.primaryAudio || this.activeEngine !== 'html5') return;
+      this.clearStallRecovery();
       this.emit({ type: 'pause' });
       this.saveCurrentSession();
       if (this.currentSong) {
@@ -408,6 +418,7 @@ class AudioPlayer {
 
     el.addEventListener('ended', () => {
       if (el !== this.primaryAudio || this.activeEngine !== 'html5') return;
+      this.clearStallRecovery();
       if (this.isCrossfading) {
         if (this.crossfadeTargetSong) {
           this.completeCrossfade(this.crossfadeTargetSong, this.crossfadeTargetIndex);
@@ -449,10 +460,44 @@ class AudioPlayer {
       }
     });
 
+    el.addEventListener('waiting', () => {
+      if (el === this.primaryAudio && this.activeEngine === 'html5') {
+        this.emit({ type: 'loading', isLoading: true });
+        this.scheduleStallRecovery();
+      }
+    });
+
+    el.addEventListener('stalled', () => {
+      if (el === this.primaryAudio && this.activeEngine === 'html5') {
+        this.emit({ type: 'loading', isLoading: true });
+        this.scheduleStallRecovery();
+      }
+    });
+
     el.addEventListener('canplay', () => {
       if (el === this.primaryAudio && this.activeEngine === 'html5') {
+        this.clearStallRecovery();
         this.emit({ type: 'loading', isLoading: false });
         this.emit({ type: 'error', error: null });
+      }
+    });
+
+    el.addEventListener('canplaythrough', () => {
+      if (el === this.primaryAudio && this.activeEngine === 'html5') {
+        this.clearStallRecovery();
+        this.emit({ type: 'loading', isLoading: false });
+      }
+    });
+
+    el.addEventListener('seeking', () => {
+      if (el === this.primaryAudio && this.activeEngine === 'html5') {
+        this.emit({ type: 'loading', isLoading: true });
+      }
+    });
+
+    el.addEventListener('seeked', () => {
+      if (el === this.primaryAudio && this.activeEngine === 'html5') {
+        this.emit({ type: 'loading', isLoading: false });
       }
     });
 
@@ -464,12 +509,29 @@ class AudioPlayer {
         return;
       }
 
-      // Automatic Instant YouTube Fallback if JioSaavn stream fails
+      this.clearStallRecovery();
+      const currentPos = el.currentTime || this.savedResumePosition || 0;
+      const songToRecover = this.currentSong;
+
+      // Controlled retry with exponential backoff (preserving playback position)
+      if (this.retryCount < 3 && navigator.onLine) {
+        this.retryCount++;
+        const delay = [400, 1200, 2500][this.retryCount - 1];
+        setTimeout(() => {
+          if (this.currentSong?.id === songToRecover.id && this.activeEngine === 'html5') {
+            try {
+              this.audio.currentTime = currentPos;
+              this.audio.play().catch(() => {});
+            } catch {}
+          }
+        }, delay);
+        return;
+      }
+
+      // Automatic Instant YouTube Fallback if CDN stream fails after retries
       if (navigator.onLine && this.currentSong && !this.isAutoRecovering && this.isUserInteracted) {
         this.isAutoRecovering = true;
-        const songToRecover = this.currentSong;
-        const resumePos = el.currentTime || this.savedResumePosition || 0;
-        this.playViaYouTubeFallback(songToRecover, this.playbackSessionId, resumePos)
+        this.playViaYouTubeFallback(songToRecover, this.playbackSessionId, currentPos)
           .catch(() => {
             this.emit({ type: 'loading', isLoading: false });
             this.emit({ type: 'error', error: 'Playback failed. Tap to retry.' });
@@ -483,6 +545,52 @@ class AudioPlayer {
       this.emit({ type: 'loading', isLoading: false });
       this.emit({ type: 'error', error: 'Playback failed. Tap to retry.' });
     });
+  }
+
+  private scheduleStallRecovery() {
+    if (this.stallRecoveryTimer) return;
+    this.stallRecoveryTimer = setTimeout(() => {
+      this.stallRecoveryTimer = null;
+      if (
+        this.activeEngine === 'html5' &&
+        this.primaryAudio.paused &&
+        !this.primaryAudio.ended &&
+        navigator.onLine &&
+        this.currentSong
+      ) {
+        const pos = this.primaryAudio.currentTime;
+        const currentSrc = this.primaryAudio.src;
+        if (currentSrc && !currentSrc.startsWith('blob:')) {
+          try {
+            this.primaryAudio.currentTime = pos;
+            this.primaryAudio.play().catch(() => {});
+          } catch {}
+        }
+      }
+    }, 5500);
+  }
+
+  private clearStallRecovery() {
+    if (this.stallRecoveryTimer) {
+      clearTimeout(this.stallRecoveryTimer);
+      this.stallRecoveryTimer = null;
+    }
+  }
+
+  private handleNetworkRestored() {
+    if (
+      this.activeEngine === 'html5' &&
+      this.primaryAudio.paused &&
+      !this.primaryAudio.ended &&
+      this.currentSong &&
+      this.isUserInteracted
+    ) {
+      const pos = this.primaryAudio.currentTime || this.savedResumePosition || 0;
+      this.resume();
+      if (pos > 0) {
+        try { this.primaryAudio.currentTime = pos; } catch {}
+      }
+    }
   }
 
   /**

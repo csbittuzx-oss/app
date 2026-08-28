@@ -32,11 +32,11 @@ const MAX_CACHE_TRACKS = 50;
 // How many bytes we download as the initial pre-buffer chunk before allowing
 // playback to start.  Larger → more resilient on stalls, smaller → faster start.
 const INITIAL_CHUNK_BYTES: Record<NetworkTier, number> = {
-  '2g':   96_000,    //  96 KB  (~10s @ 96kbps)
-  '3g':  160_000,    // 160 KB  (~10s @ 128kbps)
-  '4g':  256_000,    // 256 KB  (~5-6s @ 320kbps)
-  '5g':  384_000,    // 384 KB  – start immediately, buffer is huge
-  wifi:  384_000,
+  '2g':   48_000,    //  48 KB  (~5s @ 96kbps - ultra-fast start)
+  '3g':   64_000,    //  64 KB  (~4s @ 128kbps)
+  '4g':   96_000,    //  96 KB  (~2.5s @ 320kbps - instant start)
+  '5g':  128_000,    // 128 KB  – start immediately
+  wifi:  128_000,
 };
 
 // How many bytes ahead of playback we keep downloading (rolling look-ahead).
