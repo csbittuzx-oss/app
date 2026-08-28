@@ -1,9 +1,11 @@
 package com.auramusic.app;
 
 import android.Manifest;
+import android.app.UiModeManager;
 import android.content.Intent;
 import android.content.pm.ActivityInfo;
 import android.content.pm.PackageManager;
+import android.content.res.Configuration;
 import android.os.Build;
 import android.os.Bundle;
 import android.webkit.WebSettings;
@@ -16,17 +18,36 @@ public class MainActivity extends BridgeActivity {
 
     private static final int NOTIFICATION_PERMISSION_CODE = 101;
 
+    public boolean isTelevision() {
+        try {
+            UiModeManager uiModeManager = (UiModeManager) getSystemService(UI_MODE_SERVICE);
+            if (uiModeManager != null && uiModeManager.getCurrentModeType() == Configuration.UI_MODE_TYPE_TELEVISION) {
+                return true;
+            }
+            PackageManager pm = getPackageManager();
+            if (pm.hasSystemFeature(PackageManager.FEATURE_LEANBACK) || pm.hasSystemFeature(PackageManager.FEATURE_TELEVISION)) {
+                return true;
+            }
+        } catch (Exception ignored) {}
+        return false;
+    }
+
     @Override
     public void onCreate(Bundle savedInstanceState) {
         registerPlugin(MediaNotificationPlugin.class);
         registerPlugin(DolbyAudioPlugin.class);
         super.onCreate(savedInstanceState);
 
+        boolean isTv = isTelevision();
         try {
-            setRequestedOrientation(ActivityInfo.SCREEN_ORIENTATION_PORTRAIT);
+            if (isTv) {
+                setRequestedOrientation(ActivityInfo.SCREEN_ORIENTATION_SENSOR_LANDSCAPE);
+            } else {
+                setRequestedOrientation(ActivityInfo.SCREEN_ORIENTATION_PORTRAIT);
+            }
         } catch (Exception ignored) {}
 
-        // Configure WebView for seamless background audio playback
+        // Configure WebView for seamless background audio playback and TV user agent tagging
         try {
             WebView webView = getBridge().getWebView();
             if (webView != null) {
@@ -37,11 +58,16 @@ public class MainActivity extends BridgeActivity {
                 settings.setDatabaseEnabled(true);
                 settings.setAllowFileAccess(true);
                 settings.setAllowContentAccess(true);
+
+                if (isTv) {
+                    String currentUa = settings.getUserAgentString();
+                    settings.setUserAgentString(currentUa + " AndroidTV/SoundwaveTV");
+                }
             }
         } catch (Exception ignored) {}
 
         // Request POST_NOTIFICATIONS runtime permission on Android 13+ (API 33+)
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+        if (!isTv && Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
             if (ContextCompat.checkSelfPermission(this, Manifest.permission.POST_NOTIFICATIONS)
                     != PackageManager.PERMISSION_GRANTED) {
                 ActivityCompat.requestPermissions(
@@ -98,7 +124,8 @@ public class MainActivity extends BridgeActivity {
         // When the user completely closes the app, terminate background playback service
         try {
             Intent intent = new Intent(this, MediaPlaybackService.class);
-            stopService(intent);
+            intent.setAction(MediaPlaybackService.ACTION_STOP_SERVICE);
+            startService(intent);
         } catch (Exception ignored) {}
         super.onDestroy();
     }

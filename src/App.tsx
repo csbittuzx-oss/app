@@ -142,9 +142,13 @@ import { useAndroidBackHandler } from './core/hooks/useAndroidBackHandler';
 import { updateService, type AppUpdateInfo } from './services/UpdateService';
 import { UpdateModal } from './components/shared/UpdateModal';
 
+import { useIsTV } from './core/utils/deviceMode';
+import { TVAppShell } from './tv/components/TVAppShell';
+
 // ─── App Shell ────────────────────────────────────────────────────────────────
 
 function AppShell() {
+  const isTV = useIsTV();
   const { state: appState } = useApp();
   const { state: playerState } = usePlayer();
   const [availableUpdate, setAvailableUpdate] = useState<AppUpdateInfo | null>(null);
@@ -170,6 +174,10 @@ function AppShell() {
       return () => clearTimeout(timer);
     }
   }, [appState.config.autoUpdate]);
+
+  if (isTV) {
+    return <TVAppShell />;
+  }
 
   if (!appState.onboardingCompleted) {
     return <OnboardingScreen />;
