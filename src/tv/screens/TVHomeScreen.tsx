@@ -1,68 +1,138 @@
 import { useState, useEffect } from 'react';
-import type { Song, Playlist } from '../../data/models';
+import type { Song, Playlist, Album } from '../../data/models';
 import { usePlayer } from '../../state/PlayerContext';
 import {
   getPersonalizedTrending,
+  getPersonalizedNewReleases,
   getTodayBiggestHits,
+  getHappyHits,
+  getPartyHits,
+  getWorkoutHits,
+  getDailyRecommendations,
+  getPopularAlbums,
   deduplicateSongs,
 } from '../../data/repository/musicRepository';
+import { generateSpotifyStyleShelves } from '../../services/CuratedPlaylistsService';
 import { getOfflineBackupPlaylist } from '../../services/OfflineBackupService';
-import { CONTINUE_LISTENING_KEY } from '../../domain/player/AudioPlayer';
 
 interface TVHomeScreenProps {
   onOpenPlaylist: (playlist: Playlist) => void;
   onOpenFullPlayer: () => void;
 }
 
-export function TVHomeScreen({ onOpenPlaylist, onOpenFullPlayer }: TVHomeScreenProps) {
+export function TVHomeScreen({ onOpenPlaylist }: TVHomeScreenProps) {
   const { playSong } = usePlayer();
 
-  const [continueSong, setContinueSong] = useState<Song | null>(null);
+  // Content Shelves matching Phone UI
   const [trendingSongs, setTrendingSongs] = useState<Song[]>([]);
-  const [madeForYou, setMadeForYou] = useState<Song[]>([]);
-  const [playlists, setPlaylists] = useState<Playlist[]>([]);
+  const [todayHits, setTodayHits] = useState<Song[]>([]);
+  const [newReleases, setNewReleases] = useState<Song[]>([]);
+  const [recommendedToday, setRecommendedToday] = useState<Song[]>([]);
+  const [happyHits, setHappyHits] = useState<Song[]>([]);
+  const [partyHits, setPartyHits] = useState<Song[]>([]);
+  const [workoutHits, setWorkoutHits] = useState<Song[]>([]);
+  const [curatedPlaylists, setCuratedPlaylists] = useState<Playlist[]>([]);
+  const [popularAlbums, setPopularAlbums] = useState<Album[]>([]);
   const [offlineSongs, setOfflineSongs] = useState<Song[]>([]);
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    // 1. Load Continue Listening & Playlists from session
-    try {
-      const raw = localStorage.getItem(CONTINUE_LISTENING_KEY);
-      if (raw) {
-        const session = JSON.parse(raw);
-        if (session && session.song) {
-          setContinueSong(session.song);
-        }
-      }
-      const rawPls = localStorage.getItem('sw_playlists');
-      if (rawPls) setPlaylists(JSON.parse(rawPls));
-    } catch {}
+    let isMounted = true;
 
-    // 2. Fetch live data
-    async function loadData() {
+    async function loadAllHomeContent() {
       try {
-        const defaultLangs = ['Hindi', 'International'];
-        const [trending, mixes, offlinePl] = await Promise.all([
-          getPersonalizedTrending(defaultLangs, 20).catch(() => []),
-          getTodayBiggestHits(defaultLangs, 20).catch(() => []),
-          getOfflineBackupPlaylist().catch(() => null),
+        const languages = ['Hindi', 'English', 'Punjabi', 'International'];
+
+        // Fetch all rich content categories in parallel
+        const [
+          trending,
+          biggestHits,
+          releases,
+          dailyRecs,
+          happy,
+          party,
+          workout,
+          albums,
+          shelves,
+          offlinePl,
+        ] = await Promise.allSettled([
+          getPersonalizedTrending(languages, 20),
+          getTodayBiggestHits(languages, 20),
+          getPersonalizedNewReleases(languages, 20),
+          getDailyRecommendations(languages, [], 20),
+          getHappyHits(languages, 20),
+          getPartyHits(languages, 20),
+          getWorkoutHits(languages, 20),
+          getPopularAlbums(languages, 14),
+          generateSpotifyStyleShelves({
+            languages,
+            favorites: [],
+            recentlyPlayed: [],
+            searchRecentlyPlayed: [],
+            userPlaylists: [],
+            topArtists: [],
+          }),
+          getOfflineBackupPlaylist(),
         ]);
 
-        setTrendingSongs(deduplicateSongs(trending));
-        setMadeForYou(deduplicateSongs(mixes));
+        if (!isMounted) return;
 
-        if (offlinePl && Array.isArray(offlinePl.tracks)) {
-          setOfflineSongs(offlinePl.tracks);
+        if (trending.status === 'fulfilled' && trending.value) {
+          setTrendingSongs(deduplicateSongs(trending.value).slice(0, 18));
         }
+
+        if (biggestHits.status === 'fulfilled' && biggestHits.value) {
+          setTodayHits(deduplicateSongs(biggestHits.value).slice(0, 18));
+        }
+
+        if (releases.status === 'fulfilled' && releases.value) {
+          setNewReleases(deduplicateSongs(releases.value).slice(0, 18));
+        }
+
+        if (dailyRecs.status === 'fulfilled' && dailyRecs.value) {
+          setRecommendedToday(deduplicateSongs(dailyRecs.value).slice(0, 18));
+        }
+
+        if (happy.status === 'fulfilled' && happy.value) {
+          setHappyHits(deduplicateSongs(happy.value).slice(0, 18));
+        }
+
+        if (party.status === 'fulfilled' && party.value) {
+          setPartyHits(deduplicateSongs(party.value).slice(0, 18));
+        }
+
+        if (workout.status === 'fulfilled' && workout.value) {
+          setWorkoutHits(deduplicateSongs(workout.value).slice(0, 18));
+        }
+
+        if (albums.status === 'fulfilled' && albums.value) {
+          setPopularAlbums(albums.value.slice(0, 14));
+        }
+
+        if (shelves.status === 'fulfilled' && shelves.value) {
+          const pls: Playlist[] = [];
+          for (const s of shelves.value) {
+            if (s && s.playlists) pls.push(...s.playlists);
+          }
+          setCuratedPlaylists(pls.slice(0, 16));
+        }
+
+        if (offlinePl.status === 'fulfilled' && offlinePl.value?.tracks) {
+          setOfflineSongs(offlinePl.value.tracks);
+        }
+      } catch (e) {
+        console.warn('[TVHomeScreen] Error loading content:', e);
       } finally {
-        setLoading(false);
+        if (isMounted) setLoading(false);
       }
     }
 
-    loadData();
-  }, []);
+    loadAllHomeContent();
 
-  const featuredSong = continueSong || trendingSongs[0] || madeForYou[0];
+    return () => {
+      isMounted = false;
+    };
+  }, []);
 
   return (
     <div
@@ -75,169 +145,85 @@ export function TVHomeScreen({ onOpenPlaylist, onOpenFullPlayer }: TVHomeScreenP
         padding: 'var(--tv-safe-top) var(--tv-safe-right) 100px var(--tv-safe-left)',
         display: 'flex',
         flexDirection: 'column',
-        gap: '32px',
+        gap: '28px',
         boxSizing: 'border-box',
       }}
     >
-      {/* ── Featured Hero Banner ── */}
-      {featuredSong && (
-        <div
-          style={{
-            position: 'relative',
-            width: '100%',
-            minHeight: '180px',
-            borderRadius: '20px',
-            overflow: 'hidden',
-            background: 'linear-gradient(135deg, rgba(99, 102, 241, 0.25), rgba(168, 85, 247, 0.15))',
-            border: '1px solid rgba(255, 255, 255, 0.1)',
-            display: 'flex',
-            alignItems: 'center',
-            padding: '24px 28px',
-            gap: '24px',
-            boxSizing: 'border-box',
-          }}
-        >
-          <img
-            src={featuredSong.artworkLg || featuredSong.artwork || 'https://images.unsplash.com/photo-1511671782779-c97d3d27a1d4?w=400'}
-            alt={featuredSong.title}
-            style={{
-              width: 'clamp(110px, 12vw, 150px)',
-              height: 'clamp(110px, 12vw, 150px)',
-              borderRadius: '14px',
-              objectFit: 'cover',
-              boxShadow: '0 8px 24px rgba(0, 0, 0, 0.6)',
-              flexShrink: 0,
-            }}
-          />
-
-          <div style={{ display: 'flex', flexDirection: 'column', gap: '8px', flex: 1, minWidth: 0 }}>
-            <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-              <span
-                style={{
-                  background: 'rgba(99, 102, 241, 0.3)',
-                  color: '#A5B4FC',
-                  fontSize: '11px',
-                  fontWeight: 800,
-                  padding: '3px 8px',
-                  borderRadius: '6px',
-                  textTransform: 'uppercase',
-                  letterSpacing: '0.8px',
-                }}
-              >
-                {continueSong ? 'Continue Listening' : 'Featured Track'}
-              </span>
-            </div>
-
-            <h1
-              style={{
-                fontSize: 'clamp(20px, 2.2vw, 28px)',
-                fontWeight: 800,
-                color: '#FFFFFF',
-                margin: 0,
-                lineHeight: 1.2,
-                overflow: 'hidden',
-                textOverflow: 'ellipsis',
-                whiteSpace: 'nowrap',
-              }}
-            >
-              {featuredSong.title}
-            </h1>
-
-            <p
-              style={{
-                fontSize: 'clamp(13px, 1.3vw, 16px)',
-                color: '#A1A1AA',
-                margin: 0,
-                overflow: 'hidden',
-                textOverflow: 'ellipsis',
-                whiteSpace: 'nowrap',
-              }}
-            >
-              {featuredSong.artist} {featuredSong.album ? `• ${featuredSong.album}` : ''}
-            </p>
-
-            <div style={{ display: 'flex', gap: '12px', marginTop: '4px' }}>
-              <button
-                id="tv-hero-play"
-                data-tv-focus="true"
-                data-tv-section="hero"
-                tabIndex={0}
-                onClick={() => {
-                  playSong(featuredSong, continueSong ? [featuredSong] : trendingSongs);
-                  onOpenFullPlayer();
-                }}
-                className="tv-focusable"
-                style={{
-                  background: 'var(--tv-accent)',
-                  color: '#FFFFFF',
-                  border: 'none',
-                  borderRadius: '10px',
-                  padding: '10px 22px',
-                  fontSize: '14px',
-                  fontWeight: 700,
-                  display: 'flex',
-                  alignItems: 'center',
-                  gap: '8px',
-                  flexShrink: 0,
-                }}
-              >
-                <svg width="18" height="18" viewBox="0 0 24 24" fill="currentColor">
-                  <polygon points="5 3 19 12 5 21 5 3" />
-                </svg>
-                <span>Play Now</span>
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
-
       {/* ── Section: Trending Hits ── */}
       {trendingSongs.length > 0 && (
-        <TVCarouselSection
+        <TVSongSection
           title="Trending Hits"
+          subtitle="Top tracks trending today"
           sectionId="trending"
           songs={trendingSongs}
           onSelect={(song) => playSong(song, trendingSongs)}
         />
       )}
 
-      {/* ── Section: Made For You ── */}
-      {madeForYou.length > 0 && (
-        <TVCarouselSection
-          title="Made For You"
-          sectionId="made_for_you"
-          songs={madeForYou}
-          onSelect={(song) => playSong(song, madeForYou)}
+      {/* ── Section: Today's Biggest Hits ── */}
+      {todayHits.length > 0 && (
+        <TVSongSection
+          title="Today's Biggest Hits"
+          subtitle="The most streamed chart toppers"
+          sectionId="biggest_hits"
+          songs={todayHits}
+          onSelect={(song) => playSong(song, todayHits)}
+        />
+      )}
+
+      {/* ── Section: Recommended For Today ── */}
+      {recommendedToday.length > 0 && (
+        <TVSongSection
+          title="Recommended For You"
+          subtitle="Fresh daily mixes crafted for your taste"
+          sectionId="recommended_today"
+          songs={recommendedToday}
+          onSelect={(song) => playSong(song, recommendedToday)}
+        />
+      )}
+
+      {/* ── Section: New Releases ── */}
+      {newReleases.length > 0 && (
+        <TVSongSection
+          title="New Releases"
+          subtitle="Brand new singles & album drops"
+          sectionId="new_releases"
+          songs={newReleases}
+          onSelect={(song) => playSong(song, newReleases)}
         />
       )}
 
       {/* ── Section: Curated Playlists ── */}
-      {playlists.length > 0 && (
-        <div style={{ display: 'flex', flexDirection: 'column', gap: '12px', width: '100%' }}>
-          <h2 style={{ fontSize: 'clamp(17px, 1.7vw, 22px)', fontWeight: 800, color: '#FFFFFF', margin: 0 }}>
-            Featured Playlists
-          </h2>
-          <div className="tv-carousel-row" data-tv-section="playlists">
-            {playlists.map((pl, idx) => (
+      {curatedPlaylists.length > 0 && (
+        <div style={{ display: 'flex', flexDirection: 'column', gap: '10px', width: '100%' }}>
+          <div style={{ display: 'flex', flexDirection: 'column', gap: '2px' }}>
+            <h2 style={{ fontSize: 'clamp(16px, 1.6vw, 20px)', fontWeight: 800, color: '#FFFFFF', margin: 0 }}>
+              Curated Playlists & Top Mixes
+            </h2>
+            <span style={{ fontSize: '12px', color: '#A1A1AA' }}>Handcrafted collections and mixes</span>
+          </div>
+          <div className="tv-carousel-row" data-tv-section="curated_playlists">
+            {curatedPlaylists.map((pl, idx) => (
               <div
-                key={pl.id}
-                id={`tv-playlist-${idx}`}
+                key={`tv-pl-${pl.id}-${idx}`}
+                id={`tv-pl-${idx}`}
                 data-tv-focus="true"
-                data-tv-section="playlists"
+                data-tv-section="curated_playlists"
                 tabIndex={0}
                 onClick={() => onOpenPlaylist(pl)}
                 className="tv-song-card tv-focusable"
-                style={{ width: 'clamp(160px, 16vw, 200px)' }}
+                style={{ width: 'clamp(140px, 14vw, 180px)' }}
               >
                 <img
                   src={pl.artwork || 'https://images.unsplash.com/photo-1514525253161-7a46d19cd819?w=300'}
                   alt={pl.title}
                   className="tv-song-artwork"
-                  style={{ height: '110px', objectFit: 'cover' }}
+                  style={{ aspectRatio: '1 / 1', objectFit: 'cover' }}
+                  loading="lazy"
                 />
                 <span
                   style={{
-                    fontSize: '14px',
+                    fontSize: '13px',
                     fontWeight: 700,
                     color: '#FFFFFF',
                     whiteSpace: 'nowrap',
@@ -247,7 +233,7 @@ export function TVHomeScreen({ onOpenPlaylist, onOpenFullPlayer }: TVHomeScreenP
                 >
                   {pl.title}
                 </span>
-                <span style={{ fontSize: '12px', color: '#A1A1AA' }}>
+                <span style={{ fontSize: '11px', color: '#A1A1AA', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
                   {pl.tracks ? `${pl.tracks.length} Songs` : 'Curated Mix'}
                 </span>
               </div>
@@ -256,10 +242,96 @@ export function TVHomeScreen({ onOpenPlaylist, onOpenFullPlayer }: TVHomeScreenP
         </div>
       )}
 
-      {/* ── Section: Offline Available ── */}
+      {/* ── Section: Happy Hits & Feel Good Vibes ── */}
+      {happyHits.length > 0 && (
+        <TVSongSection
+          title="Feel Good Vibes & Happy Hits"
+          subtitle="Upbeat songs to boost your energy"
+          sectionId="happy_hits"
+          songs={happyHits}
+          onSelect={(song) => playSong(song, happyHits)}
+        />
+      )}
+
+      {/* ── Section: Party & Dance Hits ── */}
+      {partyHits.length > 0 && (
+        <TVSongSection
+          title="Party & Club Anthems"
+          subtitle="High energy beats for the weekend"
+          sectionId="party_hits"
+          songs={partyHits}
+          onSelect={(song) => playSong(song, partyHits)}
+        />
+      )}
+
+      {/* ── Section: Workout & High Energy ── */}
+      {workoutHits.length > 0 && (
+        <TVSongSection
+          title="Workout & High Energy"
+          subtitle="Power tracks to keep you moving"
+          sectionId="workout_hits"
+          songs={workoutHits}
+          onSelect={(song) => playSong(song, workoutHits)}
+        />
+      )}
+
+      {/* ── Section: Popular Albums ── */}
+      {popularAlbums.length > 0 && (
+        <div style={{ display: 'flex', flexDirection: 'column', gap: '10px', width: '100%' }}>
+          <div style={{ display: 'flex', flexDirection: 'column', gap: '2px' }}>
+            <h2 style={{ fontSize: 'clamp(16px, 1.6vw, 20px)', fontWeight: 800, color: '#FFFFFF', margin: 0 }}>
+              Trending Albums
+            </h2>
+            <span style={{ fontSize: '12px', color: '#A1A1AA' }}>Top studio records and blockbuster soundtracks</span>
+          </div>
+          <div className="tv-carousel-row" data-tv-section="popular_albums">
+            {popularAlbums.map((alb, idx) => (
+              <div
+                key={`tv-alb-${alb.id}-${idx}`}
+                id={`tv-alb-${idx}`}
+                data-tv-focus="true"
+                data-tv-section="popular_albums"
+                tabIndex={0}
+                onClick={() => {
+                  if (alb.tracks && alb.tracks.length > 0) {
+                    playSong(alb.tracks[0], alb.tracks, 0);
+                  }
+                }}
+                className="tv-song-card tv-focusable"
+                style={{ width: 'clamp(140px, 14vw, 180px)' }}
+              >
+                <img
+                  src={alb.artwork || 'https://images.unsplash.com/photo-1511671782779-c97d3d27a1d4?w=300'}
+                  alt={alb.title}
+                  className="tv-song-artwork"
+                  loading="lazy"
+                />
+                <span
+                  style={{
+                    fontSize: '13px',
+                    fontWeight: 700,
+                    color: '#FFFFFF',
+                    whiteSpace: 'nowrap',
+                    overflow: 'hidden',
+                    textOverflow: 'ellipsis',
+                  }}
+                >
+                  {alb.title}
+                </span>
+                <span style={{ fontSize: '11px', color: '#A1A1AA', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
+                  {alb.artist || 'Various Artists'}
+                </span>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
+
+      {/* ── Section: Offline Storage ── */}
       {offlineSongs.length > 0 && (
-        <TVCarouselSection
-          title="Offline Storage & Cached Tracks"
+        <TVSongSection
+          title="Offline Storage & Cached Music"
+          subtitle="Instant playback without internet connection"
           sectionId="offline_home"
           songs={offlineSongs}
           onSelect={(song) => playSong(song, offlineSongs)}
@@ -267,30 +339,35 @@ export function TVHomeScreen({ onOpenPlaylist, onOpenFullPlayer }: TVHomeScreenP
       )}
 
       {loading && trendingSongs.length === 0 && (
-        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', height: '180px', color: '#A1A1AA' }}>
-          <span>Loading music catalog...</span>
+        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', height: '220px', color: '#A1A1AA' }}>
+          <span>Loading personalized music catalog...</span>
         </div>
       )}
     </div>
   );
 }
 
-function TVCarouselSection({
+function TVSongSection({
   title,
+  subtitle,
   sectionId,
   songs,
   onSelect,
 }: {
   title: string;
+  subtitle?: string;
   sectionId: string;
   songs: Song[];
   onSelect: (song: Song) => void;
 }) {
   return (
-    <div style={{ display: 'flex', flexDirection: 'column', gap: '12px', width: '100%' }}>
-      <h2 style={{ fontSize: 'clamp(17px, 1.7vw, 22px)', fontWeight: 800, color: '#FFFFFF', margin: 0 }}>
-        {title}
-      </h2>
+    <div style={{ display: 'flex', flexDirection: 'column', gap: '10px', width: '100%' }}>
+      <div style={{ display: 'flex', flexDirection: 'column', gap: '2px' }}>
+        <h2 style={{ fontSize: 'clamp(16px, 1.6vw, 20px)', fontWeight: 800, color: '#FFFFFF', margin: 0 }}>
+          {title}
+        </h2>
+        {subtitle && <span style={{ fontSize: '12px', color: '#A1A1AA' }}>{subtitle}</span>}
+      </div>
       <div className="tv-carousel-row" data-tv-section={sectionId}>
         {songs.map((song, idx) => (
           <div
@@ -310,7 +387,7 @@ function TVCarouselSection({
             />
             <span
               style={{
-                fontSize: '14px',
+                fontSize: '13px',
                 fontWeight: 700,
                 color: '#FFFFFF',
                 whiteSpace: 'nowrap',
@@ -322,7 +399,7 @@ function TVCarouselSection({
             </span>
             <span
               style={{
-                fontSize: '12px',
+                fontSize: '11px',
                 color: '#A1A1AA',
                 whiteSpace: 'nowrap',
                 overflow: 'hidden',
