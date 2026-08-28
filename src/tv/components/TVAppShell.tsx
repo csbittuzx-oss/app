@@ -9,12 +9,14 @@ import { TVSearchScreen } from '../screens/TVSearchScreen';
 import { TVLibraryScreen } from '../screens/TVLibraryScreen';
 import { TVPlayerScreen } from '../screens/TVPlayerScreen';
 import { TVSettingsScreen } from '../screens/TVSettingsScreen';
+import { TVSpotifyImportScreen } from '../screens/TVSpotifyImportScreen';
 import '../focus/tvStyles.css';
 
 export function TVAppShell() {
   const { state: playerState, playSong } = usePlayer();
   const [activeScreen, setActiveScreen] = useState<TVScreenType>('home');
   const [selectedPlaylist, setSelectedPlaylist] = useState<Playlist | null>(null);
+  const [isSpotifyImportOpen, setIsSpotifyImportOpen] = useState(false);
 
   // Initialize TV D-pad Remote Focus Engine
   useEffect(() => {
@@ -24,10 +26,12 @@ export function TVAppShell() {
 
   const handleSelectScreen = (screen: TVScreenType) => {
     setSelectedPlaylist(null);
+    setIsSpotifyImportOpen(false);
     setActiveScreen(screen);
   };
 
   const handleOpenPlaylist = (playlist: Playlist) => {
+    setIsSpotifyImportOpen(false);
     setSelectedPlaylist(playlist);
   };
 
@@ -55,7 +59,12 @@ export function TVAppShell() {
           boxSizing: 'border-box',
         }}
       >
-        {selectedPlaylist ? (
+        {isSpotifyImportOpen ? (
+          <TVSpotifyImportScreen
+            onClose={() => setIsSpotifyImportOpen(false)}
+            onOpenPlaylist={handleOpenPlaylist}
+          />
+        ) : selectedPlaylist ? (
           <div
             style={{
               flex: 1,
@@ -175,11 +184,17 @@ export function TVAppShell() {
             {activeScreen === 'search' && <TVSearchScreen />}
 
             {activeScreen === 'library' && (
-              <TVLibraryScreen onOpenPlaylist={handleOpenPlaylist} />
+              <TVLibraryScreen
+                onOpenPlaylist={handleOpenPlaylist}
+                onOpenSpotifyImport={() => setIsSpotifyImportOpen(true)}
+              />
             )}
 
             {activeScreen === 'offline' && (
-              <TVLibraryScreen onOpenPlaylist={handleOpenPlaylist} />
+              <TVLibraryScreen
+                onOpenPlaylist={handleOpenPlaylist}
+                onOpenSpotifyImport={() => setIsSpotifyImportOpen(true)}
+              />
             )}
 
             {activeScreen === 'settings' && <TVSettingsScreen />}
@@ -191,8 +206,8 @@ export function TVAppShell() {
         )}
       </main>
 
-      {/* ── Floating TV Mini Player when browsing outside player screen ── */}
-      {activeScreen !== 'player' && (
+      {/* ── Floating TV Mini Player when browsing outside player & import screen ── */}
+      {activeScreen !== 'player' && !isSpotifyImportOpen && (
         <TVMiniPlayer onOpenFullPlayer={() => setActiveScreen('player')} />
       )}
     </div>

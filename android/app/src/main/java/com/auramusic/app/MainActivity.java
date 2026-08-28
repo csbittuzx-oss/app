@@ -36,6 +36,7 @@ public class MainActivity extends BridgeActivity {
     public void onCreate(Bundle savedInstanceState) {
         registerPlugin(MediaNotificationPlugin.class);
         registerPlugin(DolbyAudioPlugin.class);
+        registerPlugin(SpotifyImportPlugin.class);
         super.onCreate(savedInstanceState);
 
         boolean isTv = isTelevision();
