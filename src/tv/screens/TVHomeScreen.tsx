@@ -23,7 +23,7 @@ interface TVHomeScreenProps {
 export function TVHomeScreen({ onOpenPlaylist }: TVHomeScreenProps) {
   const { playSong } = usePlayer();
 
-  // Content Shelves matching Phone UI
+  // Content Shelves
   const [trendingSongs, setTrendingSongs] = useState<Song[]>([]);
   const [todayHits, setTodayHits] = useState<Song[]>([]);
   const [newReleases, setNewReleases] = useState<Song[]>([]);
@@ -43,7 +43,6 @@ export function TVHomeScreen({ onOpenPlaylist }: TVHomeScreenProps) {
       try {
         const languages = ['Hindi', 'English', 'Punjabi', 'International'];
 
-        // Fetch all rich content categories in parallel
         const [
           trending,
           biggestHits,
@@ -142,10 +141,10 @@ export function TVHomeScreen({ onOpenPlaylist }: TVHomeScreenProps) {
         height: '100%',
         overflowY: 'auto',
         overflowX: 'hidden',
-        padding: 'var(--tv-safe-top) var(--tv-safe-right) 100px var(--tv-safe-left)',
+        padding: 'var(--tv-safe-top) var(--tv-safe-right) 60px var(--tv-safe-left)',
         display: 'flex',
         flexDirection: 'column',
-        gap: '28px',
+        gap: '20px',
         boxSizing: 'border-box',
       }}
     >
@@ -195,12 +194,12 @@ export function TVHomeScreen({ onOpenPlaylist }: TVHomeScreenProps) {
 
       {/* ── Section: Curated Playlists ── */}
       {curatedPlaylists.length > 0 && (
-        <div style={{ display: 'flex', flexDirection: 'column', gap: '10px', width: '100%' }}>
-          <div style={{ display: 'flex', flexDirection: 'column', gap: '2px' }}>
-            <h2 style={{ fontSize: 'clamp(16px, 1.6vw, 20px)', fontWeight: 800, color: '#FFFFFF', margin: 0 }}>
+        <div style={{ display: 'flex', flexDirection: 'column', gap: '6px', width: '100%' }}>
+          <div style={{ display: 'flex', flexDirection: 'column' }}>
+            <h2 style={{ fontSize: '14px', fontWeight: 700, color: '#FFFFFF', margin: 0 }}>
               Curated Playlists & Top Mixes
             </h2>
-            <span style={{ fontSize: '12px', color: '#A1A1AA' }}>Handcrafted collections and mixes</span>
+            <span style={{ fontSize: '11px', color: '#71717A' }}>Handcrafted collections and mixes</span>
           </div>
           <div className="tv-carousel-row" data-tv-section="curated_playlists">
             {curatedPlaylists.map((pl, idx) => (
@@ -212,20 +211,18 @@ export function TVHomeScreen({ onOpenPlaylist }: TVHomeScreenProps) {
                 tabIndex={0}
                 onClick={() => onOpenPlaylist(pl)}
                 className="tv-song-card tv-focusable"
-                style={{ width: 'clamp(140px, 14vw, 180px)' }}
               >
                 <img
                   src={pl.artwork || 'https://images.unsplash.com/photo-1514525253161-7a46d19cd819?w=300'}
                   alt={pl.title}
                   className="tv-song-artwork"
-                  style={{ aspectRatio: '1 / 1', objectFit: 'cover' }}
                   loading="lazy"
                 />
                 <span
                   style={{
-                    fontSize: '13px',
-                    fontWeight: 700,
-                    color: '#FFFFFF',
+                    fontSize: '12px',
+                    fontWeight: 600,
+                    color: '#F4F4F5',
                     whiteSpace: 'nowrap',
                     overflow: 'hidden',
                     textOverflow: 'ellipsis',
@@ -233,7 +230,7 @@ export function TVHomeScreen({ onOpenPlaylist }: TVHomeScreenProps) {
                 >
                   {pl.title}
                 </span>
-                <span style={{ fontSize: '11px', color: '#A1A1AA', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
+                <span style={{ fontSize: '10px', color: '#71717A', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
                   {pl.tracks ? `${pl.tracks.length} Songs` : 'Curated Mix'}
                 </span>
               </div>
@@ -242,7 +239,7 @@ export function TVHomeScreen({ onOpenPlaylist }: TVHomeScreenProps) {
         </div>
       )}
 
-      {/* ── Section: Happy Hits & Feel Good Vibes ── */}
+      {/* ── Section: Happy Hits ── */}
       {happyHits.length > 0 && (
         <TVSongSection
           title="Feel Good Vibes & Happy Hits"
@@ -253,7 +250,7 @@ export function TVHomeScreen({ onOpenPlaylist }: TVHomeScreenProps) {
         />
       )}
 
-      {/* ── Section: Party & Dance Hits ── */}
+      {/* ── Section: Party Hits ── */}
       {partyHits.length > 0 && (
         <TVSongSection
           title="Party & Club Anthems"
@@ -264,7 +261,7 @@ export function TVHomeScreen({ onOpenPlaylist }: TVHomeScreenProps) {
         />
       )}
 
-      {/* ── Section: Workout & High Energy ── */}
+      {/* ── Section: Workout Hits ── */}
       {workoutHits.length > 0 && (
         <TVSongSection
           title="Workout & High Energy"
@@ -277,12 +274,12 @@ export function TVHomeScreen({ onOpenPlaylist }: TVHomeScreenProps) {
 
       {/* ── Section: Popular Albums ── */}
       {popularAlbums.length > 0 && (
-        <div style={{ display: 'flex', flexDirection: 'column', gap: '10px', width: '100%' }}>
-          <div style={{ display: 'flex', flexDirection: 'column', gap: '2px' }}>
-            <h2 style={{ fontSize: 'clamp(16px, 1.6vw, 20px)', fontWeight: 800, color: '#FFFFFF', margin: 0 }}>
+        <div style={{ display: 'flex', flexDirection: 'column', gap: '6px', width: '100%' }}>
+          <div style={{ display: 'flex', flexDirection: 'column' }}>
+            <h2 style={{ fontSize: '14px', fontWeight: 700, color: '#FFFFFF', margin: 0 }}>
               Trending Albums
             </h2>
-            <span style={{ fontSize: '12px', color: '#A1A1AA' }}>Top studio records and blockbuster soundtracks</span>
+            <span style={{ fontSize: '11px', color: '#71717A' }}>Top studio records and soundtracks</span>
           </div>
           <div className="tv-carousel-row" data-tv-section="popular_albums">
             {popularAlbums.map((alb, idx) => (
@@ -298,7 +295,6 @@ export function TVHomeScreen({ onOpenPlaylist }: TVHomeScreenProps) {
                   }
                 }}
                 className="tv-song-card tv-focusable"
-                style={{ width: 'clamp(140px, 14vw, 180px)' }}
               >
                 <img
                   src={alb.artwork || 'https://images.unsplash.com/photo-1511671782779-c97d3d27a1d4?w=300'}
@@ -308,9 +304,9 @@ export function TVHomeScreen({ onOpenPlaylist }: TVHomeScreenProps) {
                 />
                 <span
                   style={{
-                    fontSize: '13px',
-                    fontWeight: 700,
-                    color: '#FFFFFF',
+                    fontSize: '12px',
+                    fontWeight: 600,
+                    color: '#F4F4F5',
                     whiteSpace: 'nowrap',
                     overflow: 'hidden',
                     textOverflow: 'ellipsis',
@@ -318,7 +314,7 @@ export function TVHomeScreen({ onOpenPlaylist }: TVHomeScreenProps) {
                 >
                   {alb.title}
                 </span>
-                <span style={{ fontSize: '11px', color: '#A1A1AA', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
+                <span style={{ fontSize: '10px', color: '#71717A', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
                   {alb.artist || 'Various Artists'}
                 </span>
               </div>
@@ -339,8 +335,8 @@ export function TVHomeScreen({ onOpenPlaylist }: TVHomeScreenProps) {
       )}
 
       {loading && trendingSongs.length === 0 && (
-        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', height: '220px', color: '#A1A1AA' }}>
-          <span>Loading personalized music catalog...</span>
+        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', height: '160px', color: '#71717A', fontSize: '13px' }}>
+          <span>Loading music catalog...</span>
         </div>
       )}
     </div>
@@ -361,12 +357,12 @@ function TVSongSection({
   onSelect: (song: Song) => void;
 }) {
   return (
-    <div style={{ display: 'flex', flexDirection: 'column', gap: '10px', width: '100%' }}>
-      <div style={{ display: 'flex', flexDirection: 'column', gap: '2px' }}>
-        <h2 style={{ fontSize: 'clamp(16px, 1.6vw, 20px)', fontWeight: 800, color: '#FFFFFF', margin: 0 }}>
+    <div style={{ display: 'flex', flexDirection: 'column', gap: '6px', width: '100%' }}>
+      <div style={{ display: 'flex', flexDirection: 'column' }}>
+        <h2 style={{ fontSize: '14px', fontWeight: 700, color: '#FFFFFF', margin: 0 }}>
           {title}
         </h2>
-        {subtitle && <span style={{ fontSize: '12px', color: '#A1A1AA' }}>{subtitle}</span>}
+        {subtitle && <span style={{ fontSize: '11px', color: '#71717A' }}>{subtitle}</span>}
       </div>
       <div className="tv-carousel-row" data-tv-section={sectionId}>
         {songs.map((song, idx) => (
@@ -387,9 +383,9 @@ function TVSongSection({
             />
             <span
               style={{
-                fontSize: '13px',
-                fontWeight: 700,
-                color: '#FFFFFF',
+                fontSize: '12px',
+                fontWeight: 600,
+                color: '#F4F4F5',
                 whiteSpace: 'nowrap',
                 overflow: 'hidden',
                 textOverflow: 'ellipsis',
@@ -399,8 +395,8 @@ function TVSongSection({
             </span>
             <span
               style={{
-                fontSize: '11px',
-                color: '#A1A1AA',
+                fontSize: '10px',
+                color: '#71717A',
                 whiteSpace: 'nowrap',
                 overflow: 'hidden',
                 textOverflow: 'ellipsis',

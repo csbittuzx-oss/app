@@ -15,7 +15,6 @@ export function TVLibraryScreen({ onOpenPlaylist }: TVLibraryScreenProps) {
   const [offlineSongs, setOfflineSongs] = useState<Song[]>([]);
 
   useEffect(() => {
-    // 1. Load favorites from localStorage
     try {
       const rawFavs = localStorage.getItem('sw_favorites');
       if (rawFavs) setFavorites(JSON.parse(rawFavs));
@@ -24,7 +23,6 @@ export function TVLibraryScreen({ onOpenPlaylist }: TVLibraryScreenProps) {
       if (rawPlaylists) setPlaylists(JSON.parse(rawPlaylists));
     } catch {}
 
-    // 2. Load offline cached songs
     getOfflineBackupPlaylist()
       .then((pl) => {
         if (pl && Array.isArray(pl.tracks)) {
@@ -42,17 +40,17 @@ export function TVLibraryScreen({ onOpenPlaylist }: TVLibraryScreenProps) {
         height: '100%',
         overflowY: 'auto',
         overflowX: 'hidden',
-        padding: 'var(--tv-safe-top) var(--tv-safe-right) 100px var(--tv-safe-left)',
+        padding: 'var(--tv-safe-top) var(--tv-safe-right) 60px var(--tv-safe-left)',
         display: 'flex',
         flexDirection: 'column',
-        gap: '20px',
+        gap: '14px',
         boxSizing: 'border-box',
       }}
     >
       <h1
         style={{
-          fontSize: 'clamp(20px, 2.2vw, 28px)',
-          fontWeight: 800,
+          fontSize: '16px',
+          fontWeight: 700,
           color: '#FFFFFF',
           margin: 0,
         }}
@@ -60,8 +58,8 @@ export function TVLibraryScreen({ onOpenPlaylist }: TVLibraryScreenProps) {
         Your Library
       </h1>
 
-      {/* ── Tabs Header ── */}
-      <div style={{ display: 'flex', gap: '10px', flexWrap: 'wrap' }} data-tv-section="library-tabs">
+      {/* ── Compact Tabs Header ── */}
+      <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap' }} data-tv-section="library-tabs">
         <button
           id="tv-lib-tab-liked"
           data-tv-focus="true"
@@ -70,13 +68,13 @@ export function TVLibraryScreen({ onOpenPlaylist }: TVLibraryScreenProps) {
           onClick={() => setActiveTab('liked')}
           className={`tv-focusable ${activeTab === 'liked' ? 'tv-focused' : ''}`}
           style={{
-            background: activeTab === 'liked' ? 'var(--tv-accent)' : 'rgba(255, 255, 255, 0.08)',
-            border: 'none',
+            background: activeTab === 'liked' ? 'var(--tv-accent)' : 'rgba(255, 255, 255, 0.05)',
+            border: '1px solid rgba(255, 255, 255, 0.08)',
             color: '#FFFFFF',
-            padding: '8px 18px',
-            borderRadius: '10px',
-            fontSize: 'clamp(13px, 1.2vw, 15px)',
-            fontWeight: 700,
+            padding: '5px 14px',
+            borderRadius: '8px',
+            fontSize: '12px',
+            fontWeight: 600,
           }}
         >
           Liked Songs ({favorites.length})
@@ -90,13 +88,13 @@ export function TVLibraryScreen({ onOpenPlaylist }: TVLibraryScreenProps) {
           onClick={() => setActiveTab('playlists')}
           className={`tv-focusable ${activeTab === 'playlists' ? 'tv-focused' : ''}`}
           style={{
-            background: activeTab === 'playlists' ? 'var(--tv-accent)' : 'rgba(255, 255, 255, 0.08)',
-            border: 'none',
+            background: activeTab === 'playlists' ? 'var(--tv-accent)' : 'rgba(255, 255, 255, 0.05)',
+            border: '1px solid rgba(255, 255, 255, 0.08)',
             color: '#FFFFFF',
-            padding: '8px 18px',
-            borderRadius: '10px',
-            fontSize: 'clamp(13px, 1.2vw, 15px)',
-            fontWeight: 700,
+            padding: '5px 14px',
+            borderRadius: '8px',
+            fontSize: '12px',
+            fontWeight: 600,
           }}
         >
           Playlists ({playlists.length})
@@ -110,13 +108,13 @@ export function TVLibraryScreen({ onOpenPlaylist }: TVLibraryScreenProps) {
           onClick={() => setActiveTab('offline')}
           className={`tv-focusable ${activeTab === 'offline' ? 'tv-focused' : ''}`}
           style={{
-            background: activeTab === 'offline' ? 'var(--tv-accent)' : 'rgba(255, 255, 255, 0.08)',
-            border: 'none',
+            background: activeTab === 'offline' ? 'var(--tv-accent)' : 'rgba(255, 255, 255, 0.05)',
+            border: '1px solid rgba(255, 255, 255, 0.08)',
             color: '#FFFFFF',
-            padding: '8px 18px',
-            borderRadius: '10px',
-            fontSize: 'clamp(13px, 1.2vw, 15px)',
-            fontWeight: 700,
+            padding: '5px 14px',
+            borderRadius: '8px',
+            fontSize: '12px',
+            fontWeight: 600,
           }}
         >
           Offline Backup ({offlineSongs.length})
@@ -128,8 +126,8 @@ export function TVLibraryScreen({ onOpenPlaylist }: TVLibraryScreenProps) {
         <div
           style={{
             display: 'grid',
-            gridTemplateColumns: 'repeat(auto-fill, minmax(clamp(130px, 14vw, 175px), 1fr))',
-            gap: '16px',
+            gridTemplateColumns: 'repeat(auto-fill, minmax(clamp(110px, 11vw, 136px), 1fr))',
+            gap: '12px',
             width: '100%',
             boxSizing: 'border-box',
           }}
@@ -154,9 +152,9 @@ export function TVLibraryScreen({ onOpenPlaylist }: TVLibraryScreenProps) {
               />
               <span
                 style={{
-                  fontSize: '14px',
-                  fontWeight: 700,
-                  color: '#FFFFFF',
+                  fontSize: '12px',
+                  fontWeight: 600,
+                  color: '#F4F4F5',
                   whiteSpace: 'nowrap',
                   overflow: 'hidden',
                   textOverflow: 'ellipsis',
@@ -166,8 +164,8 @@ export function TVLibraryScreen({ onOpenPlaylist }: TVLibraryScreenProps) {
               </span>
               <span
                 style={{
-                  fontSize: '12px',
-                  color: '#A1A1AA',
+                  fontSize: '10px',
+                  color: '#71717A',
                   whiteSpace: 'nowrap',
                   overflow: 'hidden',
                   textOverflow: 'ellipsis',
@@ -178,7 +176,7 @@ export function TVLibraryScreen({ onOpenPlaylist }: TVLibraryScreenProps) {
             </div>
           ))}
           {favorites.length === 0 && (
-            <div style={{ color: '#A1A1AA', padding: '24px 0' }}>
+            <div style={{ color: '#71717A', padding: '16px 0', fontSize: '13px' }}>
               No liked songs yet. Tap Like on any track to add it here.
             </div>
           )}
@@ -189,8 +187,8 @@ export function TVLibraryScreen({ onOpenPlaylist }: TVLibraryScreenProps) {
         <div
           style={{
             display: 'grid',
-            gridTemplateColumns: 'repeat(auto-fill, minmax(clamp(150px, 16vw, 200px), 1fr))',
-            gap: '16px',
+            gridTemplateColumns: 'repeat(auto-fill, minmax(clamp(110px, 11vw, 136px), 1fr))',
+            gap: '12px',
             width: '100%',
             boxSizing: 'border-box',
           }}
@@ -211,13 +209,13 @@ export function TVLibraryScreen({ onOpenPlaylist }: TVLibraryScreenProps) {
                 src={pl.artwork || 'https://images.unsplash.com/photo-1514525253161-7a46d19cd819?w=300'}
                 alt={pl.title}
                 className="tv-song-artwork"
-                style={{ height: '110px', objectFit: 'cover' }}
+                loading="lazy"
               />
               <span
                 style={{
-                  fontSize: '14px',
-                  fontWeight: 700,
-                  color: '#FFFFFF',
+                  fontSize: '12px',
+                  fontWeight: 600,
+                  color: '#F4F4F5',
                   whiteSpace: 'nowrap',
                   overflow: 'hidden',
                   textOverflow: 'ellipsis',
@@ -225,13 +223,13 @@ export function TVLibraryScreen({ onOpenPlaylist }: TVLibraryScreenProps) {
               >
                 {pl.title}
               </span>
-              <span style={{ fontSize: '12px', color: '#A1A1AA' }}>
+              <span style={{ fontSize: '10px', color: '#71717A' }}>
                 {pl.tracks ? `${pl.tracks.length} Songs` : 'Playlist'}
               </span>
             </div>
           ))}
           {playlists.length === 0 && (
-            <div style={{ color: '#A1A1AA', padding: '24px 0' }}>
+            <div style={{ color: '#71717A', padding: '16px 0', fontSize: '13px' }}>
               No custom playlists created yet.
             </div>
           )}
@@ -242,8 +240,8 @@ export function TVLibraryScreen({ onOpenPlaylist }: TVLibraryScreenProps) {
         <div
           style={{
             display: 'grid',
-            gridTemplateColumns: 'repeat(auto-fill, minmax(clamp(130px, 14vw, 175px), 1fr))',
-            gap: '16px',
+            gridTemplateColumns: 'repeat(auto-fill, minmax(clamp(110px, 11vw, 136px), 1fr))',
+            gap: '12px',
             width: '100%',
             boxSizing: 'border-box',
           }}
@@ -268,9 +266,9 @@ export function TVLibraryScreen({ onOpenPlaylist }: TVLibraryScreenProps) {
               />
               <span
                 style={{
-                  fontSize: '14px',
-                  fontWeight: 700,
-                  color: '#FFFFFF',
+                  fontSize: '12px',
+                  fontWeight: 600,
+                  color: '#F4F4F5',
                   whiteSpace: 'nowrap',
                   overflow: 'hidden',
                   textOverflow: 'ellipsis',
@@ -280,7 +278,7 @@ export function TVLibraryScreen({ onOpenPlaylist }: TVLibraryScreenProps) {
               </span>
               <span
                 style={{
-                  fontSize: '12px',
+                  fontSize: '10px',
                   color: '#10B981',
                   whiteSpace: 'nowrap',
                   overflow: 'hidden',
@@ -292,8 +290,8 @@ export function TVLibraryScreen({ onOpenPlaylist }: TVLibraryScreenProps) {
             </div>
           ))}
           {offlineSongs.length === 0 && (
-            <div style={{ color: '#A1A1AA', padding: '24px 0' }}>
-              No offline cached songs available. Listen to music online to automatically cache it.
+            <div style={{ color: '#71717A', padding: '16px 0', fontSize: '13px' }}>
+              No offline cached songs available.
             </div>
           )}
         </div>

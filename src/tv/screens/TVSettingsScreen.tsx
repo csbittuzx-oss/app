@@ -37,9 +37,9 @@ export function TVSettingsScreen() {
   };
 
   const qualityOptions: { id: AudioQuality; title: string; desc: string }[] = [
-    { id: 'dolby', title: 'Dolby Audio / Atmos', desc: 'Spatial studio surround sound processing on supported devices' },
-    { id: 'high', title: 'Extreme HD (320 kbps)', desc: 'Full studio master bitrate with maximum dynamic range' },
-    { id: 'medium', title: 'High Quality (160 kbps)', desc: 'Balanced HD streaming quality' },
+    { id: 'dolby', title: 'Dolby Audio / Spatial Sound', desc: 'Studio surround sound processing' },
+    { id: 'high', title: 'Extreme HD (320 kbps)', desc: 'Studio master audio quality' },
+    { id: 'medium', title: 'High Quality (160 kbps)', desc: 'Balanced HD streaming' },
     { id: 'low', title: 'Data Saver (96 kbps)', desc: 'Fastest loading on weak networks' },
   ];
 
@@ -51,31 +51,31 @@ export function TVSettingsScreen() {
         height: '100%',
         overflowY: 'auto',
         overflowX: 'hidden',
-        padding: 'var(--tv-safe-top) var(--tv-safe-right) 100px var(--tv-safe-left)',
+        padding: 'var(--tv-safe-top) var(--tv-safe-right) 60px var(--tv-safe-left)',
         display: 'flex',
         flexDirection: 'column',
-        gap: '24px',
-        maxWidth: '720px',
+        gap: '16px',
+        maxWidth: '560px',
         boxSizing: 'border-box',
       }}
     >
       <h1
         style={{
-          fontSize: 'clamp(20px, 2.2vw, 28px)',
-          fontWeight: 800,
+          fontSize: '16px',
+          fontWeight: 700,
           color: '#FFFFFF',
           margin: 0,
         }}
       >
-        Android TV Settings
+        Settings
       </h1>
 
       {/* ── Audio Quality Section ── */}
-      <div style={{ display: 'flex', flexDirection: 'column', gap: '12px', width: '100%' }}>
-        <h2 style={{ fontSize: 'clamp(16px, 1.6vw, 20px)', fontWeight: 700, color: '#FFFFFF', margin: 0 }}>
+      <div style={{ display: 'flex', flexDirection: 'column', gap: '8px', width: '100%' }}>
+        <h2 style={{ fontSize: '13px', fontWeight: 600, color: '#A1A1AA', margin: 0 }}>
           Streaming Audio Quality
         </h2>
-        <div style={{ display: 'flex', flexDirection: 'column', gap: '8px', width: '100%' }} data-tv-section="settings-quality">
+        <div style={{ display: 'flex', flexDirection: 'column', gap: '6px', width: '100%' }} data-tv-section="settings-quality">
           {qualityOptions.map((opt) => (
             <button
               key={opt.id}
@@ -89,10 +89,10 @@ export function TVSettingsScreen() {
                 display: 'flex',
                 alignItems: 'center',
                 justifyContent: 'space-between',
-                padding: '12px 16px',
-                background: quality === opt.id ? 'rgba(99, 102, 241, 0.18)' : 'rgba(255, 255, 255, 0.04)',
-                border: quality === opt.id ? '1px solid rgba(99, 102, 241, 0.5)' : '1px solid rgba(255, 255, 255, 0.08)',
-                borderRadius: '12px',
+                padding: '8px 12px',
+                background: quality === opt.id ? 'rgba(99, 102, 241, 0.15)' : 'rgba(255, 255, 255, 0.03)',
+                border: quality === opt.id ? '1px solid rgba(99, 102, 241, 0.4)' : '1px solid rgba(255, 255, 255, 0.06)',
+                borderRadius: '8px',
                 color: '#FFFFFF',
                 textAlign: 'left',
                 width: '100%',
@@ -100,14 +100,14 @@ export function TVSettingsScreen() {
               }}
             >
               <div style={{ minWidth: 0 }}>
-                <span style={{ fontSize: 'clamp(13px, 1.3vw, 15px)', fontWeight: 700, display: 'block' }}>{opt.title}</span>
-                <span style={{ fontSize: '11px', color: '#A1A1AA' }}>{opt.desc}</span>
+                <span style={{ fontSize: '12px', fontWeight: 600, display: 'block' }}>{opt.title}</span>
+                <span style={{ fontSize: '10px', color: '#71717A' }}>{opt.desc}</span>
               </div>
               {quality === opt.id && (
                 <div
                   style={{
-                    width: 20,
-                    height: 20,
+                    width: 16,
+                    height: 16,
                     borderRadius: '50%',
                     background: 'var(--tv-accent)',
                     display: 'flex',
@@ -116,7 +116,7 @@ export function TVSettingsScreen() {
                     flexShrink: 0,
                   }}
                 >
-                  <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="#FFFFFF" strokeWidth="3">
+                  <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="#FFFFFF" strokeWidth="3">
                     <polyline points="20 6 9 17 4 12" />
                   </svg>
                 </div>
@@ -127,9 +127,9 @@ export function TVSettingsScreen() {
       </div>
 
       {/* ── Storage & Cache Section ── */}
-      <div style={{ display: 'flex', flexDirection: 'column', gap: '12px', width: '100%' }}>
-        <h2 style={{ fontSize: 'clamp(16px, 1.6vw, 20px)', fontWeight: 700, color: '#FFFFFF', margin: 0 }}>
-          Storage & Offline Cache
+      <div style={{ display: 'flex', flexDirection: 'column', gap: '8px', width: '100%' }}>
+        <h2 style={{ fontSize: '13px', fontWeight: 600, color: '#A1A1AA', margin: 0 }}>
+          Storage & Cache
         </h2>
         <button
           id="tv-setting-clear-cache"
@@ -139,13 +139,13 @@ export function TVSettingsScreen() {
           onClick={handleClearCache}
           className="tv-focusable"
           style={{
-            padding: '12px 16px',
-            background: 'rgba(239, 68, 68, 0.12)',
-            border: '1px solid rgba(239, 68, 68, 0.3)',
-            borderRadius: '12px',
+            padding: '9px 12px',
+            background: 'rgba(239, 68, 68, 0.08)',
+            border: '1px solid rgba(239, 68, 68, 0.2)',
+            borderRadius: '8px',
             color: '#F87171',
-            fontSize: 'clamp(13px, 1.3vw, 15px)',
-            fontWeight: 700,
+            fontSize: '12px',
+            fontWeight: 600,
             textAlign: 'left',
             display: 'flex',
             alignItems: 'center',
@@ -155,13 +155,13 @@ export function TVSettingsScreen() {
           }}
         >
           <span>{cacheCleared ? 'Cache Cleared' : 'Clear Offline Cached Music'}</span>
-          <span style={{ fontSize: '11px', opacity: 0.8 }}>Free local TV storage space</span>
+          <span style={{ fontSize: '10px', opacity: 0.8 }}>Free TV storage</span>
         </button>
       </div>
 
       {/* ── App Info ── */}
-      <div style={{ color: '#71717A', fontSize: '11px', padding: '8px 0' }}>
-        Soundwave for Android TV • Version 1.3.0 • Continuous Background Audio Playback
+      <div style={{ color: '#52525B', fontSize: '10px', padding: '4px 0' }}>
+        Soundwave for Android TV • Version 1.3.0
       </div>
     </div>
   );

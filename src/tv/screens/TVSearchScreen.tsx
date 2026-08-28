@@ -58,19 +58,19 @@ export function TVSearchScreen() {
         height: '100%',
         overflowY: 'auto',
         overflowX: 'hidden',
-        padding: 'var(--tv-safe-top) var(--tv-safe-right) 100px var(--tv-safe-left)',
+        padding: 'var(--tv-safe-top) var(--tv-safe-right) 60px var(--tv-safe-left)',
         display: 'flex',
         flexDirection: 'column',
-        gap: '20px',
+        gap: '14px',
         boxSizing: 'border-box',
       }}
     >
-      {/* ── Search Input & Header ── */}
-      <div style={{ display: 'flex', flexDirection: 'column', gap: '8px', width: '100%' }}>
+      {/* ── Compact Search Input ── */}
+      <div style={{ display: 'flex', flexDirection: 'column', gap: '6px', width: '100%' }}>
         <h1
           style={{
-            fontSize: 'clamp(20px, 2.2vw, 28px)',
-            fontWeight: 800,
+            fontSize: '16px',
+            fontWeight: 700,
             color: '#FFFFFF',
             margin: 0,
           }}
@@ -81,17 +81,17 @@ export function TVSearchScreen() {
           style={{
             display: 'flex',
             alignItems: 'center',
-            background: 'rgba(255, 255, 255, 0.08)',
-            border: '1px solid rgba(255, 255, 255, 0.15)',
-            borderRadius: '14px',
-            padding: '10px 16px',
-            gap: '12px',
+            background: 'rgba(255, 255, 255, 0.05)',
+            border: '1px solid rgba(255, 255, 255, 0.1)',
+            borderRadius: '10px',
+            padding: '6px 12px',
+            gap: '8px',
             width: '100%',
-            maxWidth: '560px',
+            maxWidth: '460px',
             boxSizing: 'border-box',
           }}
         >
-          <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#A1A1AA" strokeWidth="2.5" style={{ flexShrink: 0 }}>
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#71717A" strokeWidth="2.2" style={{ flexShrink: 0 }}>
             <circle cx="11" cy="11" r="8" />
             <path d="m21 21-4.3-4.3" />
           </svg>
@@ -109,8 +109,8 @@ export function TVSearchScreen() {
               border: 'none',
               outline: 'none',
               color: '#FFFFFF',
-              fontSize: 'clamp(14px, 1.4vw, 17px)',
-              fontWeight: 600,
+              fontSize: '13px',
+              fontWeight: 500,
               width: '100%',
               minWidth: 0,
             }}
@@ -124,16 +124,17 @@ export function TVSearchScreen() {
               onClick={() => setQuery('')}
               className="tv-focusable"
               style={{
-                background: 'rgba(255, 255, 255, 0.12)',
+                background: 'rgba(255, 255, 255, 0.1)',
                 border: 'none',
                 color: '#FFFFFF',
                 borderRadius: '50%',
-                width: 26,
-                height: 26,
+                width: 20,
+                height: 20,
                 display: 'flex',
                 alignItems: 'center',
                 justifyContent: 'center',
                 flexShrink: 0,
+                fontSize: '11px',
               }}
             >
               ✕
@@ -142,23 +143,23 @@ export function TVSearchScreen() {
         </div>
       </div>
 
-      {/* ── On-Screen TV Remote Keyboard ── */}
+      {/* ── Compact On-Screen TV Remote Keyboard ── */}
       <div
         style={{
           display: 'flex',
           flexDirection: 'column',
-          gap: '6px',
-          background: 'rgba(255, 255, 255, 0.03)',
-          border: '1px solid rgba(255, 255, 255, 0.06)',
-          borderRadius: '16px',
-          padding: '12px 14px',
+          gap: '4px',
+          background: 'rgba(255, 255, 255, 0.02)',
+          border: '1px solid rgba(255, 255, 255, 0.05)',
+          borderRadius: '12px',
+          padding: '8px 10px',
           width: '100%',
-          maxWidth: '560px',
+          maxWidth: '460px',
           boxSizing: 'border-box',
         }}
       >
         {KEYBOARD_KEYS.map((row, rowIdx) => (
-          <div key={rowIdx} style={{ display: 'flex', gap: '6px', width: '100%' }}>
+          <div key={rowIdx} style={{ display: 'flex', gap: '4px', width: '100%' }}>
             {row.map((k) => (
               <button
                 key={k}
@@ -171,17 +172,17 @@ export function TVSearchScreen() {
                 style={{
                   flex: k === 'SPACE' ? 3 : k === 'BACKSPACE' || k === 'CLEAR' ? 2 : 1,
                   minWidth: 0,
-                  height: '38px',
-                  background: 'rgba(255, 255, 255, 0.08)',
-                  border: '1px solid rgba(255, 255, 255, 0.1)',
-                  borderRadius: '8px',
+                  height: '28px',
+                  background: 'rgba(255, 255, 255, 0.06)',
+                  border: '1px solid rgba(255, 255, 255, 0.08)',
+                  borderRadius: '6px',
                   color: '#FFFFFF',
-                  fontSize: 'clamp(11px, 1.1vw, 14px)',
-                  fontWeight: 700,
+                  fontSize: '11px',
+                  fontWeight: 600,
                   display: 'flex',
                   alignItems: 'center',
                   justifyContent: 'center',
-                  padding: '0 4px',
+                  padding: '0 2px',
                   boxSizing: 'border-box',
                   overflow: 'hidden',
                   whiteSpace: 'nowrap',
@@ -195,12 +196,12 @@ export function TVSearchScreen() {
       </div>
 
       {/* ── Search Results Grid ── */}
-      <div style={{ display: 'flex', flexDirection: 'column', gap: '14px', width: '100%', marginTop: '6px' }}>
-        <h2 style={{ fontSize: 'clamp(16px, 1.6vw, 20px)', fontWeight: 700, color: '#FFFFFF', margin: 0 }}>
+      <div style={{ display: 'flex', flexDirection: 'column', gap: '10px', width: '100%', marginTop: '2px' }}>
+        <h2 style={{ fontSize: '13px', fontWeight: 600, color: '#A1A1AA', margin: 0 }}>
           {isSearching
             ? 'Searching songs...'
             : results.length > 0
-            ? `Search Results (${results.length})`
+            ? `Results (${results.length})`
             : query.length > 0
             ? 'No songs found'
             : 'Popular Searches'}
@@ -209,8 +210,8 @@ export function TVSearchScreen() {
         <div
           style={{
             display: 'grid',
-            gridTemplateColumns: 'repeat(auto-fill, minmax(clamp(130px, 14vw, 175px), 1fr))',
-            gap: '16px',
+            gridTemplateColumns: 'repeat(auto-fill, minmax(clamp(110px, 11vw, 136px), 1fr))',
+            gap: '12px',
             width: '100%',
             boxSizing: 'border-box',
           }}
@@ -235,9 +236,9 @@ export function TVSearchScreen() {
               />
               <span
                 style={{
-                  fontSize: '14px',
-                  fontWeight: 700,
-                  color: '#FFFFFF',
+                  fontSize: '12px',
+                  fontWeight: 600,
+                  color: '#F4F4F5',
                   whiteSpace: 'nowrap',
                   overflow: 'hidden',
                   textOverflow: 'ellipsis',
@@ -247,8 +248,8 @@ export function TVSearchScreen() {
               </span>
               <span
                 style={{
-                  fontSize: '12px',
-                  color: '#A1A1AA',
+                  fontSize: '10px',
+                  color: '#71717A',
                   whiteSpace: 'nowrap',
                   overflow: 'hidden',
                   textOverflow: 'ellipsis',

@@ -63,14 +63,14 @@ export function TVAppShell() {
               height: '100%',
               overflowY: 'auto',
               overflowX: 'hidden',
-              padding: 'var(--tv-safe-top) var(--tv-safe-right) 100px var(--tv-safe-left)',
+              padding: 'var(--tv-safe-top) var(--tv-safe-right) 60px var(--tv-safe-left)',
               display: 'flex',
               flexDirection: 'column',
-              gap: '20px',
+              gap: '14px',
               boxSizing: 'border-box',
             }}
           >
-            <div style={{ display: 'flex', alignItems: 'center', gap: '16px' }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
               <button
                 id="tv-btn-playlist-back"
                 data-tv-focus="true"
@@ -79,24 +79,25 @@ export function TVAppShell() {
                 onClick={() => setSelectedPlaylist(null)}
                 className="tv-focusable"
                 style={{
-                  background: 'rgba(255, 255, 255, 0.08)',
+                  background: 'rgba(255, 255, 255, 0.06)',
                   border: 'none',
                   color: '#FFFFFF',
                   borderRadius: '50%',
-                  width: 40,
-                  height: 40,
+                  width: 32,
+                  height: 32,
                   display: 'flex',
                   alignItems: 'center',
                   justifyContent: 'center',
                   flexShrink: 0,
+                  fontSize: '14px',
                 }}
               >
                 ←
               </button>
               <h1
                 style={{
-                  fontSize: 'clamp(20px, 2.2vw, 28px)',
-                  fontWeight: 800,
+                  fontSize: '16px',
+                  fontWeight: 700,
                   color: '#FFFFFF',
                   margin: 0,
                   overflow: 'hidden',
@@ -111,8 +112,8 @@ export function TVAppShell() {
             <div
               style={{
                 display: 'grid',
-                gridTemplateColumns: 'repeat(auto-fill, minmax(clamp(140px, 15vw, 190px), 1fr))',
-                gap: '16px',
+                gridTemplateColumns: 'repeat(auto-fill, minmax(clamp(110px, 11vw, 136px), 1fr))',
+                gap: '12px',
                 width: '100%',
                 boxSizing: 'border-box',
               }}
@@ -137,9 +138,9 @@ export function TVAppShell() {
                   />
                   <span
                     style={{
-                      fontSize: '14px',
-                      fontWeight: 700,
-                      color: '#FFFFFF',
+                      fontSize: '12px',
+                      fontWeight: 600,
+                      color: '#F4F4F5',
                       whiteSpace: 'nowrap',
                       overflow: 'hidden',
                       textOverflow: 'ellipsis',
@@ -149,8 +150,8 @@ export function TVAppShell() {
                   </span>
                   <span
                     style={{
-                      fontSize: '12px',
-                      color: '#A1A1AA',
+                      fontSize: '10px',
+                      color: '#71717A',
                       whiteSpace: 'nowrap',
                       overflow: 'hidden',
                       textOverflow: 'ellipsis',
