@@ -175,6 +175,13 @@ function AppShell() {
     }
   }, [appState.config.autoUpdate]);
 
+  // Toggle TV Mode CSS Class on Document Body
+  useEffect(() => {
+    if (typeof document !== 'undefined') {
+      document.body.classList.toggle('tv-mode', isTV);
+    }
+  }, [isTV]);
+
   if (isTV) {
     return <TVAppShell />;
   }
