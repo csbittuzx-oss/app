@@ -4,13 +4,13 @@
    ══════════════════════════════════════════════════════════════════════════════ */
 
 :root {
-  --tv-safe-left: clamp(24px, 3.5vw, 48px);
-  --tv-safe-right: clamp(24px, 3.5vw, 48px);
-  --tv-safe-top: clamp(20px, 3vh, 36px);
-  --tv-safe-bottom: clamp(20px, 3vh, 36px);
+  --tv-safe-left: clamp(20px, 3vw, 36px);
+  --tv-safe-right: clamp(20px, 3vw, 36px);
+  --tv-safe-top: clamp(16px, 2.5vh, 28px);
+  --tv-safe-bottom: clamp(16px, 2.5vh, 28px);
   
-  --tv-nav-rail-collapsed: clamp(70px, 7vw, 84px);
-  --tv-nav-rail-expanded: clamp(190px, 18vw, 230px);
+  --tv-nav-rail-collapsed: 60px;
+  --tv-nav-rail-expanded: 190px;
   
   --tv-accent: #6366F1;
   --tv-accent-glow: rgba(99, 102, 241, 0.45);
@@ -78,7 +78,7 @@
 /* TV Media Card */
 .tv-song-card {
   flex-shrink: 0;
-  width: clamp(140px, 14vw, 180px);
+  width: clamp(130px, 13vw, 170px);
   background: rgba(255, 255, 255, 0.04);
   border: 1px solid var(--tv-card-border);
   border-radius: 14px;
@@ -100,20 +100,19 @@
   background: #18181B;
 }
 
-/* TV Navigation Rail */
+/* ── Compact Sleek TV Navigation Rail ── */
 .tv-nav-rail {
   width: var(--tv-nav-rail-collapsed);
   height: 100vh;
   flex-shrink: 0;
-  background: rgba(15, 16, 22, 0.96);
-  backdrop-filter: blur(24px);
+  background: rgba(12, 13, 18, 0.98);
   border-right: 1px solid rgba(255, 255, 255, 0.06);
   display: flex;
   flex-direction: column;
-  padding: var(--tv-safe-top) 10px var(--tv-safe-bottom) 10px;
-  gap: 20px;
+  padding: var(--tv-safe-top) 8px var(--tv-safe-bottom) 8px;
+  gap: 14px;
   z-index: 50;
-  transition: width 0.25s cubic-bezier(0.16, 1, 0.3, 1);
+  transition: width 0.22s cubic-bezier(0.16, 1, 0.3, 1), box-shadow 0.22s ease;
   overflow: hidden;
   white-space: nowrap;
 }
@@ -121,31 +120,58 @@
 .tv-nav-rail.expanded,
 .tv-nav-rail:focus-within {
   width: var(--tv-nav-rail-expanded);
-  box-shadow: 16px 0 48px rgba(0, 0, 0, 0.7);
+  box-shadow: 12px 0 40px rgba(0, 0, 0, 0.7);
 }
 
 .tv-nav-item {
   display: flex;
   align-items: center;
-  gap: 14px;
-  padding: 12px 14px;
-  border-radius: 12px;
-  color: #A1A1AA;
+  gap: 12px;
+  width: 100%;
+  height: 44px;
+  padding: 0 10px;
+  border-radius: 10px;
+  color: #94A3B8;
   text-decoration: none;
-  font-size: clamp(13px, 1.2vw, 15px);
+  font-size: 14px;
   font-weight: 600;
   background: transparent;
   border: 1px solid transparent;
+  overflow: hidden;
+}
+
+.tv-nav-item-icon {
+  width: 24px;
+  height: 24px;
+  display: flex;
+  align-items: center;
+  justifyContent: center;
+  flex-shrink: 0;
+}
+
+.tv-nav-item-label {
+  opacity: 0;
+  transform: translateX(-6px);
+  transition: opacity 0.18s ease, transform 0.18s ease;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.tv-nav-rail.expanded .tv-nav-item-label,
+.tv-nav-rail:focus-within .tv-nav-item-label {
+  opacity: 1;
+  transform: translateX(0);
 }
 
 .tv-nav-item.active {
   color: #FFFFFF;
-  background: rgba(99, 102, 241, 0.15);
-  border-color: rgba(99, 102, 241, 0.4);
+  background: rgba(99, 102, 241, 0.16);
+  border-color: rgba(99, 102, 241, 0.35);
 }
 
 .tv-nav-item:focus {
   color: #FFFFFF;
   background: var(--tv-accent);
-  transform: scale(1.03);
+  transform: scale(1.04);
 }
