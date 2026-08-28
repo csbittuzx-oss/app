@@ -38,20 +38,30 @@ export function TVLibraryScreen({ onOpenPlaylist }: TVLibraryScreenProps) {
     <div
       style={{
         flex: 1,
-        height: '100vh',
+        width: '100%',
+        height: '100%',
         overflowY: 'auto',
-        padding: '36px 48px 120px 48px',
+        overflowX: 'hidden',
+        padding: 'var(--tv-safe-top) var(--tv-safe-right) 100px var(--tv-safe-left)',
         display: 'flex',
         flexDirection: 'column',
-        gap: '28px',
+        gap: '20px',
+        boxSizing: 'border-box',
       }}
     >
-      <h1 style={{ fontSize: '28px', fontWeight: 800, color: '#FFFFFF', margin: 0 }}>
+      <h1
+        style={{
+          fontSize: 'clamp(20px, 2.2vw, 28px)',
+          fontWeight: 800,
+          color: '#FFFFFF',
+          margin: 0,
+        }}
+      >
         Your Library
       </h1>
 
       {/* ── Tabs Header ── */}
-      <div style={{ display: 'flex', gap: '14px' }} data-tv-section="library-tabs">
+      <div style={{ display: 'flex', gap: '10px', flexWrap: 'wrap' }} data-tv-section="library-tabs">
         <button
           id="tv-lib-tab-liked"
           data-tv-focus="true"
@@ -63,9 +73,9 @@ export function TVLibraryScreen({ onOpenPlaylist }: TVLibraryScreenProps) {
             background: activeTab === 'liked' ? 'var(--tv-accent)' : 'rgba(255, 255, 255, 0.08)',
             border: 'none',
             color: '#FFFFFF',
-            padding: '10px 24px',
-            borderRadius: '12px',
-            fontSize: '16px',
+            padding: '8px 18px',
+            borderRadius: '10px',
+            fontSize: 'clamp(13px, 1.2vw, 15px)',
             fontWeight: 700,
           }}
         >
@@ -83,9 +93,9 @@ export function TVLibraryScreen({ onOpenPlaylist }: TVLibraryScreenProps) {
             background: activeTab === 'playlists' ? 'var(--tv-accent)' : 'rgba(255, 255, 255, 0.08)',
             border: 'none',
             color: '#FFFFFF',
-            padding: '10px 24px',
-            borderRadius: '12px',
-            fontSize: '16px',
+            padding: '8px 18px',
+            borderRadius: '10px',
+            fontSize: 'clamp(13px, 1.2vw, 15px)',
             fontWeight: 700,
           }}
         >
@@ -103,9 +113,9 @@ export function TVLibraryScreen({ onOpenPlaylist }: TVLibraryScreenProps) {
             background: activeTab === 'offline' ? 'var(--tv-accent)' : 'rgba(255, 255, 255, 0.08)',
             border: 'none',
             color: '#FFFFFF',
-            padding: '10px 24px',
-            borderRadius: '12px',
-            fontSize: '16px',
+            padding: '8px 18px',
+            borderRadius: '10px',
+            fontSize: 'clamp(13px, 1.2vw, 15px)',
             fontWeight: 700,
           }}
         >
@@ -118,8 +128,10 @@ export function TVLibraryScreen({ onOpenPlaylist }: TVLibraryScreenProps) {
         <div
           style={{
             display: 'grid',
-            gridTemplateColumns: 'repeat(auto-fill, minmax(200px, 1fr))',
-            gap: '20px',
+            gridTemplateColumns: 'repeat(auto-fill, minmax(clamp(130px, 14vw, 175px), 1fr))',
+            gap: '16px',
+            width: '100%',
+            boxSizing: 'border-box',
           }}
           data-tv-section="library-liked"
         >
@@ -142,7 +154,7 @@ export function TVLibraryScreen({ onOpenPlaylist }: TVLibraryScreenProps) {
               />
               <span
                 style={{
-                  fontSize: '15px',
+                  fontSize: '14px',
                   fontWeight: 700,
                   color: '#FFFFFF',
                   whiteSpace: 'nowrap',
@@ -154,7 +166,7 @@ export function TVLibraryScreen({ onOpenPlaylist }: TVLibraryScreenProps) {
               </span>
               <span
                 style={{
-                  fontSize: '13px',
+                  fontSize: '12px',
                   color: '#A1A1AA',
                   whiteSpace: 'nowrap',
                   overflow: 'hidden',
@@ -177,8 +189,10 @@ export function TVLibraryScreen({ onOpenPlaylist }: TVLibraryScreenProps) {
         <div
           style={{
             display: 'grid',
-            gridTemplateColumns: 'repeat(auto-fill, minmax(220px, 1fr))',
-            gap: '20px',
+            gridTemplateColumns: 'repeat(auto-fill, minmax(clamp(150px, 16vw, 200px), 1fr))',
+            gap: '16px',
+            width: '100%',
+            boxSizing: 'border-box',
           }}
           data-tv-section="library-playlists"
         >
@@ -197,11 +211,11 @@ export function TVLibraryScreen({ onOpenPlaylist }: TVLibraryScreenProps) {
                 src={pl.artwork || 'https://images.unsplash.com/photo-1514525253161-7a46d19cd819?w=300'}
                 alt={pl.title}
                 className="tv-song-artwork"
-                style={{ height: '140px', objectFit: 'cover' }}
+                style={{ height: '110px', objectFit: 'cover' }}
               />
               <span
                 style={{
-                  fontSize: '15px',
+                  fontSize: '14px',
                   fontWeight: 700,
                   color: '#FFFFFF',
                   whiteSpace: 'nowrap',
@@ -211,7 +225,7 @@ export function TVLibraryScreen({ onOpenPlaylist }: TVLibraryScreenProps) {
               >
                 {pl.title}
               </span>
-              <span style={{ fontSize: '13px', color: '#A1A1AA' }}>
+              <span style={{ fontSize: '12px', color: '#A1A1AA' }}>
                 {pl.tracks ? `${pl.tracks.length} Songs` : 'Playlist'}
               </span>
             </div>
@@ -228,8 +242,10 @@ export function TVLibraryScreen({ onOpenPlaylist }: TVLibraryScreenProps) {
         <div
           style={{
             display: 'grid',
-            gridTemplateColumns: 'repeat(auto-fill, minmax(200px, 1fr))',
-            gap: '20px',
+            gridTemplateColumns: 'repeat(auto-fill, minmax(clamp(130px, 14vw, 175px), 1fr))',
+            gap: '16px',
+            width: '100%',
+            boxSizing: 'border-box',
           }}
           data-tv-section="library-offline"
         >
@@ -252,7 +268,7 @@ export function TVLibraryScreen({ onOpenPlaylist }: TVLibraryScreenProps) {
               />
               <span
                 style={{
-                  fontSize: '15px',
+                  fontSize: '14px',
                   fontWeight: 700,
                   color: '#FFFFFF',
                   whiteSpace: 'nowrap',
@@ -264,7 +280,7 @@ export function TVLibraryScreen({ onOpenPlaylist }: TVLibraryScreenProps) {
               </span>
               <span
                 style={{
-                  fontSize: '13px',
+                  fontSize: '12px',
                   color: '#10B981',
                   whiteSpace: 'nowrap',
                   overflow: 'hidden',

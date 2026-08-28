@@ -41,21 +41,36 @@ export function TVAppShell() {
         onOpenPlayer={() => setActiveScreen('player')}
       />
 
-      {/* ── Main Screen Viewport ── */}
-      <main style={{ flex: 1, position: 'relative', overflow: 'hidden' }}>
+      {/* ── Main Screen Viewport with strict responsive constraints ── */}
+      <main
+        style={{
+          flex: 1,
+          minWidth: 0,
+          width: '100%',
+          height: '100%',
+          position: 'relative',
+          overflow: 'hidden',
+          display: 'flex',
+          flexDirection: 'column',
+          boxSizing: 'border-box',
+        }}
+      >
         {selectedPlaylist ? (
           <div
             style={{
               flex: 1,
-              height: '100vh',
+              width: '100%',
+              height: '100%',
               overflowY: 'auto',
-              padding: '36px 48px 120px 48px',
+              overflowX: 'hidden',
+              padding: 'var(--tv-safe-top) var(--tv-safe-right) 100px var(--tv-safe-left)',
               display: 'flex',
               flexDirection: 'column',
-              gap: '24px',
+              gap: '20px',
+              boxSizing: 'border-box',
             }}
           >
-            <div style={{ display: 'flex', alignItems: 'center', gap: '20px' }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: '16px' }}>
               <button
                 id="tv-btn-playlist-back"
                 data-tv-focus="true"
@@ -68,16 +83,27 @@ export function TVAppShell() {
                   border: 'none',
                   color: '#FFFFFF',
                   borderRadius: '50%',
-                  width: 44,
-                  height: 44,
+                  width: 40,
+                  height: 40,
                   display: 'flex',
                   alignItems: 'center',
                   justifyContent: 'center',
+                  flexShrink: 0,
                 }}
               >
                 ←
               </button>
-              <h1 style={{ fontSize: '28px', fontWeight: 800, color: '#FFFFFF', margin: 0 }}>
+              <h1
+                style={{
+                  fontSize: 'clamp(20px, 2.2vw, 28px)',
+                  fontWeight: 800,
+                  color: '#FFFFFF',
+                  margin: 0,
+                  overflow: 'hidden',
+                  textOverflow: 'ellipsis',
+                  whiteSpace: 'nowrap',
+                }}
+              >
                 {selectedPlaylist.title}
               </h1>
             </div>
@@ -85,8 +111,10 @@ export function TVAppShell() {
             <div
               style={{
                 display: 'grid',
-                gridTemplateColumns: 'repeat(auto-fill, minmax(200px, 1fr))',
-                gap: '20px',
+                gridTemplateColumns: 'repeat(auto-fill, minmax(clamp(140px, 15vw, 190px), 1fr))',
+                gap: '16px',
+                width: '100%',
+                boxSizing: 'border-box',
               }}
               data-tv-section="playlist-tracks"
             >
@@ -109,7 +137,7 @@ export function TVAppShell() {
                   />
                   <span
                     style={{
-                      fontSize: '15px',
+                      fontSize: '14px',
                       fontWeight: 700,
                       color: '#FFFFFF',
                       whiteSpace: 'nowrap',
@@ -121,7 +149,7 @@ export function TVAppShell() {
                   </span>
                   <span
                     style={{
-                      fontSize: '13px',
+                      fontSize: '12px',
                       color: '#A1A1AA',
                       whiteSpace: 'nowrap',
                       overflow: 'hidden',
