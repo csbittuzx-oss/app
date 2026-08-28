@@ -121,6 +121,7 @@ class AudioPlayer {
   private lastSavedPositionTime = 0;
   private isAutoRecovering = false;
   private isUserInteracted = false;
+  private isSwitchingSource = false;
 
   constructor() {
     this.primaryAudio = new Audio();
@@ -402,7 +403,7 @@ class AudioPlayer {
     });
 
     el.addEventListener('pause', () => {
-      if (el !== this.primaryAudio || this.activeEngine !== 'html5') return;
+      if (el !== this.primaryAudio || this.activeEngine !== 'html5' || this.isSwitchingSource) return;
       this.clearStallRecovery();
       this.emit({ type: 'pause' });
       this.saveCurrentSession();
@@ -449,6 +450,11 @@ class AudioPlayer {
       if (currentSec > this.lastTimeUpdateSecond) {
         userProfileTracker.recordListeningDuration(currentSec - this.lastTimeUpdateSecond);
         this.lastTimeUpdateSecond = currentSec;
+
+        // Gracefully cache for offline backup after 20 seconds of stable listening
+        if (currentSec === 20 && this.currentSong && !this.currentSong.isDownloaded && this.currentSong.previewUrl && !this.currentSong.previewUrl.startsWith('blob:')) {
+          cacheSongForOfflineBackup(this.currentSong, this.currentSong.previewUrl).catch(() => {});
+        }
       }
 
       this.checkRidingModeAndAutomix(currentTime, duration, progress);
@@ -1008,6 +1014,7 @@ class AudioPlayer {
       MediaNotificationService.update(targetSong, true, targetSong.duration, this.pendingSeekPosition || 0);
 
       this.activeEngine = 'html5';
+      this.isSwitchingSource = true;
       this.audio.src = cachedData.streamUrl;
       this.audio.volume = this._volume;
 
@@ -1042,6 +1049,8 @@ class AudioPlayer {
         }
       } catch {
         this.emit({ type: 'loading', isLoading: false });
+      } finally {
+        this.isSwitchingSource = false;
       }
 
       if (currentSessionId !== this.playbackSessionId) return;
@@ -1153,6 +1162,7 @@ class AudioPlayer {
 
     // ── Set audio source and start playback ──
     targetSong.previewUrl = resolvedUrl;
+    this.isSwitchingSource = true;
     this.audio.src = resolvedUrl;
     this.audio.volume = this._volume;
 
@@ -1178,12 +1188,6 @@ class AudioPlayer {
 
     this.saveCurrentSession();
 
-    // Adaptive pre-buffer of stream
-    if (!resolvedUrl.startsWith('blob:')) {
-      adaptiveStreaming.preBufferSong(targetSong.id, resolvedUrl, this._audioQuality);
-      cacheSongForOfflineBackup(targetSong, resolvedUrl).catch(() => {});
-    }
-
     try {
       const playPromise = this.audio.play();
       if (playPromise !== undefined) await playPromise;
@@ -1193,6 +1197,8 @@ class AudioPlayer {
       }
     } catch {
       this.emit({ type: 'loading', isLoading: false });
+    } finally {
+      this.isSwitchingSource = false;
     }
 
     if (currentSessionId !== this.playbackSessionId) return;
