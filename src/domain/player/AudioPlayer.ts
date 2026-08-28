@@ -111,7 +111,6 @@ class AudioPlayer {
   private currentStreamSongId: string | null = null;
   private stallWatcherCleanup: (() => void) | null = null;
   private nextSongPreBuffered: string | null = null;
-  private retryCount = 0;
   private stallRecoveryTimer: ReturnType<typeof setTimeout> | null = null;
 
   // Continue Listening & Resume state (Restored from previous session exclusively for resume)
@@ -396,7 +395,6 @@ class AudioPlayer {
     el.addEventListener('playing', () => {
       if (el !== this.primaryAudio || this.activeEngine !== 'html5') return;
       this.clearStallRecovery();
-      this.retryCount = 0;
       this.emit({ type: 'loading', isLoading: false });
       this.emit({ type: 'play' });
       this.emit({ type: 'error', error: null });
@@ -511,7 +509,7 @@ class AudioPlayer {
       if (el !== this.primaryAudio || this.activeEngine !== 'html5') return;
       const err = el.error;
       // Filter out abort errors, empty src resets during song switching, or unmounted states
-      if (!el.src || !this.currentSong || err?.code === MediaError.MEDIA_ERR_ABORTED || !this.isUserInteracted) {
+      if (!el.src || !this.currentSong || err?.code === MediaError.MEDIA_ERR_ABORTED) {
         return;
       }
 
@@ -519,23 +517,9 @@ class AudioPlayer {
       const currentPos = el.currentTime || this.savedResumePosition || 0;
       const songToRecover = this.currentSong;
 
-      // Controlled retry with exponential backoff (preserving playback position)
-      if (this.retryCount < 3 && navigator.onLine) {
-        this.retryCount++;
-        const delay = [400, 1200, 2500][this.retryCount - 1];
-        setTimeout(() => {
-          if (this.currentSong?.id === songToRecover.id && this.activeEngine === 'html5') {
-            try {
-              this.audio.currentTime = currentPos;
-              this.audio.play().catch(() => {});
-            } catch {}
-          }
-        }, delay);
-        return;
-      }
-
-      // Automatic Instant YouTube Fallback if CDN stream fails after retries
-      if (navigator.onLine && this.currentSong && !this.isAutoRecovering && this.isUserInteracted) {
+      // Instant YouTube Fallback if Saavn CDN stream fails
+      if (navigator.onLine && !this.isAutoRecovering) {
+        console.log(`[AudioPlayer] Saavn CDN stream failed for "${songToRecover.title}". Instant switch to YouTube InnerTube API.`);
         this.isAutoRecovering = true;
         this.playViaYouTubeFallback(songToRecover, this.playbackSessionId, currentPos)
           .catch(() => {
@@ -1125,7 +1109,10 @@ class AudioPlayer {
               targetSong.artwork = fullTrack.artwork;
               targetSong.artworkLg = fullTrack.artwork;
             }
-            targetSong.provider = 'saavn';
+            targetSong.provider = fullTrack.streamUrl.startsWith('yt_') ? 'youtube' : 'saavn';
+            if (fullTrack.streamUrl.startsWith('yt_')) {
+              targetSong.id = fullTrack.streamUrl;
+            }
             this.emit({ type: 'songchange', song: { ...targetSong } });
           }
         } catch (e) {
