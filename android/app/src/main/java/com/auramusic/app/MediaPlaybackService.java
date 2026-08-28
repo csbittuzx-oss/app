@@ -53,6 +53,7 @@ public class MediaPlaybackService extends Service {
     private PowerManager.WakeLock wakeLock;
     private WifiManager.WifiLock wifiLock;
     private boolean isBecomingNoisyRegistered = false;
+    private boolean hasAudioFocus = false;
 
     private String currentTitle = "Soundwave";
     private String currentArtist = "Playing";
@@ -230,7 +231,9 @@ public class MediaPlaybackService extends Service {
         this.currentPosition = position;
 
         if (playing) {
-            requestAudioFocus();
+            if (!hasAudioFocus) {
+                requestAudioFocus();
+            }
             acquireLocks();
             registerNoisyReceiver();
         } else {
@@ -385,33 +388,42 @@ public class MediaPlaybackService extends Service {
                         .setAudioAttributes(playbackAttributes)
                         .setAcceptsDelayedFocusGain(true)
                         .setOnAudioFocusChangeListener(focusChange -> {
-                            if (focusChange == AudioManager.AUDIOFOCUS_LOSS || focusChange == AudioManager.AUDIOFOCUS_LOSS_TRANSIENT) {
+                            // Only handle true permanent focus loss, ignore transient focus shifts
+                            if (focusChange == AudioManager.AUDIOFOCUS_LOSS) {
+                                hasAudioFocus = false;
                                 if (MediaNotificationPlugin.instance != null) {
                                     MediaNotificationPlugin.instance.handleAction("pause");
                                 }
+                            } else if (focusChange == AudioManager.AUDIOFOCUS_GAIN) {
+                                hasAudioFocus = true;
                             }
                         })
                         .build();
-                    audioManager.requestAudioFocus(audioFocusRequest);
+                    int res = audioManager.requestAudioFocus(audioFocusRequest);
+                    hasAudioFocus = (res == AudioManager.AUDIOFOCUS_REQUEST_GRANTED);
                 } else {
-                    audioManager.requestAudioFocus(
+                    int res = audioManager.requestAudioFocus(
                         focusChange -> {
-                            if (focusChange == AudioManager.AUDIOFOCUS_LOSS || focusChange == AudioManager.AUDIOFOCUS_LOSS_TRANSIENT) {
+                            if (focusChange == AudioManager.AUDIOFOCUS_LOSS) {
+                                hasAudioFocus = false;
                                 if (MediaNotificationPlugin.instance != null) {
                                     MediaNotificationPlugin.instance.handleAction("pause");
                                 }
+                            } else if (focusChange == AudioManager.AUDIOFOCUS_GAIN) {
+                                hasAudioFocus = true;
                             }
                         },
                         AudioManager.STREAM_MUSIC,
                         AudioManager.AUDIOFOCUS_GAIN
                     );
+                    hasAudioFocus = (res == AudioManager.AUDIOFOCUS_REQUEST_GRANTED);
                 }
             } catch (Exception ignored) {}
         }
     }
 
     private void abandonAudioFocus() {
-        if (audioManager != null) {
+        if (audioManager != null && hasAudioFocus) {
             try {
                 if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O && audioFocusRequest != null) {
                     audioManager.abandonAudioFocusRequest(audioFocusRequest);
@@ -419,6 +431,7 @@ public class MediaPlaybackService extends Service {
                     audioManager.abandonAudioFocus(null);
                 }
             } catch (Exception ignored) {}
+            hasAudioFocus = false;
         }
     }
 
