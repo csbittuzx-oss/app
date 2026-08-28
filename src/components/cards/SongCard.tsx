@@ -7,6 +7,7 @@ import { CONFIG } from '../../config';
 import { showToast } from '../../core/utils/toast';
 import { SongOptionsBottomSheet } from '../shared/SongOptionsBottomSheet';
 import { resizeImageUrl } from '../../core/utils/imageUtils';
+import { isSongCached } from '../../services/OfflineBackupService';
 
 interface SongCardProps {
   song: Song;
@@ -83,8 +84,16 @@ export function SongCard({
   const isHorizontalSwipeRef = useRef<boolean | null>(null);
   const hasTriggeredHapticRef = useRef(false);
 
+  const isOffline = typeof navigator !== 'undefined' && !navigator.onLine;
+  const isAvailableOffline = isSongCached(song.id) || song.isDownloaded || false;
+  const isPlayable = !isOffline || isAvailableOffline;
+
   const handlePlay = () => {
     if (Math.abs(dragX) > 10) return; // ignore click if drag gesture
+    if (isOffline && !isAvailableOffline) {
+      showToast(`"${song.title}" is not available offline.`, 'info', 2000);
+      return;
+    }
     playSong(song, queue, index);
     addRecentlyPlayed(song);
     if (onPlay) onPlay();
@@ -314,6 +323,7 @@ export function SongCard({
           paddingLeft: isCurrentSong ? 8 : (Math.abs(dragX) > 0 ? 8 : 0),
           paddingRight: isCurrentSong ? 8 : (Math.abs(dragX) > 0 ? 8 : 0),
           borderRadius: isCurrentSong ? 'var(--radius-md)' : 'var(--radius-sm)',
+          opacity: isPlayable ? 1 : 0.42,
           userSelect: 'none',
           WebkitUserSelect: 'none',
         }}

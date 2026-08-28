@@ -9,7 +9,12 @@
 import type { Song, RepeatMode, AudioQuality } from '../../data/models';
 import { shuffle } from '../../core/utils';
 import { resolveFullTrack, formatMediaUrlWithQuality, isPreviewAudioUrl, fetchSaavnSongStreamById } from '../../data/api/saavnApi';
-import { cacheSongForOfflineBackup, getOfflineSongStream } from '../../services/OfflineBackupService';
+import {
+  cacheSongForOfflineBackup,
+  getOfflineSongStream,
+  isSongCached,
+  setCurrentlyPlayingSongId,
+} from '../../services/OfflineBackupService';
 import { showToast } from '../../core/utils/toast';
 import { MediaNotificationService } from '../../services/MediaNotificationService';
 import {
@@ -876,34 +881,85 @@ class AudioPlayer {
     userProfileTracker.recordPlay(targetSong);
     aiTasteProfileEngine.recordSongPlay(targetSong);
 
+    setCurrentlyPlayingSongId(targetSong.id);
+
+    // ── 0. Check Offline Local Cache Fast-Path (Instant 0ms playback offline & online) ──
+    const cachedData = await getOfflineSongStream(targetSong.id);
+    if (cachedData?.streamUrl) {
+      if (currentSessionId !== this.playbackSessionId) return;
+
+      targetSong.previewUrl = cachedData.streamUrl;
+      targetSong.isDownloaded = true;
+      if (cachedData.artwork) {
+        targetSong.artwork = cachedData.artwork;
+        targetSong.artworkLg = cachedData.artwork;
+      }
+
+      this.emit({ type: 'songchange', song: { ...targetSong } });
+      this.updateMediaSession(targetSong);
+      MediaNotificationService.update(targetSong, true, targetSong.duration, this.pendingSeekPosition || 0);
+
+      this.activeEngine = 'html5';
+      this.audio.src = cachedData.streamUrl;
+      this.audio.volume = this._volume;
+
+      const targetSeek = this.pendingSeekPosition;
+      this.pendingSeekPosition = 0;
+
+      if (targetSeek > 0) {
+        const applySeek = () => {
+          try {
+            if (currentSessionId === this.playbackSessionId && targetSeek > 0 && isFinite(targetSeek)) {
+              this.audio.currentTime = targetSeek;
+            }
+          } catch {}
+        };
+        if (this.audio.readyState >= 1) {
+          applySeek();
+        } else {
+          this.audio.addEventListener('loadedmetadata', applySeek, { once: true });
+        }
+      } else {
+        this.audio.currentTime = 0;
+      }
+
+      this.saveCurrentSession();
+
+      try {
+        const playPromise = this.audio.play();
+        if (playPromise !== undefined) await playPromise;
+        if (currentSessionId === this.playbackSessionId) {
+          this.emit({ type: 'loading', isLoading: false });
+          this.emit({ type: 'play' });
+        }
+      } catch {
+        this.emit({ type: 'loading', isLoading: false });
+      }
+
+      if (currentSessionId !== this.playbackSessionId) return;
+      this.scheduleNextSongPreBuffer();
+      return;
+    }
+
+    // ── Offline check if song is not cached ──
+    if (!navigator.onLine) {
+      this.emit({ type: 'loading', isLoading: false });
+      showToast(`"${targetSong.title}" is not available offline.`, 'info', 2000);
+      if (this._queue.length > 1) {
+        setTimeout(() => {
+          if (currentSessionId === this.playbackSessionId && !this.isPlaying) {
+            this.next();
+          }
+        }, 1200);
+      }
+      return;
+    }
+
     // ── Immediately update UI with new song info (artwork, title, artist) ──
     this.emit({ type: 'songchange', song: targetSong });
     this.emit({ type: 'loading', isLoading: true });
     this.updateMediaSession(targetSong);
     MediaNotificationService.update(targetSong, true, targetSong.duration, this.pendingSeekPosition || 0);
-
-    // ── Offline check ──
-    if (!navigator.onLine) {
-      let offlineUrl: string | null = null;
-      try { offlineUrl = await getOfflineSongStream(targetSong.id); } catch {}
-
-      if (!offlineUrl && targetSong.previewUrl?.startsWith('blob:')) {
-        offlineUrl = targetSong.previewUrl;
-      }
-
-      if (currentSessionId !== this.playbackSessionId) return;
-
-      if (offlineUrl) {
-        targetSong.previewUrl = offlineUrl;
-        targetSong.isDownloaded = true;
-        youtubeAudioEngine.stop();
-        this.activeEngine = 'html5';
-      } else {
-        this.emit({ type: 'loading', isLoading: false });
-        showToast("You're offline. This song isn't available for offline playback.", 'danger', 3200);
-        return;
-      }
-    }
 
     // ── 0. Attempt Ultra-Fast Direct 320kbps Audio Stream Resolution ──
     // Every song (whether from YouTube search, JioSaavn search, or Spotify) first resolves its authentic 320kbps master stream from CDN for instant 50ms playback.
@@ -1017,6 +1073,7 @@ class AudioPlayer {
     // Adaptive pre-buffer of stream
     if (!resolvedUrl.startsWith('blob:')) {
       adaptiveStreaming.preBufferSong(targetSong.id, resolvedUrl, this._audioQuality);
+      cacheSongForOfflineBackup(targetSong, resolvedUrl).catch(() => {});
     }
 
     try {
@@ -1093,6 +1150,7 @@ class AudioPlayer {
     this.emit({ type: 'songchange', song: { ...targetSong } });
     this.updateMediaSession(targetSong);
     this.saveCurrentSession();
+    cacheSongForOfflineBackup(targetSong).catch(() => {});
 
     await youtubeAudioEngine.loadAndPlay(videoId, sessionId, seekSeconds);
     return true;
@@ -1689,6 +1747,32 @@ class AudioPlayer {
       aiTasteProfileEngine.recordSongSkip(current);
     }
 
+    if (!navigator.onLine) {
+      // Offline mode: find next cached track
+      let foundIndex = -1;
+      for (let i = this._queueIndex + 1; i < this._queue.length; i++) {
+        if (isSongCached(this._queue[i].id)) {
+          foundIndex = i;
+          break;
+        }
+      }
+      if (foundIndex === -1 && this._repeat === 'all') {
+        for (let i = 0; i <= this._queueIndex; i++) {
+          if (isSongCached(this._queue[i].id)) {
+            foundIndex = i;
+            break;
+          }
+        }
+      }
+      if (foundIndex !== -1) {
+        this._queueIndex = foundIndex;
+        this.play(this._queue[this._queueIndex]);
+      } else {
+        showToast('No more offline songs in queue', 'info', 2000);
+      }
+      return;
+    }
+
     if (this._queueIndex < this._queue.length - 1) {
       this._queueIndex++;
       this.play(this._queue[this._queueIndex]);
@@ -1706,6 +1790,32 @@ class AudioPlayer {
 
     if (!forceTrackChange && this.audio.currentTime > 3 && this._queueIndex > 0) {
       this.audio.currentTime = 0;
+      return;
+    }
+
+    if (!navigator.onLine) {
+      // Offline mode: find previous cached track
+      let foundIndex = -1;
+      for (let i = this._queueIndex - 1; i >= 0; i--) {
+        if (isSongCached(this._queue[i].id)) {
+          foundIndex = i;
+          break;
+        }
+      }
+      if (foundIndex === -1 && this._repeat === 'all') {
+        for (let i = this._queue.length - 1; i >= this._queueIndex; i--) {
+          if (isSongCached(this._queue[i].id)) {
+            foundIndex = i;
+            break;
+          }
+        }
+      }
+      if (foundIndex !== -1) {
+        this._queueIndex = foundIndex;
+        this.play(this._queue[this._queueIndex]);
+      } else {
+        this.audio.currentTime = 0;
+      }
       return;
     }
 

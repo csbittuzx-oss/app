@@ -29,8 +29,17 @@ export function LibraryScreen() {
   const [offlineCount, setOfflineCount] = useState<number>(0);
 
   useEffect(() => {
-    getOfflineTracksCount().then(cnt => setOfflineCount(cnt));
-  }, []);
+    const refreshCount = () => {
+      getOfflineTracksCount().then(cnt => setOfflineCount(cnt));
+    };
+    refreshCount();
+    window.addEventListener('online', refreshCount);
+    window.addEventListener('offline', refreshCount);
+    return () => {
+      window.removeEventListener('online', refreshCount);
+      window.removeEventListener('offline', refreshCount);
+    };
+  }, [activeTab]);
 
   const longPressTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const isLongPressTriggeredRef = useRef(false);
@@ -258,7 +267,7 @@ export function LibraryScreen() {
 
         {/* Playlists tab */}
         {activeTab === 'playlists' && (
-          sortedPlaylists.length === 0 && state.recentlyPlayed.length === 0 ? (
+          sortedPlaylists.length === 0 && state.recentlyPlayed.length === 0 && offlineCount === 0 ? (
             <EmptyState
               icon={
                 <svg width="52" height="52" viewBox="0 0 24 24" fill="none">
