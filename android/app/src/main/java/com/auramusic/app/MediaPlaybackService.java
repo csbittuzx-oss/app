@@ -12,8 +12,6 @@ import android.content.IntentFilter;
 import android.content.pm.ServiceInfo;
 import android.graphics.Bitmap;
 import android.graphics.BitmapFactory;
-import android.media.AudioAttributes;
-import android.media.AudioFocusRequest;
 import android.media.AudioManager;
 import android.net.wifi.WifiManager;
 import android.os.Binder;
@@ -48,12 +46,9 @@ public class MediaPlaybackService extends Service {
 
     private MediaSessionCompat mediaSession;
     private NotificationManagerCompat notificationManager;
-    private AudioManager audioManager;
-    private AudioFocusRequest audioFocusRequest;
     private PowerManager.WakeLock wakeLock;
     private WifiManager.WifiLock wifiLock;
     private boolean isBecomingNoisyRegistered = false;
-    private boolean hasAudioFocus = false;
 
     private String currentTitle = "Soundwave";
     private String currentArtist = "Playing";
@@ -84,7 +79,6 @@ public class MediaPlaybackService extends Service {
     @Override
     public void onCreate() {
         super.onCreate();
-        audioManager = (AudioManager) getSystemService(Context.AUDIO_SERVICE);
         createNotificationChannel();
         initMediaSession();
         initLocks();
@@ -231,9 +225,6 @@ public class MediaPlaybackService extends Service {
         this.currentPosition = position;
 
         if (playing) {
-            if (!hasAudioFocus) {
-                requestAudioFocus();
-            }
             acquireLocks();
             registerNoisyReceiver();
         } else {
@@ -373,72 +364,9 @@ public class MediaPlaybackService extends Service {
         return builder.build();
     }
 
-    private void requestAudioFocus() {
-        if (audioManager == null) {
-            audioManager = (AudioManager) getSystemService(Context.AUDIO_SERVICE);
-        }
-        if (audioManager != null) {
-            try {
-                if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
-                    AudioAttributes playbackAttributes = new AudioAttributes.Builder()
-                        .setUsage(AudioAttributes.USAGE_MEDIA)
-                        .setContentType(AudioAttributes.CONTENT_TYPE_MUSIC)
-                        .build();
-                    audioFocusRequest = new AudioFocusRequest.Builder(AudioManager.AUDIOFOCUS_GAIN)
-                        .setAudioAttributes(playbackAttributes)
-                        .setAcceptsDelayedFocusGain(true)
-                        .setOnAudioFocusChangeListener(focusChange -> {
-                            // Only handle true permanent focus loss, ignore transient focus shifts
-                            if (focusChange == AudioManager.AUDIOFOCUS_LOSS) {
-                                hasAudioFocus = false;
-                                if (MediaNotificationPlugin.instance != null) {
-                                    MediaNotificationPlugin.instance.handleAction("pause");
-                                }
-                            } else if (focusChange == AudioManager.AUDIOFOCUS_GAIN) {
-                                hasAudioFocus = true;
-                            }
-                        })
-                        .build();
-                    int res = audioManager.requestAudioFocus(audioFocusRequest);
-                    hasAudioFocus = (res == AudioManager.AUDIOFOCUS_REQUEST_GRANTED);
-                } else {
-                    int res = audioManager.requestAudioFocus(
-                        focusChange -> {
-                            if (focusChange == AudioManager.AUDIOFOCUS_LOSS) {
-                                hasAudioFocus = false;
-                                if (MediaNotificationPlugin.instance != null) {
-                                    MediaNotificationPlugin.instance.handleAction("pause");
-                                }
-                            } else if (focusChange == AudioManager.AUDIOFOCUS_GAIN) {
-                                hasAudioFocus = true;
-                            }
-                        },
-                        AudioManager.STREAM_MUSIC,
-                        AudioManager.AUDIOFOCUS_GAIN
-                    );
-                    hasAudioFocus = (res == AudioManager.AUDIOFOCUS_REQUEST_GRANTED);
-                }
-            } catch (Exception ignored) {}
-        }
-    }
-
-    private void abandonAudioFocus() {
-        if (audioManager != null && hasAudioFocus) {
-            try {
-                if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O && audioFocusRequest != null) {
-                    audioManager.abandonAudioFocusRequest(audioFocusRequest);
-                } else {
-                    audioManager.abandonAudioFocus(null);
-                }
-            } catch (Exception ignored) {}
-            hasAudioFocus = false;
-        }
-    }
-
     public void stopPlayback() {
         isPlaying = false;
         releaseLocks();
-        abandonAudioFocus();
         unregisterNoisyReceiver();
 
         if (notificationManager != null) {
