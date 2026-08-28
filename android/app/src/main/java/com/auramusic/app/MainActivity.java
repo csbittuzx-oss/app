@@ -56,10 +56,11 @@ public class MainActivity extends BridgeActivity {
     @Override
     public void onPause() {
         super.onPause();
-        // Keep WebView timers running when minimized for seamless background playback
+        // Prevent Chromium from pausing HTML5 audio when minimized
         try {
             WebView webView = getBridge().getWebView();
             if (webView != null) {
+                webView.onResume();
                 webView.resumeTimers();
             }
         } catch (Exception ignored) {}
@@ -68,12 +69,28 @@ public class MainActivity extends BridgeActivity {
     @Override
     public void onStop() {
         super.onStop();
+        // Keep audio streaming active when screen locked or app hidden
         try {
             WebView webView = getBridge().getWebView();
             if (webView != null) {
+                webView.onResume();
                 webView.resumeTimers();
             }
         } catch (Exception ignored) {}
+    }
+
+    @Override
+    public void onWindowFocusChanged(boolean hasFocus) {
+        super.onWindowFocusChanged(hasFocus);
+        if (!hasFocus) {
+            try {
+                WebView webView = getBridge().getWebView();
+                if (webView != null) {
+                    webView.onResume();
+                    webView.resumeTimers();
+                }
+            } catch (Exception ignored) {}
+        }
     }
 
     @Override
