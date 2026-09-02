@@ -1,9 +1,9 @@
 /* ══════════════════════════════════════════════════════════════════════════════
-   SOUNDWAVE — Milky Translucent Liquid Glass Bottom Navigation System
-   • Thick Frosted Opal Liquid Glass Material
-   • Soft Milky-White Tint with Iridescent Multi-Chromatic Highlights
-   • Strong 40px Backdrop Blur Diffusing Background Content
-   • Matching Liquid Glass Capsule with Fluid Spring Dynamics
+   SOUNDWAVE — Semi-Opaque Frosted Pearl Liquid Glass Bottom Navigation
+   • Medium Opacity Frosted Glass (0.90 - 0.93 opacity)
+   • Soft Milky/Pearl Surface with Subtle Refraction
+   • Diffused Background Content — Zero Confusing Overlap
+   • Ultra-Sharp Navigation Icons, Contrast Labels & Neutral Active Pill
    • Edge-to-Edge Android Safe Area Compliance
    ══════════════════════════════════════════════════════════════════════════════ */
 
@@ -21,37 +21,40 @@
   pointer-events: none; /* Let touches pass through surrounding empty margins */
 }
 
-/* ── 2. Bottom System Area Frosted Blur Layer (Begins at bottom nav top down to screen bottom) ── */
+/* ── 2. Bottom System Area Frosted Blur Layer (Strictly behind bottom nav area with 100% seamless fade) ── */
 .bottom-nav-blur-underlay {
   position: absolute;
   left: 0;
   right: 0;
-  top: 0; /* Exact vertical position where bottom nav begins */
+  top: 0;
   bottom: 0; /* Extends to the very bottom edge of the screen */
   pointer-events: none;
   z-index: 0;
-  backdrop-filter: blur(28px) saturate(190%) contrast(105%);
-  -webkit-backdrop-filter: blur(28px) saturate(190%) contrast(105%);
+  backdrop-filter: blur(24px) saturate(170%);
+  -webkit-backdrop-filter: blur(24px) saturate(170%);
   background: linear-gradient(
     to bottom,
     rgba(10, 10, 18, 0) 0%,
-    rgba(10, 10, 18, 0.65) 20%,
-    rgba(10, 10, 18, 0.9) 50%,
-    rgba(10, 10, 18, 0.98) 100%
+    rgba(10, 10, 18, 0.05) 20%,
+    rgba(10, 10, 18, 0.3) 48%,
+    rgba(10, 10, 18, 0.72) 76%,
+    rgba(10, 10, 18, 0.94) 100%
   );
   mask-image: linear-gradient(
     to bottom,
-    transparent 0%,
-    rgba(0, 0, 0, 0.7) 18%,
-    black 44%,
-    black 100%
+    rgba(0, 0, 0, 0) 0%,
+    rgba(0, 0, 0, 0.04) 18%,
+    rgba(0, 0, 0, 0.25) 42%,
+    rgba(0, 0, 0, 0.65) 68%,
+    rgba(0, 0, 0, 1) 90%
   );
   -webkit-mask-image: linear-gradient(
     to bottom,
-    transparent 0%,
-    rgba(0, 0, 0, 0.7) 18%,
-    black 44%,
-    black 100%
+    rgba(0, 0, 0, 0) 0%,
+    rgba(0, 0, 0, 0.04) 18%,
+    rgba(0, 0, 0, 0.25) 42%,
+    rgba(0, 0, 0, 0.65) 68%,
+    rgba(0, 0, 0, 1) 90%
   );
 }
 
@@ -59,9 +62,10 @@
   background: linear-gradient(
     to bottom,
     rgba(248, 249, 252, 0) 0%,
-    rgba(248, 249, 252, 0.65) 20%,
-    rgba(248, 249, 252, 0.92) 50%,
-    rgba(248, 249, 252, 0.98) 100%
+    rgba(248, 249, 252, 0.05) 20%,
+    rgba(248, 249, 252, 0.3) 48%,
+    rgba(248, 249, 252, 0.72) 76%,
+    rgba(248, 249, 252, 0.95) 100%
   );
 }
 
@@ -81,56 +85,52 @@
   box-sizing: border-box;
   overflow: hidden;
 
-  /* Thick Milky Frosted Liquid Glass Material (Dark Mode) */
+  /* Semi-Opaque Frosted Pearl / Milky Liquid Glass (Dark Theme) */
   background: linear-gradient(
     145deg,
-    rgba(255, 255, 255, 0.32) 0%,
-    rgba(230, 240, 255, 0.18) 25%,
-    rgba(255, 235, 248, 0.14) 65%,
-    rgba(22, 24, 40, 0.82) 100%
+    rgba(38, 42, 64, 0.88) 0%,
+    rgba(26, 28, 46, 0.92) 50%,
+    rgba(18, 20, 36, 0.94) 100%
   );
-  backdrop-filter: blur(40px) saturate(220%) brightness(108%) contrast(106%);
-  -webkit-backdrop-filter: blur(40px) saturate(220%) brightness(108%) contrast(106%);
+  backdrop-filter: blur(28px) saturate(180%) contrast(102%);
+  -webkit-backdrop-filter: blur(28px) saturate(180%) contrast(102%);
 
-  /* Thin Bright Translucent Border & Specular Highlights */
-  border: 1px solid rgba(255, 255, 255, 0.28);
-  border-top: 1px solid rgba(255, 255, 255, 0.78);
-  border-bottom: 1px solid rgba(255, 255, 255, 0.18);
+  /* Thin Soft Translucent Border & Top Specular Highlight */
+  border: 1px solid rgba(255, 255, 255, 0.16);
+  border-top: 1px solid rgba(255, 255, 255, 0.32);
+  border-bottom: 1px solid rgba(0, 0, 0, 0.3);
 
-  /* Soft Inner Glow, Iridescent Blue/Pink Highlights & Floating Shadow */
+  /* Gentle Floating Shadow & Soft Inner Volumetric Light */
   box-shadow:
-    0 18px 38px -8px rgba(0, 0, 0, 0.55),
-    0 8px 18px -3px rgba(0, 0, 0, 0.35),
-    inset 0 1.5px 2px 0 rgba(255, 255, 255, 0.85),
-    inset 0 -1.5px 2px 0 rgba(180, 205, 245, 0.28),
-    inset 0 0 16px 0 rgba(255, 255, 255, 0.18);
+    0 14px 34px -6px rgba(0, 0, 0, 0.6),
+    0 4px 14px -2px rgba(0, 0, 0, 0.4),
+    inset 0 1px 1.5px 0 rgba(255, 255, 255, 0.25),
+    inset 0 0 14px 0 rgba(255, 255, 255, 0.04);
   
   user-select: none;
   -webkit-user-select: none;
 }
 
 [data-theme="light"] .bottom-nav-island {
-  /* Thick Milky Frosted Liquid Glass Material (Light Mode) */
+  /* Semi-Opaque Frosted Pearl / Milky Liquid Glass (Light Theme) */
   background: linear-gradient(
     145deg,
-    rgba(255, 255, 255, 0.9) 0%,
-    rgba(242, 248, 255, 0.82) 30%,
-    rgba(255, 242, 250, 0.78) 65%,
-    rgba(235, 240, 252, 0.86) 100%
+    rgba(255, 255, 255, 0.94) 0%,
+    rgba(248, 250, 255, 0.91) 50%,
+    rgba(240, 244, 252, 0.94) 100%
   );
-  backdrop-filter: blur(40px) saturate(220%) brightness(108%) contrast(106%);
-  -webkit-backdrop-filter: blur(40px) saturate(220%) brightness(108%) contrast(106%);
+  backdrop-filter: blur(28px) saturate(180%) contrast(102%);
+  -webkit-backdrop-filter: blur(28px) saturate(180%) contrast(102%);
 
-  border: 1px solid rgba(255, 255, 255, 0.9);
+  border: 1px solid rgba(255, 255, 255, 0.95);
   border-top: 1px solid #FFFFFF;
   border-bottom: 1px solid rgba(0, 0, 0, 0.08);
 
   box-shadow:
-    0 16px 36px -6px rgba(15, 23, 42, 0.14),
-    0 6px 14px -2px rgba(15, 23, 42, 0.08),
-    inset 0 1.5px 2px 0 rgba(255, 255, 255, 1),
-    inset 0 -1.5px 2px 0 rgba(210, 225, 250, 0.5),
-    inset 0 0 16px 0 rgba(255, 255, 255, 0.65);
+    0 12px 30px -4px rgba(15, 23, 42, 0.14),
+    0 4px 12px -2px rgba(15, 23, 42, 0.08),
+    inset 0 1.5px 2px 0 #FFFFFF,
+    inset 0 0 14px 0 rgba(255, 255, 255, 0.6);
 }
 
 /* Subtle Glass Surface Top Reflection Beam */
@@ -138,15 +138,15 @@
   content: '';
   position: absolute;
   top: 0;
-  left: 8%;
-  right: 8%;
+  left: 10%;
+  right: 10%;
   height: 1px;
   background: linear-gradient(
     90deg,
     transparent 0%,
-    rgba(255, 255, 255, 0.7) 45%,
-    rgba(255, 255, 255, 0.95) 50%,
-    rgba(255, 255, 255, 0.7) 55%,
+    rgba(255, 255, 255, 0.5) 45%,
+    rgba(255, 255, 255, 0.8) 50%,
+    rgba(255, 255, 255, 0.5) 55%,
     transparent 100%
   );
   pointer-events: none;
@@ -165,24 +165,18 @@
   z-index: 1;
   box-sizing: border-box;
 
-  /* Milky Liquid Glass Pill Gradient with Amber/Gold Accent Refraction */
+  /* Neutral Frosted Liquid Glass Active Indicator (Dark Theme) */
   background: linear-gradient(
     135deg,
-    rgba(255, 255, 255, 0.42) 0%,
-    rgba(255, 245, 230, 0.22) 40%,
-    rgba(245, 158, 11, 0.3) 100%
+    rgba(255, 255, 255, 0.2) 0%,
+    rgba(255, 255, 255, 0.1) 100%
   );
-  
-  border: 1px solid rgba(255, 255, 255, 0.48);
-  border-top: 1px solid rgba(255, 255, 255, 0.9);
-  border-bottom: 1px solid rgba(255, 255, 255, 0.22);
-
+  border: 1px solid rgba(255, 255, 255, 0.28);
+  border-top: 1px solid rgba(255, 255, 255, 0.6);
+  border-bottom: 1px solid rgba(255, 255, 255, 0.12);
   box-shadow:
-    0 4px 16px -2px rgba(0, 0, 0, 0.35),
-    0 0 20px 2px rgba(245, 158, 11, 0.32),
-    inset 0 1.5px 2px 0 rgba(255, 255, 255, 0.95),
-    inset 0 0 10px 0 rgba(255, 255, 255, 0.35),
-    inset 0 -1px 1px 0 rgba(0, 0, 0, 0.35);
+    0 2px 8px rgba(0, 0, 0, 0.3),
+    inset 0 1px 1.5px rgba(255, 255, 255, 0.5);
 
   will-change: transform;
   transition:
@@ -192,20 +186,19 @@
 }
 
 [data-theme="light"] .bottom-nav-active-capsule {
+  /* Neutral Frosted Pearl Active Indicator (Light Theme) */
   background: linear-gradient(
     135deg,
-    rgba(255, 255, 255, 1) 0%,
-    rgba(255, 250, 240, 0.92) 45%,
-    rgba(245, 158, 11, 0.25) 100%
+    #FFFFFF 0%,
+    #F8FAFC 100%
   );
-  border: 1px solid rgba(255, 255, 255, 1);
+  border: 1px solid rgba(0, 0, 0, 0.06);
   border-top: 1px solid #FFFFFF;
-  border-bottom: 1px solid rgba(245, 158, 11, 0.35);
+  border-bottom: 1px solid rgba(0, 0, 0, 0.08);
   box-shadow:
-    0 4px 14px rgba(245, 158, 11, 0.25),
-    0 2px 6px rgba(0, 0, 0, 0.08),
-    inset 0 1.5px 2px #FFFFFF,
-    inset 0 0 10px rgba(255, 255, 255, 0.8);
+    0 3px 10px rgba(15, 23, 42, 0.12),
+    0 1px 3px rgba(15, 23, 42, 0.06),
+    inset 0 1px 1.5px #FFFFFF;
 }
 
 /* Inner Specular Highlight Lens */
@@ -219,7 +212,7 @@
   border-radius: 9999px;
   background: linear-gradient(
     to bottom,
-    rgba(255, 255, 255, 0.7) 0%,
+    rgba(255, 255, 255, 0.75) 0%,
     rgba(255, 255, 255, 0) 100%
   );
   opacity: 0.95;
@@ -283,10 +276,14 @@
   cursor: pointer;
   outline: none;
   -webkit-tap-highlight-color: transparent;
-  color: var(--color-text-muted, #94A3B8);
+  color: #94A3B8;
   transition: color 240ms ease, transform 180ms cubic-bezier(0.34, 1.56, 0.64, 1);
   min-height: 48px;
   box-sizing: border-box;
+}
+
+[data-theme="light"] .bottom-nav-tab {
+  color: #64748B;
 }
 
 .bottom-nav-tab:active {
@@ -301,7 +298,7 @@
   color: #0F172A;
 }
 
-/* ── 6. Icon Wrapper & Kinetic Elevation ── */
+/* ── 6. Icon Box ── */
 .bottom-nav-icon-box {
   display: flex;
   align-items: center;
@@ -309,16 +306,11 @@
   width: 26px;
   height: 26px;
   position: relative;
-  transition: transform 320ms cubic-bezier(0.34, 1.56, 0.64, 1), filter 300ms ease;
+  transition: transform 320ms cubic-bezier(0.34, 1.56, 0.64, 1);
 }
 
 .bottom-nav-tab.is-active .bottom-nav-icon-box {
   transform: translateY(-1.5px) scale(1.08);
-  filter: drop-shadow(0 0 10px rgba(245, 158, 11, 0.45));
-}
-
-[data-theme="light"] .bottom-nav-tab.is-active .bottom-nav-icon-box {
-  filter: drop-shadow(0 2px 6px rgba(217, 119, 6, 0.35));
 }
 
 .bottom-nav-icon-box svg {
@@ -339,14 +331,12 @@
 }
 
 .bottom-nav-tab.is-active .bottom-nav-label {
-  font-weight: 600;
+  font-weight: 650;
   color: #FFFFFF;
-  text-shadow: 0 1px 6px rgba(0, 0, 0, 0.5), 0 0 10px rgba(255, 255, 255, 0.3);
   transform: translateY(0.5px);
 }
 
 [data-theme="light"] .bottom-nav-tab.is-active .bottom-nav-label {
   color: #0F172A;
-  text-shadow: none;
   font-weight: 650;
 }

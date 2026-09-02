@@ -1,9 +1,9 @@
 /* ══════════════════════════════════════════════════════════════════════════════
-   SOUNDWAVE — Milky Translucent Liquid Glass Now Playing Mini-Player
-   • Thick Frosted Opal Liquid Glass Material
-   • Soft Milky-White Tint with Iridescent Multi-Chromatic Highlights
-   • Strong 40px Backdrop Blur Diffusing Background Content
-   • Specular Bevels, Inner Volumetric Glow & Floating Shadow
+   SOUNDWAVE — Semi-Opaque Frosted Pearl Liquid Glass Mini-Player
+   • Medium Opacity Frosted Glass (0.90 - 0.93 opacity)
+   • Soft Milky/Pearl Surface with Subtle Refraction
+   • Diffused Background Content — Zero Confusing Overlap
+   • Ultra-Sharp & High-Contrast Typography and Playback Controls
    ══════════════════════════════════════════════════════════════════════════════ */
 
 .mini-player-root {
@@ -36,29 +36,27 @@
   user-select: none;
   -webkit-user-select: none;
 
-  /* Thick Milky Frosted Liquid Glass Material (Dark Mode) */
+  /* Semi-Opaque Frosted Pearl / Milky Liquid Glass (Dark Theme) */
   background: linear-gradient(
     145deg,
-    rgba(255, 255, 255, 0.32) 0%,
-    rgba(230, 240, 255, 0.18) 25%,
-    rgba(255, 235, 248, 0.14) 65%,
-    rgba(22, 24, 40, 0.82) 100%
+    rgba(38, 42, 64, 0.88) 0%,
+    rgba(26, 28, 46, 0.92) 50%,
+    rgba(18, 20, 36, 0.94) 100%
   );
-  backdrop-filter: blur(40px) saturate(220%) brightness(108%) contrast(106%);
-  -webkit-backdrop-filter: blur(40px) saturate(220%) brightness(108%) contrast(106%);
+  backdrop-filter: blur(28px) saturate(180%) contrast(102%);
+  -webkit-backdrop-filter: blur(28px) saturate(180%) contrast(102%);
 
-  /* Thin Bright Translucent Border & Specular Top Reflection */
-  border: 1px solid rgba(255, 255, 255, 0.28);
-  border-top: 1px solid rgba(255, 255, 255, 0.78);
-  border-bottom: 1px solid rgba(255, 255, 255, 0.18);
+  /* Thin Soft Translucent Border & Top Specular Highlight */
+  border: 1px solid rgba(255, 255, 255, 0.16);
+  border-top: 1px solid rgba(255, 255, 255, 0.32);
+  border-bottom: 1px solid rgba(0, 0, 0, 0.3);
 
-  /* Soft Inner Glow, Iridescent Blue/Pink Highlights & Floating Shadow */
+  /* Gentle Floating Shadow & Soft Inner Volumetric Light */
   box-shadow:
-    0 16px 36px -6px rgba(0, 0, 0, 0.5),
-    0 6px 16px -2px rgba(0, 0, 0, 0.3),
-    inset 0 1.5px 2px 0 rgba(255, 255, 255, 0.85),
-    inset 0 -1.5px 2px 0 rgba(180, 205, 245, 0.28),
-    inset 0 0 16px 0 rgba(255, 255, 255, 0.18);
+    0 12px 30px -4px rgba(0, 0, 0, 0.55),
+    0 4px 12px -2px rgba(0, 0, 0, 0.35),
+    inset 0 1px 1.5px 0 rgba(255, 255, 255, 0.25),
+    inset 0 0 14px 0 rgba(255, 255, 255, 0.04);
 
   transition: transform 180ms cubic-bezier(0.34, 1.56, 0.64, 1), box-shadow 200ms ease;
 }
@@ -68,27 +66,25 @@
 }
 
 [data-theme="light"] .mini-player-island {
-  /* Thick Milky Frosted Liquid Glass Material (Light Mode) */
+  /* Semi-Opaque Frosted Pearl / Milky Liquid Glass (Light Theme) */
   background: linear-gradient(
     145deg,
-    rgba(255, 255, 255, 0.88) 0%,
-    rgba(242, 248, 255, 0.8) 30%,
-    rgba(255, 242, 250, 0.75) 65%,
-    rgba(235, 240, 252, 0.84) 100%
+    rgba(255, 255, 255, 0.94) 0%,
+    rgba(248, 250, 255, 0.91) 50%,
+    rgba(240, 244, 252, 0.94) 100%
   );
-  backdrop-filter: blur(40px) saturate(220%) brightness(108%) contrast(106%);
-  -webkit-backdrop-filter: blur(40px) saturate(220%) brightness(108%) contrast(106%);
+  backdrop-filter: blur(28px) saturate(180%) contrast(102%);
+  -webkit-backdrop-filter: blur(28px) saturate(180%) contrast(102%);
 
-  border: 1px solid rgba(255, 255, 255, 0.85);
+  border: 1px solid rgba(255, 255, 255, 0.95);
   border-top: 1px solid #FFFFFF;
   border-bottom: 1px solid rgba(0, 0, 0, 0.08);
 
   box-shadow:
-    0 16px 36px -6px rgba(15, 23, 42, 0.14),
-    0 6px 14px -2px rgba(15, 23, 42, 0.08),
-    inset 0 1.5px 2px 0 rgba(255, 255, 255, 1),
-    inset 0 -1.5px 2px 0 rgba(210, 225, 250, 0.5),
-    inset 0 0 16px 0 rgba(255, 255, 255, 0.65);
+    0 12px 30px -4px rgba(15, 23, 42, 0.14),
+    0 4px 12px -2px rgba(15, 23, 42, 0.08),
+    inset 0 1.5px 2px 0 #FFFFFF,
+    inset 0 0 14px 0 rgba(255, 255, 255, 0.6);
 }
 
 /* Subtle Top Reflection Highlight Line */
@@ -96,15 +92,15 @@
   content: '';
   position: absolute;
   top: 0;
-  left: 10%;
-  right: 10%;
+  left: 12%;
+  right: 12%;
   height: 1px;
   background: linear-gradient(
     90deg,
     transparent 0%,
-    rgba(255, 255, 255, 0.7) 45%,
-    rgba(255, 255, 255, 0.95) 50%,
-    rgba(255, 255, 255, 0.7) 55%,
+    rgba(255, 255, 255, 0.5) 45%,
+    rgba(255, 255, 255, 0.8) 50%,
+    rgba(255, 255, 255, 0.5) 55%,
     transparent 100%
   );
   pointer-events: none;
@@ -118,16 +114,16 @@
   border-radius: 50%;
   object-fit: cover;
   flex-shrink: 0;
-  box-shadow: 0 4px 10px rgba(0, 0, 0, 0.35);
-  border: 1px solid rgba(255, 255, 255, 0.3);
+  box-shadow: 0 4px 10px rgba(0, 0, 0, 0.3);
+  border: 1px solid rgba(255, 255, 255, 0.25);
 }
 
 [data-theme="light"] .mini-player-art {
-  box-shadow: 0 2px 6px rgba(0, 0, 0, 0.12);
+  box-shadow: 0 2px 6px rgba(0, 0, 0, 0.1);
   border: 1px solid rgba(255, 255, 255, 0.9);
 }
 
-/* ── Typography & Info ── */
+/* ── Typography & Info (Maximum Crispness & Contrast) ── */
 .mini-player-info {
   flex: 1;
   min-width: 0;
@@ -140,22 +136,30 @@
   margin: 0;
   font-size: 13px;
   font-weight: 600;
-  color: var(--color-text-primary, #F1F5F9);
+  color: #F1F5F9;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
   line-height: 1.25;
 }
 
+[data-theme="light"] .mini-player-title {
+  color: #0F172A;
+}
+
 .mini-player-artist {
   margin: 1px 0 0;
   font-size: 11px;
   font-weight: 400;
-  color: var(--color-text-secondary, #94A3B8);
+  color: #94A3B8;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
   line-height: 1.2;
+}
+
+[data-theme="light"] .mini-player-artist {
+  color: #475569;
 }
 
 /* ── Playback Action Controls ── */
@@ -176,11 +180,16 @@
   align-items: center;
   justify-content: center;
   cursor: pointer;
-  color: var(--color-accent-on, #0A0A12);
+  color: #0A0A12;
   flex-shrink: 0;
-  box-shadow: 0 2px 10px rgba(245, 158, 11, 0.45);
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.25);
   transition: transform 160ms cubic-bezier(0.34, 1.56, 0.64, 1);
   padding: 0;
+}
+
+[data-theme="light"] .mini-player-btn-play {
+  background: #D97706;
+  color: #FFFFFF;
 }
 
 .mini-player-btn-play:active {
@@ -197,15 +206,19 @@
   align-items: center;
   justify-content: center;
   cursor: pointer;
-  color: var(--color-text-secondary, #94A3B8);
+  color: #94A3B8;
   flex-shrink: 0;
   transition: color 180ms ease, transform 160ms cubic-bezier(0.34, 1.56, 0.64, 1);
   padding: 0;
 }
 
+[data-theme="light"] .mini-player-btn-next {
+  color: #334155;
+}
+
 .mini-player-btn-next:active {
   transform: scale(0.9);
-  color: var(--color-text-primary, #F1F5F9);
+  color: #0F172A;
 }
 
 /* ── Inset Bottom Progress Bar ── */
@@ -231,4 +244,9 @@
   border-radius: 9999px;
   transition: width 1s linear;
   box-shadow: 0 0 6px rgba(245, 158, 11, 0.6);
+}
+
+[data-theme="light"] .mini-player-progress-fill {
+  background: #D97706;
+  box-shadow: 0 0 6px rgba(217, 119, 6, 0.5);
 }
