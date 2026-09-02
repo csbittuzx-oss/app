@@ -198,19 +198,36 @@ function AppShell() {
         hasMiniPlayer={!!playerState.currentSong}
       />
 
-      {/* Main scrollable screen content */}
-      <div style={{ flex: 1, display: 'flex', flexDirection: 'column', overflow: 'hidden', position: 'relative' }}>
+      {/* Main scrollable screen content (flows edge-to-edge behind floating glass objects) */}
+      <div style={{ position: 'absolute', inset: 0, display: 'flex', flexDirection: 'column', overflow: 'hidden' }}>
         <ScreenRouter />
       </div>
 
-      {/* Mini Player (above bottom nav) */}
-      <MiniPlayer />
+      {/* Independent Floating Glass Layers (Now Playing & Bottom Nav directly over screen content) */}
+      <div
+        id="floating-layers-dock"
+        style={{
+          position: 'absolute',
+          bottom: 0,
+          left: 0,
+          right: 0,
+          display: 'flex',
+          flexDirection: 'column',
+          alignItems: 'center',
+          pointerEvents: 'none',
+          zIndex: 95,
+          background: 'transparent',
+        }}
+      >
+        {/* Mini Player (floating rounded pill) */}
+        <MiniPlayer />
 
-      {/* Offline Connectivity Indicator */}
-      <OfflineIndicator />
+        {/* Offline Connectivity Indicator */}
+        <OfflineIndicator />
 
-      {/* Bottom Navigation */}
-      <BottomNav />
+        {/* Bottom Navigation (floating rounded pill) */}
+        <BottomNav />
+      </div>
 
       {/* Full Player overlay */}
       {playerState.showFullPlayer && <FullPlayer />}

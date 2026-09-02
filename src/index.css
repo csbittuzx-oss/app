@@ -106,10 +106,10 @@
   --duration-slow: 400ms;
 
   /* ── Layout ── */
-  --nav-height: 64px;
-  --bottom-nav-height: 76px;
-  --mini-player-height: 64px;
-  --content-bottom-pad: 20px;
+  --nav-height: 62px;
+  --bottom-nav-height: 72px;
+  --mini-player-height: 58px;
+  --content-bottom-pad: calc(146px + env(safe-area-inset-bottom, 0px));
   --header-height: 56px;
   --screen-max: 600px;
 

@@ -1,0 +1,234 @@
+/* ══════════════════════════════════════════════════════════════════════════════
+   SOUNDWAVE — Milky Translucent Liquid Glass Now Playing Mini-Player
+   • Thick Frosted Opal Liquid Glass Material
+   • Soft Milky-White Tint with Iridescent Multi-Chromatic Highlights
+   • Strong 40px Backdrop Blur Diffusing Background Content
+   • Specular Bevels, Inner Volumetric Glow & Floating Shadow
+   ══════════════════════════════════════════════════════════════════════════════ */
+
+.mini-player-root {
+  position: relative;
+  z-index: 95;
+  width: 100%;
+  flex-shrink: 0;
+  display: flex;
+  justify-content: center;
+  pointer-events: none; /* Passes touches through surrounding empty margins */
+  margin-bottom: 6px;
+  background: transparent;
+}
+
+.mini-player-island {
+  position: relative;
+  pointer-events: auto;
+  width: calc(100% - 24px);
+  max-width: 410px;
+  height: 56px;
+  margin: 0 auto;
+  border-radius: 9999px;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 0 12px 0 7px;
+  box-sizing: border-box;
+  overflow: hidden;
+  cursor: pointer;
+  user-select: none;
+  -webkit-user-select: none;
+
+  /* Thick Milky Frosted Liquid Glass Material (Dark Mode) */
+  background: linear-gradient(
+    145deg,
+    rgba(255, 255, 255, 0.32) 0%,
+    rgba(230, 240, 255, 0.18) 25%,
+    rgba(255, 235, 248, 0.14) 65%,
+    rgba(22, 24, 40, 0.82) 100%
+  );
+  backdrop-filter: blur(40px) saturate(220%) brightness(108%) contrast(106%);
+  -webkit-backdrop-filter: blur(40px) saturate(220%) brightness(108%) contrast(106%);
+
+  /* Thin Bright Translucent Border & Specular Top Reflection */
+  border: 1px solid rgba(255, 255, 255, 0.28);
+  border-top: 1px solid rgba(255, 255, 255, 0.78);
+  border-bottom: 1px solid rgba(255, 255, 255, 0.18);
+
+  /* Soft Inner Glow, Iridescent Blue/Pink Highlights & Floating Shadow */
+  box-shadow:
+    0 16px 36px -6px rgba(0, 0, 0, 0.5),
+    0 6px 16px -2px rgba(0, 0, 0, 0.3),
+    inset 0 1.5px 2px 0 rgba(255, 255, 255, 0.85),
+    inset 0 -1.5px 2px 0 rgba(180, 205, 245, 0.28),
+    inset 0 0 16px 0 rgba(255, 255, 255, 0.18);
+
+  transition: transform 180ms cubic-bezier(0.34, 1.56, 0.64, 1), box-shadow 200ms ease;
+}
+
+.mini-player-island:active {
+  transform: scale(0.985);
+}
+
+[data-theme="light"] .mini-player-island {
+  /* Thick Milky Frosted Liquid Glass Material (Light Mode) */
+  background: linear-gradient(
+    145deg,
+    rgba(255, 255, 255, 0.88) 0%,
+    rgba(242, 248, 255, 0.8) 30%,
+    rgba(255, 242, 250, 0.75) 65%,
+    rgba(235, 240, 252, 0.84) 100%
+  );
+  backdrop-filter: blur(40px) saturate(220%) brightness(108%) contrast(106%);
+  -webkit-backdrop-filter: blur(40px) saturate(220%) brightness(108%) contrast(106%);
+
+  border: 1px solid rgba(255, 255, 255, 0.85);
+  border-top: 1px solid #FFFFFF;
+  border-bottom: 1px solid rgba(0, 0, 0, 0.08);
+
+  box-shadow:
+    0 16px 36px -6px rgba(15, 23, 42, 0.14),
+    0 6px 14px -2px rgba(15, 23, 42, 0.08),
+    inset 0 1.5px 2px 0 rgba(255, 255, 255, 1),
+    inset 0 -1.5px 2px 0 rgba(210, 225, 250, 0.5),
+    inset 0 0 16px 0 rgba(255, 255, 255, 0.65);
+}
+
+/* Subtle Top Reflection Highlight Line */
+.mini-player-island::before {
+  content: '';
+  position: absolute;
+  top: 0;
+  left: 10%;
+  right: 10%;
+  height: 1px;
+  background: linear-gradient(
+    90deg,
+    transparent 0%,
+    rgba(255, 255, 255, 0.7) 45%,
+    rgba(255, 255, 255, 0.95) 50%,
+    rgba(255, 255, 255, 0.7) 55%,
+    transparent 100%
+  );
+  pointer-events: none;
+  z-index: 4;
+}
+
+/* ── Inset Rounded Album Artwork ── */
+.mini-player-art {
+  width: 42px;
+  height: 42px;
+  border-radius: 50%;
+  object-fit: cover;
+  flex-shrink: 0;
+  box-shadow: 0 4px 10px rgba(0, 0, 0, 0.35);
+  border: 1px solid rgba(255, 255, 255, 0.3);
+}
+
+[data-theme="light"] .mini-player-art {
+  box-shadow: 0 2px 6px rgba(0, 0, 0, 0.12);
+  border: 1px solid rgba(255, 255, 255, 0.9);
+}
+
+/* ── Typography & Info ── */
+.mini-player-info {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+}
+
+.mini-player-title {
+  margin: 0;
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--color-text-primary, #F1F5F9);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  line-height: 1.25;
+}
+
+.mini-player-artist {
+  margin: 1px 0 0;
+  font-size: 11px;
+  font-weight: 400;
+  color: var(--color-text-secondary, #94A3B8);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  line-height: 1.2;
+}
+
+/* ── Playback Action Controls ── */
+.mini-player-actions {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  flex-shrink: 0;
+}
+
+.mini-player-btn-play {
+  background: var(--color-accent, #F59E0B);
+  border: none;
+  border-radius: 50%;
+  width: 34px;
+  height: 34px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  color: var(--color-accent-on, #0A0A12);
+  flex-shrink: 0;
+  box-shadow: 0 2px 10px rgba(245, 158, 11, 0.45);
+  transition: transform 160ms cubic-bezier(0.34, 1.56, 0.64, 1);
+  padding: 0;
+}
+
+.mini-player-btn-play:active {
+  transform: scale(0.9);
+}
+
+.mini-player-btn-next {
+  background: transparent;
+  border: none;
+  border-radius: 50%;
+  min-width: 36px;
+  min-height: 36px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  color: var(--color-text-secondary, #94A3B8);
+  flex-shrink: 0;
+  transition: color 180ms ease, transform 160ms cubic-bezier(0.34, 1.56, 0.64, 1);
+  padding: 0;
+}
+
+.mini-player-btn-next:active {
+  transform: scale(0.9);
+  color: var(--color-text-primary, #F1F5F9);
+}
+
+/* ── Inset Bottom Progress Bar ── */
+.mini-player-progress-track {
+  position: absolute;
+  bottom: 0;
+  left: 20px;
+  right: 20px;
+  height: 2px;
+  background: rgba(255, 255, 255, 0.12);
+  border-radius: 9999px;
+  overflow: hidden;
+  pointer-events: none;
+}
+
+[data-theme="light"] .mini-player-progress-track {
+  background: rgba(0, 0, 0, 0.08);
+}
+
+.mini-player-progress-fill {
+  height: 100%;
+  background: var(--color-accent, #F59E0B);
+  border-radius: 9999px;
+  transition: width 1s linear;
+  box-shadow: 0 0 6px rgba(245, 158, 11, 0.6);
+}

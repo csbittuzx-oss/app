@@ -1,10 +1,10 @@
 /* ══════════════════════════════════════════════════════════════════════════════
-   SOUNDWAVE — Liquid Glass Bottom Navigation System
-   • Floating Pill Island Architecture
-   • High-Refraction Multi-Layer Backdrop Filters
-   • Fluid Liquid-Morphing Sliding Capsule with Spring Dynamics
-   • Ambient Lower-Screen Feathered Gradient Blur Vignette
-   • Edge-to-Edge Android Safe Area & Gesture Navigation Inset Compliance
+   SOUNDWAVE — Milky Translucent Liquid Glass Bottom Navigation System
+   • Thick Frosted Opal Liquid Glass Material
+   • Soft Milky-White Tint with Iridescent Multi-Chromatic Highlights
+   • Strong 40px Backdrop Blur Diffusing Background Content
+   • Matching Liquid Glass Capsule with Fluid Spring Dynamics
+   • Edge-to-Edge Android Safe Area Compliance
    ══════════════════════════════════════════════════════════════════════════════ */
 
 /* ── 1. Root Navigation Wrapper ── */
@@ -17,17 +17,17 @@
   align-items: center;
   justify-content: flex-end;
   z-index: 96;
-  padding-bottom: env(safe-area-inset-bottom, 0px);
+  background: transparent;
   pointer-events: none; /* Let touches pass through surrounding empty margins */
 }
 
-/* ── 2. Lower Screen Feathered Frosted Blur Underlay ── */
+/* ── 2. Bottom System Area Frosted Blur Layer (Begins at bottom nav top down to screen bottom) ── */
 .bottom-nav-blur-underlay {
   position: absolute;
   left: 0;
   right: 0;
-  bottom: 0;
-  top: -24px;
+  top: 0; /* Exact vertical position where bottom nav begins */
+  bottom: 0; /* Extends to the very bottom edge of the screen */
   pointer-events: none;
   z-index: 0;
   backdrop-filter: blur(28px) saturate(190%) contrast(105%);
@@ -35,22 +35,22 @@
   background: linear-gradient(
     to bottom,
     rgba(10, 10, 18, 0) 0%,
-    rgba(10, 10, 18, 0.35) 20%,
-    rgba(10, 10, 18, 0.72) 55%,
-    rgba(10, 10, 18, 0.94) 100%
+    rgba(10, 10, 18, 0.65) 20%,
+    rgba(10, 10, 18, 0.9) 50%,
+    rgba(10, 10, 18, 0.98) 100%
   );
   mask-image: linear-gradient(
     to bottom,
     transparent 0%,
-    rgba(0, 0, 0, 0.4) 18%,
-    black 48%,
+    rgba(0, 0, 0, 0.7) 18%,
+    black 44%,
     black 100%
   );
   -webkit-mask-image: linear-gradient(
     to bottom,
     transparent 0%,
-    rgba(0, 0, 0, 0.4) 18%,
-    black 48%,
+    rgba(0, 0, 0, 0.7) 18%,
+    black 44%,
     black 100%
   );
 }
@@ -59,9 +59,9 @@
   background: linear-gradient(
     to bottom,
     rgba(248, 249, 252, 0) 0%,
-    rgba(248, 249, 252, 0.4) 20%,
-    rgba(248, 249, 252, 0.78) 55%,
-    rgba(248, 249, 252, 0.95) 100%
+    rgba(248, 249, 252, 0.65) 20%,
+    rgba(248, 249, 252, 0.92) 50%,
+    rgba(248, 249, 252, 0.98) 100%
   );
 }
 
@@ -72,8 +72,8 @@
   pointer-events: auto;
   width: calc(100% - 24px);
   max-width: 410px;
-  height: 64px;
-  margin: 4px 12px 8px 12px;
+  height: 62px;
+  margin: 4px 12px calc(10px + env(safe-area-inset-bottom, 0px)) 12px;
   border-radius: 9999px;
   display: flex;
   align-items: center;
@@ -81,47 +81,56 @@
   box-sizing: border-box;
   overflow: hidden;
 
-  /* Premium Liquid Glass Surface */
+  /* Thick Milky Frosted Liquid Glass Material (Dark Mode) */
   background: linear-gradient(
-    135deg,
-    rgba(255, 255, 255, 0.14) 0%,
-    rgba(255, 255, 255, 0.04) 35%,
-    rgba(19, 19, 32, 0.68) 100%
+    145deg,
+    rgba(255, 255, 255, 0.32) 0%,
+    rgba(230, 240, 255, 0.18) 25%,
+    rgba(255, 235, 248, 0.14) 65%,
+    rgba(22, 24, 40, 0.82) 100%
   );
-  backdrop-filter: blur(36px) saturate(210%) brightness(108%);
-  -webkit-backdrop-filter: blur(36px) saturate(210%) brightness(108%);
+  backdrop-filter: blur(40px) saturate(220%) brightness(108%) contrast(106%);
+  -webkit-backdrop-filter: blur(40px) saturate(220%) brightness(108%) contrast(106%);
 
-  /* Dual Specular Light Refraction Borders */
-  border: 1px solid rgba(255, 255, 255, 0.16);
-  border-top: 1px solid rgba(255, 255, 255, 0.35);
-  border-bottom: 1px solid rgba(255, 255, 255, 0.08);
+  /* Thin Bright Translucent Border & Specular Highlights */
+  border: 1px solid rgba(255, 255, 255, 0.28);
+  border-top: 1px solid rgba(255, 255, 255, 0.78);
+  border-bottom: 1px solid rgba(255, 255, 255, 0.18);
 
-  /* Machined Depth & Soft Ambient Ambient Elevation */
+  /* Soft Inner Glow, Iridescent Blue/Pink Highlights & Floating Shadow */
   box-shadow:
-    0 20px 40px -10px rgba(0, 0, 0, 0.7),
-    0 8px 18px -4px rgba(0, 0, 0, 0.45),
-    inset 0 1px 1.5px 0 rgba(255, 255, 255, 0.45),
-    inset 0 -1px 2px 0 rgba(0, 0, 0, 0.55);
+    0 18px 38px -8px rgba(0, 0, 0, 0.55),
+    0 8px 18px -3px rgba(0, 0, 0, 0.35),
+    inset 0 1.5px 2px 0 rgba(255, 255, 255, 0.85),
+    inset 0 -1.5px 2px 0 rgba(180, 205, 245, 0.28),
+    inset 0 0 16px 0 rgba(255, 255, 255, 0.18);
   
   user-select: none;
   -webkit-user-select: none;
 }
 
 [data-theme="light"] .bottom-nav-island {
+  /* Thick Milky Frosted Liquid Glass Material (Light Mode) */
   background: linear-gradient(
-    135deg,
-    rgba(255, 255, 255, 0.85) 0%,
-    rgba(255, 255, 255, 0.6) 40%,
-    rgba(235, 238, 248, 0.72) 100%
+    145deg,
+    rgba(255, 255, 255, 0.9) 0%,
+    rgba(242, 248, 255, 0.82) 30%,
+    rgba(255, 242, 250, 0.78) 65%,
+    rgba(235, 240, 252, 0.86) 100%
   );
-  border: 1px solid rgba(0, 0, 0, 0.06);
-  border-top: 1px solid rgba(255, 255, 255, 0.9);
-  border-bottom: 1px solid rgba(0, 0, 0, 0.1);
+  backdrop-filter: blur(40px) saturate(220%) brightness(108%) contrast(106%);
+  -webkit-backdrop-filter: blur(40px) saturate(220%) brightness(108%) contrast(106%);
+
+  border: 1px solid rgba(255, 255, 255, 0.9);
+  border-top: 1px solid #FFFFFF;
+  border-bottom: 1px solid rgba(0, 0, 0, 0.08);
+
   box-shadow:
-    0 16px 36px -8px rgba(15, 23, 42, 0.15),
-    0 6px 14px -3px rgba(15, 23, 42, 0.08),
-    inset 0 1px 2px 0 rgba(255, 255, 255, 0.95),
-    inset 0 -1px 1px 0 rgba(0, 0, 0, 0.05);
+    0 16px 36px -6px rgba(15, 23, 42, 0.14),
+    0 6px 14px -2px rgba(15, 23, 42, 0.08),
+    inset 0 1.5px 2px 0 rgba(255, 255, 255, 1),
+    inset 0 -1.5px 2px 0 rgba(210, 225, 250, 0.5),
+    inset 0 0 16px 0 rgba(255, 255, 255, 0.65);
 }
 
 /* Subtle Glass Surface Top Reflection Beam */
@@ -136,7 +145,7 @@
     90deg,
     transparent 0%,
     rgba(255, 255, 255, 0.7) 45%,
-    rgba(255, 255, 255, 0.85) 50%,
+    rgba(255, 255, 255, 0.95) 50%,
     rgba(255, 255, 255, 0.7) 55%,
     transparent 100%
   );
@@ -156,22 +165,23 @@
   z-index: 1;
   box-sizing: border-box;
 
-  /* Liquid Glass Pill Gradient with Amber/Gold Accent Refraction */
+  /* Milky Liquid Glass Pill Gradient with Amber/Gold Accent Refraction */
   background: linear-gradient(
     135deg,
-    rgba(255, 255, 255, 0.24) 0%,
-    rgba(255, 255, 255, 0.08) 45%,
-    rgba(245, 158, 11, 0.22) 100%
+    rgba(255, 255, 255, 0.42) 0%,
+    rgba(255, 245, 230, 0.22) 40%,
+    rgba(245, 158, 11, 0.3) 100%
   );
   
-  border: 1px solid rgba(255, 255, 255, 0.32);
-  border-top: 1px solid rgba(255, 255, 255, 0.65);
-  border-bottom: 1px solid rgba(255, 255, 255, 0.15);
+  border: 1px solid rgba(255, 255, 255, 0.48);
+  border-top: 1px solid rgba(255, 255, 255, 0.9);
+  border-bottom: 1px solid rgba(255, 255, 255, 0.22);
 
   box-shadow:
-    0 4px 16px -2px rgba(0, 0, 0, 0.4),
-    0 0 20px 2px rgba(245, 158, 11, 0.25),
-    inset 0 1px 2px 0 rgba(255, 255, 255, 0.7),
+    0 4px 16px -2px rgba(0, 0, 0, 0.35),
+    0 0 20px 2px rgba(245, 158, 11, 0.32),
+    inset 0 1.5px 2px 0 rgba(255, 255, 255, 0.95),
+    inset 0 0 10px 0 rgba(255, 255, 255, 0.35),
     inset 0 -1px 1px 0 rgba(0, 0, 0, 0.35);
 
   will-change: transform;
@@ -184,17 +194,18 @@
 [data-theme="light"] .bottom-nav-active-capsule {
   background: linear-gradient(
     135deg,
-    rgba(255, 255, 255, 0.98) 0%,
-    rgba(255, 255, 255, 0.85) 45%,
-    rgba(245, 158, 11, 0.2) 100%
+    rgba(255, 255, 255, 1) 0%,
+    rgba(255, 250, 240, 0.92) 45%,
+    rgba(245, 158, 11, 0.25) 100%
   );
-  border: 1px solid rgba(255, 255, 255, 0.9);
+  border: 1px solid rgba(255, 255, 255, 1);
   border-top: 1px solid #FFFFFF;
-  border-bottom: 1px solid rgba(245, 158, 11, 0.3);
+  border-bottom: 1px solid rgba(245, 158, 11, 0.35);
   box-shadow:
-    0 4px 14px rgba(245, 158, 11, 0.22),
-    0 2px 6px rgba(0, 0, 0, 0.06),
-    inset 0 1px 2px #FFFFFF;
+    0 4px 14px rgba(245, 158, 11, 0.25),
+    0 2px 6px rgba(0, 0, 0, 0.08),
+    inset 0 1.5px 2px #FFFFFF,
+    inset 0 0 10px rgba(255, 255, 255, 0.8);
 }
 
 /* Inner Specular Highlight Lens */
@@ -208,10 +219,10 @@
   border-radius: 9999px;
   background: linear-gradient(
     to bottom,
-    rgba(255, 255, 255, 0.5) 0%,
+    rgba(255, 255, 255, 0.7) 0%,
     rgba(255, 255, 255, 0) 100%
   );
-  opacity: 0.85;
+  opacity: 0.95;
   pointer-events: none;
 }
 

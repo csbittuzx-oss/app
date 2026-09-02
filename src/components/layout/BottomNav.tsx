@@ -145,10 +145,10 @@ export function BottomNav() {
       className="bottom-nav-root"
       aria-label="Main navigation"
     >
-      {/* 1. Feathered Frosted Gradient Blur Underlay */}
+      {/* Smooth Frosted Glass Background Blur Layer (starts from bottom nav top down to screen bottom) */}
       <div className="bottom-nav-blur-underlay" aria-hidden="true" />
 
-      {/* 2. Floating Liquid Glass Island */}
+      {/* Floating Liquid Glass Island */}
       <div className="bottom-nav-island">
         {/* Sliding Liquid-Glass Capsule Indicator with Spring Physics */}
         <div
