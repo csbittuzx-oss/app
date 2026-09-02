@@ -107,6 +107,7 @@
 
   /* ── Layout ── */
   --nav-height: 64px;
+  --bottom-nav-height: 76px;
   --mini-player-height: 64px;
   --content-bottom-pad: 20px;
   --header-height: 56px;

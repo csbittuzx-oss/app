@@ -1,0 +1,341 @@
+/* ══════════════════════════════════════════════════════════════════════════════
+   SOUNDWAVE — Liquid Glass Bottom Navigation System
+   • Floating Pill Island Architecture
+   • High-Refraction Multi-Layer Backdrop Filters
+   • Fluid Liquid-Morphing Sliding Capsule with Spring Dynamics
+   • Ambient Lower-Screen Feathered Gradient Blur Vignette
+   • Edge-to-Edge Android Safe Area & Gesture Navigation Inset Compliance
+   ══════════════════════════════════════════════════════════════════════════════ */
+
+/* ── 1. Root Navigation Wrapper ── */
+.bottom-nav-root {
+  position: relative;
+  width: 100%;
+  flex-shrink: 0;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: flex-end;
+  z-index: 96;
+  padding-bottom: env(safe-area-inset-bottom, 0px);
+  pointer-events: none; /* Let touches pass through surrounding empty margins */
+}
+
+/* ── 2. Lower Screen Feathered Frosted Blur Underlay ── */
+.bottom-nav-blur-underlay {
+  position: absolute;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  top: -24px;
+  pointer-events: none;
+  z-index: 0;
+  backdrop-filter: blur(28px) saturate(190%) contrast(105%);
+  -webkit-backdrop-filter: blur(28px) saturate(190%) contrast(105%);
+  background: linear-gradient(
+    to bottom,
+    rgba(10, 10, 18, 0) 0%,
+    rgba(10, 10, 18, 0.35) 20%,
+    rgba(10, 10, 18, 0.72) 55%,
+    rgba(10, 10, 18, 0.94) 100%
+  );
+  mask-image: linear-gradient(
+    to bottom,
+    transparent 0%,
+    rgba(0, 0, 0, 0.4) 18%,
+    black 48%,
+    black 100%
+  );
+  -webkit-mask-image: linear-gradient(
+    to bottom,
+    transparent 0%,
+    rgba(0, 0, 0, 0.4) 18%,
+    black 48%,
+    black 100%
+  );
+}
+
+[data-theme="light"] .bottom-nav-blur-underlay {
+  background: linear-gradient(
+    to bottom,
+    rgba(248, 249, 252, 0) 0%,
+    rgba(248, 249, 252, 0.4) 20%,
+    rgba(248, 249, 252, 0.78) 55%,
+    rgba(248, 249, 252, 0.95) 100%
+  );
+}
+
+/* ── 3. Floating Liquid Glass Island (Container) ── */
+.bottom-nav-island {
+  position: relative;
+  z-index: 2;
+  pointer-events: auto;
+  width: calc(100% - 24px);
+  max-width: 410px;
+  height: 64px;
+  margin: 4px 12px 8px 12px;
+  border-radius: 9999px;
+  display: flex;
+  align-items: center;
+  padding: 4px;
+  box-sizing: border-box;
+  overflow: hidden;
+
+  /* Premium Liquid Glass Surface */
+  background: linear-gradient(
+    135deg,
+    rgba(255, 255, 255, 0.14) 0%,
+    rgba(255, 255, 255, 0.04) 35%,
+    rgba(19, 19, 32, 0.68) 100%
+  );
+  backdrop-filter: blur(36px) saturate(210%) brightness(108%);
+  -webkit-backdrop-filter: blur(36px) saturate(210%) brightness(108%);
+
+  /* Dual Specular Light Refraction Borders */
+  border: 1px solid rgba(255, 255, 255, 0.16);
+  border-top: 1px solid rgba(255, 255, 255, 0.35);
+  border-bottom: 1px solid rgba(255, 255, 255, 0.08);
+
+  /* Machined Depth & Soft Ambient Ambient Elevation */
+  box-shadow:
+    0 20px 40px -10px rgba(0, 0, 0, 0.7),
+    0 8px 18px -4px rgba(0, 0, 0, 0.45),
+    inset 0 1px 1.5px 0 rgba(255, 255, 255, 0.45),
+    inset 0 -1px 2px 0 rgba(0, 0, 0, 0.55);
+  
+  user-select: none;
+  -webkit-user-select: none;
+}
+
+[data-theme="light"] .bottom-nav-island {
+  background: linear-gradient(
+    135deg,
+    rgba(255, 255, 255, 0.85) 0%,
+    rgba(255, 255, 255, 0.6) 40%,
+    rgba(235, 238, 248, 0.72) 100%
+  );
+  border: 1px solid rgba(0, 0, 0, 0.06);
+  border-top: 1px solid rgba(255, 255, 255, 0.9);
+  border-bottom: 1px solid rgba(0, 0, 0, 0.1);
+  box-shadow:
+    0 16px 36px -8px rgba(15, 23, 42, 0.15),
+    0 6px 14px -3px rgba(15, 23, 42, 0.08),
+    inset 0 1px 2px 0 rgba(255, 255, 255, 0.95),
+    inset 0 -1px 1px 0 rgba(0, 0, 0, 0.05);
+}
+
+/* Subtle Glass Surface Top Reflection Beam */
+.bottom-nav-island::before {
+  content: '';
+  position: absolute;
+  top: 0;
+  left: 8%;
+  right: 8%;
+  height: 1px;
+  background: linear-gradient(
+    90deg,
+    transparent 0%,
+    rgba(255, 255, 255, 0.7) 45%,
+    rgba(255, 255, 255, 0.85) 50%,
+    rgba(255, 255, 255, 0.7) 55%,
+    transparent 100%
+  );
+  pointer-events: none;
+  z-index: 4;
+}
+
+/* ── 4. Sliding Liquid-Glass Capsule (Active Tab Pill) ── */
+.bottom-nav-active-capsule {
+  position: absolute;
+  top: 4px;
+  bottom: 4px;
+  left: 4px;
+  width: calc((100% - 8px) / 4);
+  border-radius: 9999px;
+  pointer-events: none;
+  z-index: 1;
+  box-sizing: border-box;
+
+  /* Liquid Glass Pill Gradient with Amber/Gold Accent Refraction */
+  background: linear-gradient(
+    135deg,
+    rgba(255, 255, 255, 0.24) 0%,
+    rgba(255, 255, 255, 0.08) 45%,
+    rgba(245, 158, 11, 0.22) 100%
+  );
+  
+  border: 1px solid rgba(255, 255, 255, 0.32);
+  border-top: 1px solid rgba(255, 255, 255, 0.65);
+  border-bottom: 1px solid rgba(255, 255, 255, 0.15);
+
+  box-shadow:
+    0 4px 16px -2px rgba(0, 0, 0, 0.4),
+    0 0 20px 2px rgba(245, 158, 11, 0.25),
+    inset 0 1px 2px 0 rgba(255, 255, 255, 0.7),
+    inset 0 -1px 1px 0 rgba(0, 0, 0, 0.35);
+
+  will-change: transform;
+  transition:
+    transform 400ms cubic-bezier(0.34, 1.45, 0.64, 1),
+    background 300ms ease,
+    box-shadow 300ms ease;
+}
+
+[data-theme="light"] .bottom-nav-active-capsule {
+  background: linear-gradient(
+    135deg,
+    rgba(255, 255, 255, 0.98) 0%,
+    rgba(255, 255, 255, 0.85) 45%,
+    rgba(245, 158, 11, 0.2) 100%
+  );
+  border: 1px solid rgba(255, 255, 255, 0.9);
+  border-top: 1px solid #FFFFFF;
+  border-bottom: 1px solid rgba(245, 158, 11, 0.3);
+  box-shadow:
+    0 4px 14px rgba(245, 158, 11, 0.22),
+    0 2px 6px rgba(0, 0, 0, 0.06),
+    inset 0 1px 2px #FFFFFF;
+}
+
+/* Inner Specular Highlight Lens */
+.bottom-nav-active-capsule::after {
+  content: '';
+  position: absolute;
+  top: 2px;
+  left: 14%;
+  right: 14%;
+  height: 44%;
+  border-radius: 9999px;
+  background: linear-gradient(
+    to bottom,
+    rgba(255, 255, 255, 0.5) 0%,
+    rgba(255, 255, 255, 0) 100%
+  );
+  opacity: 0.85;
+  pointer-events: none;
+}
+
+/* Kinetic Liquid Morphing Modifier Classes */
+.bottom-nav-active-capsule.morph-forward {
+  animation: liquidMorphForward 420ms cubic-bezier(0.34, 1.45, 0.64, 1);
+}
+
+.bottom-nav-active-capsule.morph-backward {
+  animation: liquidMorphBackward 420ms cubic-bezier(0.34, 1.45, 0.64, 1);
+}
+
+@keyframes liquidMorphForward {
+  0% {
+    transform: scale(1, 1);
+  }
+  30% {
+    transform: scale(1.16, 0.9) skewX(-2deg);
+  }
+  65% {
+    transform: scale(0.96, 1.04) skewX(1deg);
+  }
+  100% {
+    transform: scale(1, 1);
+  }
+}
+
+@keyframes liquidMorphBackward {
+  0% {
+    transform: scale(1, 1);
+  }
+  30% {
+    transform: scale(1.16, 0.9) skewX(2deg);
+  }
+  65% {
+    transform: scale(0.96, 1.04) skewX(-1deg);
+  }
+  100% {
+    transform: scale(1, 1);
+  }
+}
+
+/* ── 5. Navigation Tab Item Buttons ── */
+.bottom-nav-tab {
+  flex: 1;
+  height: 100%;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 3px;
+  position: relative;
+  z-index: 3;
+  background: transparent;
+  border: none;
+  padding: 0;
+  margin: 0;
+  cursor: pointer;
+  outline: none;
+  -webkit-tap-highlight-color: transparent;
+  color: var(--color-text-muted, #94A3B8);
+  transition: color 240ms ease, transform 180ms cubic-bezier(0.34, 1.56, 0.64, 1);
+  min-height: 48px;
+  box-sizing: border-box;
+}
+
+.bottom-nav-tab:active {
+  transform: scale(0.92);
+}
+
+.bottom-nav-tab.is-active {
+  color: #FFFFFF;
+}
+
+[data-theme="light"] .bottom-nav-tab.is-active {
+  color: #0F172A;
+}
+
+/* ── 6. Icon Wrapper & Kinetic Elevation ── */
+.bottom-nav-icon-box {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 26px;
+  height: 26px;
+  position: relative;
+  transition: transform 320ms cubic-bezier(0.34, 1.56, 0.64, 1), filter 300ms ease;
+}
+
+.bottom-nav-tab.is-active .bottom-nav-icon-box {
+  transform: translateY(-1.5px) scale(1.08);
+  filter: drop-shadow(0 0 10px rgba(245, 158, 11, 0.45));
+}
+
+[data-theme="light"] .bottom-nav-tab.is-active .bottom-nav-icon-box {
+  filter: drop-shadow(0 2px 6px rgba(217, 119, 6, 0.35));
+}
+
+.bottom-nav-icon-box svg {
+  display: block;
+  width: 22px;
+  height: 22px;
+  transition: stroke 240ms ease, fill 240ms ease;
+}
+
+/* ── 7. Text Label Styling ── */
+.bottom-nav-label {
+  font-family: var(--font-body, 'Poppins', sans-serif);
+  font-size: 10.5px;
+  line-height: 1;
+  letter-spacing: 0.015em;
+  font-weight: 500;
+  transition: font-weight 240ms ease, color 240ms ease, transform 240ms ease;
+}
+
+.bottom-nav-tab.is-active .bottom-nav-label {
+  font-weight: 600;
+  color: #FFFFFF;
+  text-shadow: 0 1px 6px rgba(0, 0, 0, 0.5), 0 0 10px rgba(255, 255, 255, 0.3);
+  transform: translateY(0.5px);
+}
+
+[data-theme="light"] .bottom-nav-tab.is-active .bottom-nav-label {
+  color: #0F172A;
+  text-shadow: none;
+  font-weight: 650;
+}

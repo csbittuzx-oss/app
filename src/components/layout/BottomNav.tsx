@@ -1,58 +1,131 @@
+import { useEffect, useRef, useState } from 'react';
 import type { Screen } from '../../data/models';
 import { useApp } from '../../state/AppContext';
-import { usePlayer } from '../../state/PlayerContext';
 import { resetHomeScrollPosition } from '../../screens/HomeScreen';
+import './BottomNav.css';
 
-// SVG Icons inline (consistent 24px Lucide-style)
+// ─── SVG Icons Inline (Liquid Glass High-Precision 24px) ───────────────────────
+
 const HomeIcon = ({ filled }: { filled?: boolean }) => (
   <svg width="24" height="24" viewBox="0 0 24 24" fill="none" aria-hidden="true">
-    {filled
-      ? <path d="M12 2L2 9v13h7v-7h6v7h7V9L12 2z" fill="currentColor"/>
-      : <path d="M3 9l9-7 9 7v11a2 2 0 01-2 2H5a2 2 0 01-2-2z M9 22V12h6v10" stroke="currentColor" strokeWidth="1.75" strokeLinecap="round" strokeLinejoin="round"/>
-    }
+    {filled ? (
+      <path
+        d="M12 2.5L3 9.5v11A1.5 1.5 0 004.5 22h5a1 1 0 001-1v-5a1 1 0 011-1h1a1 1 0 011 1v5a1 1 0 001 1h5a1.5 1.5 0 001.5-1.5v-11L12 2.5z"
+        fill="currentColor"
+      />
+    ) : (
+      <path
+        d="M3 9.5L12 2.5l9 7v11a1.5 1.5 0 01-1.5 1.5h-5a1 1 0 01-1-1v-5a1 1 0 00-1-1h-1a1 1 0 00-1 1v5a1 1 0 01-1 1h-5A1.5 1.5 0 013 20.5v-11z"
+        stroke="currentColor"
+        strokeWidth="1.8"
+        strokeLinecap="round"
+        strokeLinejoin="round"
+        fill="none"
+      />
+    )}
   </svg>
 );
 
 const SearchIcon = ({ filled }: { filled?: boolean }) => (
   <svg width="24" height="24" viewBox="0 0 24 24" fill="none" aria-hidden="true">
-    <circle cx="11" cy="11" r="8" stroke="currentColor" strokeWidth={filled ? 0 : 1.75} fill={filled ? 'currentColor' : 'none'}/>
-    {filled && <circle cx="11" cy="11" r="5" fill="var(--color-bg)"/>}
-    <line x1="21" y1="21" x2="16.65" y2="16.65" stroke="currentColor" strokeWidth="1.75" strokeLinecap="round"/>
+    {filled ? (
+      <>
+        <circle cx="11" cy="11" r="7.5" stroke="currentColor" strokeWidth="2.2" />
+        <circle cx="11" cy="11" r="4.5" fill="currentColor" opacity="0.35" />
+        <path d="M16.5 16.5L21.5 21.5" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" />
+      </>
+    ) : (
+      <>
+        <circle cx="11" cy="11" r="7.5" stroke="currentColor" strokeWidth="1.8" fill="none" />
+        <path d="M16.5 16.5L21.5 21.5" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" />
+      </>
+    )}
   </svg>
 );
 
 const LibraryIcon = ({ filled }: { filled?: boolean }) => (
   <svg width="24" height="24" viewBox="0 0 24 24" fill="none" aria-hidden="true">
-    {filled
-      ? <>
-          <rect x="3" y="3" width="7" height="18" rx="1" fill="currentColor"/>
-          <rect x="14" y="3" width="7" height="18" rx="1" fill="currentColor"/>
-        </>
-      : <>
-          <rect x="3" y="3" width="7" height="18" rx="1" stroke="currentColor" strokeWidth="1.75"/>
-          <rect x="14" y="3" width="7" height="18" rx="1" stroke="currentColor" strokeWidth="1.75"/>
-        </>
-    }
+    {filled ? (
+      <>
+        <path
+          d="M4 4.5A1.5 1.5 0 015.5 3h1.5A1.5 1.5 0 018.5 4.5v15A1.5 1.5 0 017 21H5.5A1.5 1.5 0 014 19.5v-15z"
+          fill="currentColor"
+        />
+        <path
+          d="M11 4.5A1.5 1.5 0 0112.5 3h1.5A1.5 1.5 0 0115.5 4.5v15a1.5 1.5 0 01-1.5 1.5h-1.5a1.5 1.5 0 01-1.5-1.5v-15z"
+          fill="currentColor"
+        />
+        <path d="M19.5 5.5l-2.5 14" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" />
+      </>
+    ) : (
+      <>
+        <rect x="4" y="3.5" width="4.5" height="17" rx="1.2" stroke="currentColor" strokeWidth="1.8" fill="none" />
+        <rect x="11" y="3.5" width="4.5" height="17" rx="1.2" stroke="currentColor" strokeWidth="1.8" fill="none" />
+        <path d="M18.5 5.5l-2.5 14" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" />
+      </>
+    )}
   </svg>
 );
 
 const SettingsIcon = ({ filled }: { filled?: boolean }) => (
   <svg width="24" height="24" viewBox="0 0 24 24" fill="none" aria-hidden="true">
-    <path
-      d="M12.22 2h-.44a2 2 0 0 0-2 2v.18a2 2 0 0 1-1 1.73l-.43.25a2 2 0 0 1-2 0l-.15-.08a2 2 0 0 0-2.73.73l-.22.38a2 2 0 0 0 .73 2.73l.15.1a2 2 0 0 1 1 1.72v.51a2 2 0 0 1-1 1.74l-.15.09a2 2 0 0 0-.73 2.73l.22.38a2 2 0 0 0 2.73.73l.15-.08a2 2 0 0 1 2 0l.43.25a2 2 0 0 1 1 1.73V20a2 2 0 0 0 2 2h.44a2 2 0 0 0 2-2v-.18a2 2 0 0 1 1-1.73l.43-.25a2 2 0 0 1 2 0l.15.08a2 2 0 0 0 2.73-.73l.22-.39a2 2 0 0 0-.73-2.73l-.15-.08a2 2 0 0 1-1-1.74v-.5a2 2 0 0 1 1-1.74l.15-.09a2 2 0 0 0 .73-2.73l-.22-.38a2 2 0 0 0-2.73-.73l-.15.08a2 2 0 0 1-2 0l-.43-.25a2 2 0 0 1-1-1.73V4a2 2 0 0 0-2-2z"
-      stroke="currentColor"
-      strokeWidth={filled ? '0' : '1.75'}
-      fill={filled ? 'currentColor' : 'none'}
-    />
-    <circle cx="12" cy="12" r="3" stroke="currentColor" strokeWidth="1.75" fill={filled ? 'var(--color-surface)' : 'none'} />
+    {filled ? (
+      <>
+        <path
+          d="M12.22 2h-.44a2 2 0 00-2 2v.18a2 2 0 01-1 1.73l-.43.25a2 2 0 01-2 0l-.15-.08a2 2 0 00-2.73.73l-.22.38a2 2 0 00.73 2.73l.15.1a2 2 0 011 1.72v.51a2 2 0 01-1 1.74l-.15.09a2 2 0 00-.73 2.73l.22.38a2 2 0 002.73.73l.15-.08a2 2 0 012 0l.43.25a2 2 0 011 1.73V20a2 2 0 002 2h.44a2 2 0 002-2v-.18a2 2 0 011-1.73l.43-.25a2 2 0 012 0l.15.08a2 2 0 002.73-.73l.22-.39a2 2 0 00-.73-2.73l-.15-.08a2 2 0 01-1-1.74v-.5a2 2 0 011-1.74l.15-.09a2 2 0 00.73-2.73l-.22-.38a2 2 0 00-2.73-.73l-.15.08a2 2 0 01-2 0l-.43-.25a2 2 0 01-1-1.73V4a2 2 0 00-2-2z"
+          fill="currentColor"
+        />
+        <circle cx="12" cy="12" r="3" fill="var(--color-bg, #0A0A12)" />
+      </>
+    ) : (
+      <>
+        <path
+          d="M12.22 2h-.44a2 2 0 00-2 2v.18a2 2 0 01-1 1.73l-.43.25a2 2 0 01-2 0l-.15-.08a2 2 0 00-2.73.73l-.22.38a2 2 0 00.73 2.73l.15.1a2 2 0 011 1.72v.51a2 2 0 01-1 1.74l-.15.09a2 2 0 00-.73 2.73l.22.38a2 2 0 002.73.73l.15-.08a2 2 0 012 0l.43.25a2 2 0 011 1.73V20a2 2 0 002 2h.44a2 2 0 002-2v-.18a2 2 0 011-1.73l.43-.25a2 2 0 012 0l.15.08a2 2 0 002.73-.73l.22-.39a2 2 0 00-.73-2.73l-.15-.08a2 2 0 01-1-1.74v-.5a2 2 0 011-1.74l.15-.09a2 2 0 00.73-2.73l-.22-.38a2 2 0 00-2.73-.73l-.15.08a2 2 0 01-2 0l-.43-.25a2 2 0 01-1-1.73V4a2 2 0 00-2-2z"
+          stroke="currentColor"
+          strokeWidth="1.8"
+          fill="none"
+        />
+        <circle cx="12" cy="12" r="3" stroke="currentColor" strokeWidth="1.8" fill="none" />
+      </>
+    )}
   </svg>
 );
 
+// ─── Tab Configuration ────────────────────────────────────────────────────────
+
+const NAV_TABS = [
+  { id: 'home', label: 'Home', Icon: HomeIcon },
+  { id: 'search', label: 'Search', Icon: SearchIcon },
+  { id: 'library', label: 'Library', Icon: LibraryIcon },
+  { id: 'settings', label: 'Settings', Icon: SettingsIcon },
+] as const;
+
+// ─── Liquid Glass BottomNav Component ─────────────────────────────────────────
+
 export function BottomNav() {
   const { nav: { nav, navigate } } = useApp();
-  const { state: playerState } = usePlayer();
-  const hasMiniPlayer = Boolean(playerState.currentSong);
   const current = nav.screen === 'profile' ? 'settings' : nav.screen;
+
+  // Resolve current active tab index (0: Home, 1: Search, 2: Library, 3: Settings)
+  const tabIndex = NAV_TABS.findIndex((t) => t.id === current);
+  const activeIndex = tabIndex >= 0 ? tabIndex : 0;
+
+  // Track animation state for fluid liquid morphing physics
+  const prevIndexRef = useRef<number>(activeIndex);
+  const [morphClass, setMorphClass] = useState<string>('');
+
+  useEffect(() => {
+    if (prevIndexRef.current !== activeIndex) {
+      const isMovingForward = activeIndex > prevIndexRef.current;
+      setMorphClass(isMovingForward ? 'morph-forward' : 'morph-backward');
+      prevIndexRef.current = activeIndex;
+
+      const timer = setTimeout(() => {
+        setMorphClass('');
+      }, 420);
+      return () => clearTimeout(timer);
+    }
+  }, [activeIndex]);
 
   const handleTabClick = (id: string) => {
     if (id === 'home' && current === 'home') {
@@ -69,114 +142,46 @@ export function BottomNav() {
   return (
     <nav
       id="bottom-nav"
-      style={{
-        display: 'flex',
-        alignItems: 'stretch',
-        background: 'var(--color-surface)',
-        borderTop: '1px solid var(--color-border)',
-        paddingBottom: 'env(safe-area-inset-bottom, 0px)',
-        height: `calc(64px + env(safe-area-inset-bottom, 0px))`,
-        zIndex: 96,
-        flexShrink: 0,
-        position: 'relative',
-        backdropFilter: hasMiniPlayer ? 'blur(20px)' : 'none',
-      }}
+      className="bottom-nav-root"
       aria-label="Main navigation"
     >
-      {/* 1. Home */}
-      <button
-        id="nav-home"
-        aria-label="Home"
-        aria-current={current === 'home' ? 'page' : undefined}
-        onClick={() => handleTabClick('home')}
-        style={navButtonStyle(current === 'home')}
-      >
-        <span style={iconScaleStyle(current === 'home')}>
-          <HomeIcon filled={current === 'home'} />
-        </span>
-        <span style={labelStyle(current === 'home')}>Home</span>
-      </button>
+      {/* 1. Feathered Frosted Gradient Blur Underlay */}
+      <div className="bottom-nav-blur-underlay" aria-hidden="true" />
 
-      {/* 2. Search */}
-      <button
-        id="nav-search"
-        aria-label="Search"
-        aria-current={current === 'search' ? 'page' : undefined}
-        onClick={() => handleTabClick('search')}
-        style={navButtonStyle(current === 'search')}
-      >
-        <span style={iconScaleStyle(current === 'search')}>
-          <SearchIcon filled={current === 'search'} />
-        </span>
-        <span style={labelStyle(current === 'search')}>Search</span>
-      </button>
+      {/* 2. Floating Liquid Glass Island */}
+      <div className="bottom-nav-island">
+        {/* Sliding Liquid-Glass Capsule Indicator with Spring Physics */}
+        <div
+          className={`bottom-nav-active-capsule ${morphClass}`}
+          style={{
+            transform: `translateX(calc(${activeIndex} * 100%))`,
+          }}
+          aria-hidden="true"
+        />
 
-      {/* 3. Library */}
-      <button
-        id="nav-library"
-        aria-label="Library"
-        aria-current={current === 'library' ? 'page' : undefined}
-        onClick={() => handleTabClick('library')}
-        style={navButtonStyle(current === 'library')}
-      >
-        <span style={iconScaleStyle(current === 'library')}>
-          <LibraryIcon filled={current === 'library'} />
-        </span>
-        <span style={labelStyle(current === 'library')}>Library</span>
-      </button>
+        {/* Navigation Tab Buttons */}
+        {NAV_TABS.map((tab) => {
+          const isActive = current === tab.id;
+          const { Icon, id, label } = tab;
 
-      {/* 4. Settings */}
-      <button
-        id="nav-settings"
-        aria-label="Settings"
-        aria-current={current === 'settings' ? 'page' : undefined}
-        onClick={() => handleTabClick('settings')}
-        style={navButtonStyle(current === 'settings')}
-      >
-        <span style={iconScaleStyle(current === 'settings')}>
-          <SettingsIcon filled={current === 'settings'} />
-        </span>
-        <span style={labelStyle(current === 'settings')}>Settings</span>
-      </button>
+          return (
+            <button
+              key={id}
+              id={`nav-${id}`}
+              className={`bottom-nav-tab ${isActive ? 'is-active' : ''}`}
+              aria-label={label}
+              aria-current={isActive ? 'page' : undefined}
+              onClick={() => handleTabClick(id)}
+              type="button"
+            >
+              <span className="bottom-nav-icon-box">
+                <Icon filled={isActive} />
+              </span>
+              <span className="bottom-nav-label">{label}</span>
+            </button>
+          );
+        })}
+      </div>
     </nav>
   );
-}
-
-function navButtonStyle(isActive: boolean): React.CSSProperties {
-  return {
-    flex: 1,
-    display: 'flex',
-    flexDirection: 'column',
-    alignItems: 'center',
-    justifyContent: 'center',
-    gap: 4,
-    background: 'transparent',
-    border: 'none',
-    cursor: 'pointer',
-    color: isActive ? 'var(--color-accent)' : 'var(--color-text-muted)',
-    transition: 'color 200ms var(--ease-standard), transform 150ms var(--ease-spring)',
-    padding: '8px 4px',
-    minHeight: '48px',
-    position: 'relative',
-  };
-}
-
-function iconScaleStyle(isActive: boolean): React.CSSProperties {
-  return {
-    transform: isActive ? 'scale(1.12)' : 'scale(1)',
-    transition: 'transform 200ms var(--ease-spring)',
-    display: 'flex',
-    alignItems: 'center',
-    justifyContent: 'center',
-  };
-}
-
-function labelStyle(isActive: boolean): React.CSSProperties {
-  return {
-    fontSize: '10px',
-    fontFamily: 'var(--font-body)',
-    fontWeight: isActive ? 600 : 400,
-    letterSpacing: '0.02em',
-    lineHeight: 1,
-  };
 }

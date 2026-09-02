@@ -1260,6 +1260,10 @@
         grid-template-columns: repeat(2, 1fr);
         gap: 16px;
       }
+      .services-grid {
+        grid-template-columns: repeat(2, 1fr);
+        gap: 16px;
+      }
     }
 
     @media (max-width: 768px) {
@@ -1286,26 +1290,32 @@
       .spec-card:last-child {
         border-bottom: none;
       }
-      .features-section {
+      .features-section, .services-section {
         padding: 48px 0;
       }
-      .features-grid {
+      .features-grid, .services-grid {
         grid-template-columns: 1fr;
         gap: 12px;
       }
-      .feature-box {
+      .feature-box, .service-card {
         padding: 18px 16px;
       }
-      .feature-box h3 {
+      .feature-box h3, .service-card h3 {
         font-size: 1.02rem;
       }
-      .feature-box p {
+      .feature-box p, .service-card p {
         font-size: 0.85rem;
         line-height: 1.5;
       }
       .feature-meta-footer {
         margin-top: 14px;
         padding-top: 8px;
+      }
+      .process-banner {
+        padding: 24px 18px;
+      }
+      .process-flow-track {
+        gap: 8px;
       }
       .developer-card {
         grid-template-columns: 1fr;
@@ -1397,6 +1407,202 @@
         flex-direction: column;
         gap: 10px;
       }
+    }
+
+    /* ═══════════════════════════════════════════════════════════════════════════
+       WHAT WE PROVIDE (SOLUTIONS & CAPABILITIES)
+       ═══════════════════════════════════════════════════════════════════════════ */
+    .services-section {
+      padding: 72px 0;
+      border-bottom: 1px solid var(--border);
+      position: relative;
+    }
+
+    .section-desc-lead {
+      font-size: 1.05rem;
+      color: var(--text-secondary);
+      max-width: 680px;
+      line-height: 1.6;
+      margin-top: -16px;
+      margin-bottom: 36px;
+    }
+
+    .services-grid {
+      display: grid;
+      grid-template-columns: repeat(3, 1fr);
+      gap: 16px;
+      margin-bottom: 32px;
+    }
+
+    .service-card {
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: var(--radius-md);
+      padding: 22px 20px;
+      display: flex;
+      flex-direction: column;
+      justify-content: space-between;
+      transition: all 0.35s var(--ease-out-expo);
+      position: relative;
+    }
+
+    .service-card:hover {
+      background: var(--surface-elevated);
+      border-color: var(--border-hover);
+      transform: translateY(-3px);
+      box-shadow: 0 12px 28px rgba(0, 0, 0, 0.4);
+    }
+
+    .service-card-top {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 12px;
+      margin-bottom: 14px;
+    }
+
+    .service-icon-pill {
+      width: 38px;
+      height: 38px;
+      border-radius: var(--radius-sm);
+      background: var(--surface-elevated);
+      border: 1px solid var(--border);
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      color: var(--accent);
+      transition: transform 0.3s var(--ease-spring), color 0.3s ease;
+      flex-shrink: 0;
+    }
+
+    .service-card:hover .service-icon-pill {
+      transform: scale(1.1) rotate(3deg);
+      color: #FBBF24;
+      border-color: var(--accent-border);
+    }
+
+    .service-tag {
+      font-family: var(--font-mono);
+      font-size: 0.66rem;
+      color: var(--text-muted);
+      background: var(--surface-elevated);
+      border: 1px solid var(--border);
+      padding: 3px 8px;
+      border-radius: 4px;
+      line-height: 1;
+      display: inline-flex;
+      align-items: center;
+      letter-spacing: 0.04em;
+    }
+
+    .service-card h3 {
+      font-size: 1.02rem;
+      font-weight: 700;
+      margin-bottom: 6px;
+      line-height: 1.35;
+      color: var(--text);
+    }
+
+    .service-card p {
+      font-size: 0.85rem;
+      color: var(--text-secondary);
+      line-height: 1.55;
+      word-break: break-word;
+    }
+
+    /* Process Flow Banner */
+    .process-banner {
+      background: linear-gradient(135deg, rgba(22, 22, 29, 0.95), rgba(17, 17, 22, 0.95));
+      border: 1px solid var(--border);
+      border-radius: var(--radius-lg);
+      padding: 32px 28px;
+      margin-bottom: 24px;
+      position: relative;
+      overflow: hidden;
+    }
+
+    .process-banner::before {
+      content: '';
+      position: absolute;
+      top: 0;
+      left: 0;
+      right: 0;
+      height: 2px;
+      background: linear-gradient(90deg, #F59E0B, #A3E635, #38BDF8);
+    }
+
+    .process-banner h3 {
+      font-size: 1.35rem;
+      font-weight: 800;
+      letter-spacing: -0.02em;
+      margin-bottom: 8px;
+      color: var(--text);
+    }
+
+    .process-banner-desc {
+      font-size: 0.92rem;
+      color: var(--text-secondary);
+      line-height: 1.6;
+      max-width: 820px;
+      margin-bottom: 20px;
+    }
+
+    .process-flow-track {
+      display: flex;
+      align-items: center;
+      flex-wrap: wrap;
+      gap: 10px;
+    }
+
+    .process-step-pill {
+      display: inline-flex;
+      align-items: center;
+      gap: 8px;
+      background: var(--surface-subtle);
+      border: 1px solid var(--border);
+      padding: 8px 14px;
+      border-radius: var(--radius-full);
+      font-family: var(--font-mono);
+      font-size: 0.78rem;
+      font-weight: 600;
+      color: var(--text);
+      transition: all 0.25s ease;
+    }
+
+    .process-step-pill:hover {
+      border-color: var(--accent-border);
+      background: var(--surface-elevated);
+      color: var(--accent);
+      transform: translateY(-2px);
+    }
+
+    .process-step-num {
+      width: 18px;
+      height: 18px;
+      border-radius: 50%;
+      background: var(--accent);
+      color: #09090B;
+      font-size: 0.68rem;
+      font-weight: 800;
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      line-height: 1;
+    }
+
+    .process-arrow-sep {
+      color: var(--text-muted);
+      display: inline-flex;
+      align-items: center;
+    }
+
+    .services-disclaimer {
+      font-size: 0.76rem;
+      color: var(--text-muted);
+      line-height: 1.5;
+      border-top: 1px solid var(--border-subtle);
+      padding-top: 16px;
+      font-family: var(--font-body);
     }
 
     /* ═══════════════════════════════════════════════════════════════════════════
@@ -1583,6 +1789,7 @@
           <li><a href="#matrix" class="nav-link">Matrix</a></li>
           <li><a href="#setup" class="nav-link">Installation</a></li>
           <li><a href="#faq" class="nav-link">FAQ</a></li>
+          <li><a href="#services" class="nav-link">Services</a></li>
           <li><a href="#developer" class="nav-link highlight">Developer</a></li>
         </ul>
       </nav>
@@ -2095,11 +2302,344 @@
   </section>
 
   <!-- ═══════════════════════════════════════════════════════════════════════════
+       WHAT WE PROVIDE (SOLUTIONS & CAPABILITIES)
+       ═══════════════════════════════════════════════════════════════════════════ -->
+  <section class="services-section reveal-on-scroll" id="services">
+    <div class="container">
+      <div class="section-label">06 // What We Provide</div>
+      <h2 class="section-heading">What We Provide</h2>
+      <p class="section-desc-lead">Everything you need to turn your idea into a complete, ready-to-use digital product.</p>
+
+      <div class="services-grid">
+
+        <!-- 1. Any Type of Project -->
+        <div class="service-card">
+          <div>
+            <div class="service-card-top">
+              <div class="service-icon-pill">
+                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                  <polygon points="12 2 2 7 12 12 22 7 12 2"></polygon>
+                  <polyline points="2 17 12 22 22 17"></polyline>
+                  <polyline points="2 12 12 17 22 12"></polyline>
+                </svg>
+              </div>
+              <span class="service-tag">ANY.PROJECT</span>
+            </div>
+            <h3>Any Type of Project</h3>
+            <p>Android Apps, Web Apps, Business Websites, Portfolio Websites, E-commerce Platforms, Custom Software &amp; more.</p>
+          </div>
+        </div>
+
+        <!-- 2. Complete UI/UX Design -->
+        <div class="service-card">
+          <div>
+            <div class="service-card-top">
+              <div class="service-icon-pill">
+                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                  <rect x="3" y="3" width="18" height="18" rx="2" ry="2"></rect>
+                  <line x1="3" y1="9" x2="21" y2="9"></line>
+                  <line x1="9" y1="21" x2="9" y2="9"></line>
+                </svg>
+              </div>
+              <span class="service-tag">UIUX.DESIGN</span>
+            </div>
+            <h3>Complete UI/UX Design</h3>
+            <p>Modern, professional, responsive designs optimized for mobile, tablet, and desktop.</p>
+          </div>
+        </div>
+
+        <!-- 3. Frontend & Backend Development -->
+        <div class="service-card">
+          <div>
+            <div class="service-card-top">
+              <div class="service-icon-pill">
+                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                  <polyline points="16 18 22 12 16 6"></polyline>
+                  <polyline points="8 6 2 12 8 18"></polyline>
+                </svg>
+              </div>
+              <span class="service-tag">FULLSTACK.DEV</span>
+            </div>
+            <h3>Frontend &amp; Backend Development</h3>
+            <p>Complete development from user interface to database, APIs, authentication, admin systems, and server-side functionality.</p>
+          </div>
+        </div>
+
+        <!-- 4. Free Hosting Setup -->
+        <div class="service-card">
+          <div>
+            <div class="service-card-top">
+              <div class="service-icon-pill">
+                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                  <path d="M18 10h-1.26A8 8 0 1 0 9 20h9a5 5 0 0 0 0-10z"></path>
+                </svg>
+              </div>
+              <span class="service-tag">FREE.HOSTING</span>
+            </div>
+            <h3>Free Hosting Setup</h3>
+            <p>We deploy and configure your project so it's ready to go live.</p>
+          </div>
+        </div>
+
+        <!-- 5. Free Domain for 1 Year -->
+        <div class="service-card">
+          <div>
+            <div class="service-card-top">
+              <div class="service-icon-pill">
+                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                  <circle cx="12" cy="12" r="10"></circle>
+                  <line x1="2" y1="12" x2="22" y2="12"></line>
+                  <path d="M12 2a15.3 15.3 0 0 1 4 10 15.3 15.3 0 0 1-4 10 15.3 15.3 0 0 1-4-10 15.3 15.3 0 0 1 4-10z"></path>
+                </svg>
+              </div>
+              <span class="service-tag">FREE.DOMAIN</span>
+            </div>
+            <h3>Free Domain for 1 Year</h3>
+            <p>Get a domain for your project for the first year at no additional cost.*</p>
+          </div>
+        </div>
+
+        <!-- 6. 5 Years of Free Updates & Changes -->
+        <div class="service-card">
+          <div>
+            <div class="service-card-top">
+              <div class="service-icon-pill">
+                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                  <path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"></path>
+                  <polyline points="9 12 11 14 15 10"></polyline>
+                </svg>
+              </div>
+              <span class="service-tag">5YR.UPDATES</span>
+            </div>
+            <h3>5 Years of Free Updates &amp; Changes</h3>
+            <p>Get ongoing support for updates, improvements, content changes, and minor modifications.*</p>
+          </div>
+        </div>
+
+        <!-- 7. Database & API Integration -->
+        <div class="service-card">
+          <div>
+            <div class="service-card-top">
+              <div class="service-icon-pill">
+                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                  <ellipse cx="12" cy="5" rx="9" ry="3"></ellipse>
+                  <path d="M21 12c0 1.66-4 3-9 3s-9-1.34-9-3"></path>
+                  <path d="M3 5v14c0 1.66 4 3 9 3s9-1.34 9-3V5"></path>
+                </svg>
+              </div>
+              <span class="service-tag">DATABASE.API</span>
+            </div>
+            <h3>Database &amp; API Integration</h3>
+            <p>Secure database setup and integration with APIs and third-party services.</p>
+          </div>
+        </div>
+
+        <!-- 8. Authentication Systems -->
+        <div class="service-card">
+          <div>
+            <div class="service-card-top">
+              <div class="service-icon-pill">
+                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                  <rect x="3" y="11" width="18" height="11" rx="2" ry="2"></rect>
+                  <path d="M7 11V7a5 5 0 0 1 10 0v4"></path>
+                </svg>
+              </div>
+              <span class="service-tag">AUTH.SYSTEMS</span>
+            </div>
+            <h3>Authentication Systems</h3>
+            <p>Login, registration, password recovery, OTP, social login, and user account management.</p>
+          </div>
+        </div>
+
+        <!-- 9. Admin Dashboard -->
+        <div class="service-card">
+          <div>
+            <div class="service-card-top">
+              <div class="service-icon-pill">
+                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                  <rect x="3" y="3" width="7" height="7"></rect>
+                  <rect x="14" y="3" width="7" height="7"></rect>
+                  <rect x="14" y="14" width="7" height="7"></rect>
+                  <rect x="3" y="14" width="7" height="7"></rect>
+                </svg>
+              </div>
+              <span class="service-tag">ADMIN.PANEL</span>
+            </div>
+            <h3>Admin Dashboard</h3>
+            <p>Manage users, content, products, orders, analytics, notifications, and other project features.</p>
+          </div>
+        </div>
+
+        <!-- 10. Payment Gateway Integration -->
+        <div class="service-card">
+          <div>
+            <div class="service-card-top">
+              <div class="service-icon-pill">
+                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                  <rect x="1" y="4" width="22" height="16" rx="2" ry="2"></rect>
+                  <line x1="1" y1="10" x2="23" y2="10"></line>
+                </svg>
+              </div>
+              <span class="service-tag">PAYMENT.GATEWAY</span>
+            </div>
+            <h3>Payment Gateway Integration</h3>
+            <p>Integration of supported online payment solutions when required.</p>
+          </div>
+        </div>
+
+        <!-- 11. SEO Optimization -->
+        <div class="service-card">
+          <div>
+            <div class="service-card-top">
+              <div class="service-icon-pill">
+                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                  <circle cx="11" cy="11" r="8"></circle>
+                  <line x1="21" y1="21" x2="16.65" y2="16.65"></line>
+                </svg>
+              </div>
+              <span class="service-tag">SEO.RANKING</span>
+            </div>
+            <h3>SEO Optimization</h3>
+            <p>Search-engine-friendly website structure, metadata, performance, sitemap, and other essential SEO setup.</p>
+          </div>
+        </div>
+
+        <!-- 12. Performance Optimization -->
+        <div class="service-card">
+          <div>
+            <div class="service-card-top">
+              <div class="service-icon-pill">
+                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                  <polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2"></polygon>
+                </svg>
+              </div>
+              <span class="service-tag">PERFORMANCE.OPT</span>
+            </div>
+            <h3>Performance Optimization</h3>
+            <p>Fast loading, optimized assets, caching, and responsive performance across devices.</p>
+          </div>
+        </div>
+
+        <!-- 13. Security Setup -->
+        <div class="service-card">
+          <div>
+            <div class="service-card-top">
+              <div class="service-icon-pill">
+                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                  <path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"></path>
+                </svg>
+              </div>
+              <span class="service-tag">SECURITY.SHIELD</span>
+            </div>
+            <h3>Security Setup</h3>
+            <p>Essential security practices, HTTPS configuration, authentication protection, validation, and secure data handling.</p>
+          </div>
+        </div>
+
+        <!-- 14. Analytics Integration -->
+        <div class="service-card">
+          <div>
+            <div class="service-card-top">
+              <div class="service-icon-pill">
+                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                  <line x1="18" y1="20" x2="18" y2="10"></line>
+                  <line x1="12" y1="20" x2="12" y2="4"></line>
+                  <line x1="6" y1="20" x2="6" y2="14"></line>
+                </svg>
+              </div>
+              <span class="service-tag">ANALYTICS.TRACK</span>
+            </div>
+            <h3>Analytics Integration</h3>
+            <p>Track visitors, engagement, conversions, and other important metrics.</p>
+          </div>
+        </div>
+
+        <!-- 15. Deployment & Configuration -->
+        <div class="service-card">
+          <div>
+            <div class="service-card-top">
+              <div class="service-icon-pill">
+                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                  <path d="M4 14.899A7 7 0 1 1 15.71 8h1.79a4.5 4.5 0 0 1 2.5 8.242"></path>
+                  <path d="M12 12v9"></path>
+                  <path d="m8 17 4 4 4-4"></path>
+                </svg>
+              </div>
+              <span class="service-tag">PROD.DEPLOY</span>
+            </div>
+            <h3>Deployment &amp; Configuration</h3>
+            <p>Complete production deployment and configuration of your application or website.</p>
+          </div>
+        </div>
+
+        <!-- 16. Maintenance & Technical Support -->
+        <div class="service-card">
+          <div>
+            <div class="service-card-top">
+              <div class="service-icon-pill">
+                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                  <path d="M14.7 6.3a1 1 0 0 0 0 1.4l1.6 1.6a1 1 0 0 0 1.4 0l3.77-3.77a6 6 0 0 1-7.94 7.94l-6.91 6.91a2.12 2.12 0 0 1-3-3l6.91-6.91a6 6 0 0 1 7.94-7.94l-3.76 3.76z"></path>
+                </svg>
+              </div>
+              <span class="service-tag">TECH.SUPPORT</span>
+            </div>
+            <h3>Maintenance &amp; Technical Support</h3>
+            <p>Assistance with bugs, technical issues, compatibility updates, and project maintenance.</p>
+          </div>
+        </div>
+
+        <!-- 17. Source Code Included -->
+        <div class="service-card">
+          <div>
+            <div class="service-card-top">
+              <div class="service-icon-pill">
+                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                  <polyline points="16 18 22 12 16 6"></polyline>
+                  <polyline points="8 6 2 12 8 18"></polyline>
+                  <line x1="12" y1="2" x2="12" y2="22"></line>
+                </svg>
+              </div>
+              <span class="service-tag">SOURCE.CODE</span>
+            </div>
+            <h3>Source Code Included</h3>
+            <p>Receive the complete project source code and necessary project files.</p>
+          </div>
+        </div>
+
+      </div>
+
+      <!-- Process Flow Banner -->
+      <div class="process-banner">
+        <h3>From Idea to Launch — We Handle Everything</h3>
+        <p class="process-banner-desc">Whether you need a simple website, a professional business platform, or a complete mobile application, we can handle the entire development process:</p>
+        <div class="process-flow-track">
+          <div class="process-step-pill"><span class="process-step-num">1</span> Planning</div>
+          <span class="process-arrow-sep">➔</span>
+          <div class="process-step-pill"><span class="process-step-num">2</span> Design</div>
+          <span class="process-arrow-sep">➔</span>
+          <div class="process-step-pill"><span class="process-step-num">3</span> Development</div>
+          <span class="process-arrow-sep">➔</span>
+          <div class="process-step-pill"><span class="process-step-num">4</span> Testing</div>
+          <span class="process-arrow-sep">➔</span>
+          <div class="process-step-pill"><span class="process-step-num">5</span> Deployment</div>
+          <span class="process-arrow-sep">➔</span>
+          <div class="process-step-pill"><span class="process-step-num">6</span> Maintenance</div>
+        </div>
+      </div>
+
+      <div class="services-disclaimer">
+        *Domain, hosting, updates, and third-party services are subject to the selected plan, fair-use limits, availability, and applicable provider charges.
+      </div>
+
+    </div>
+  </section>
+
+  <!-- ═══════════════════════════════════════════════════════════════════════════
        DEVELOPER SECTION (DOWNSIDE) — Pandit Bittu (Pixel-Perfect Alignment)
        ═══════════════════════════════════════════════════════════════════════════ -->
   <section class="developer-section reveal-on-scroll" id="developer">
     <div class="container">
-      <div class="section-label">06 // Developer Profile</div>
+      <div class="section-label">07 // Developer Profile</div>
       <h2 class="section-heading">Architected by Pandit Bittu</h2>
 
       <div class="developer-card">
@@ -2181,6 +2721,7 @@
     <div class="container footer-inner">
       <div>Soundwave &copy; 2026. Minimalist Lossless Audio Engine for Android by Pandit Bittu.</div>
       <ul class="footer-links">
+        <li><a href="#services">What We Provide</a></li>
         <li><a href="#developer">Developer</a></li>
         <li><a href="https://instagram.com/panditbittu.x" target="_blank" rel="noopener noreferrer">Instagram</a></li>
         <li><a href="https://t.me/bittuxu_bot" target="_blank" rel="noopener noreferrer">Telegram: @bittuxu_bot</a></li>
