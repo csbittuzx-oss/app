@@ -67,7 +67,7 @@ export function ArtistScreen() {
         className="scroll-area"
         style={{
           flex: 1,
-          paddingBottom: 8,
+          paddingBottom: 'var(--content-bottom-pad)',
         }}
       >
         {error ? (

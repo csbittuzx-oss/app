@@ -73,7 +73,7 @@ export function AlbumScreen() {
         className="scroll-area"
         style={{
           flex: 1,
-          paddingBottom: 8,
+          paddingBottom: 'var(--content-bottom-pad)',
         }}
       >
         {/* Album header */}

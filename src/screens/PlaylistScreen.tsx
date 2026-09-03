@@ -91,7 +91,7 @@ export function PlaylistScreen() {
         className="scroll-area"
         style={{
           flex: 1,
-          paddingBottom: 8,
+          paddingBottom: 'var(--content-bottom-pad)',
         }}
       >
         {/* Header */}

@@ -109,7 +109,7 @@
   --nav-height: 62px;
   --bottom-nav-height: 72px;
   --mini-player-height: 58px;
-  --content-bottom-pad: calc(146px + env(safe-area-inset-bottom, 0px));
+  --content-bottom-pad: calc(168px + env(safe-area-inset-bottom, 0px));
   --header-height: 56px;
   --screen-max: 600px;
 
