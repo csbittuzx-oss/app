@@ -3,6 +3,7 @@ import { resolveFullTrack } from './saavnApi';
 import { universalGet, universalPost } from '../../core/utils/http';
 import { resizeImageUrl } from '../../core/utils/imageUtils';
 import { evaluateTrackMatch, cleanCoreTitle } from '../../domain/player/TrackMatchingEngine';
+import { resolveInnerTubeAudioStream } from './InnerTubeAudioResolver';
 
 const YTM_SEARCH_ENDPOINT = 'https://music.youtube.com/youtubei/v1/search?prettyPrint=false';
 const PIPED_API_ENDPOINT = 'https://api.piped.private.coffee';
@@ -297,17 +298,34 @@ export async function getYouTubeMusicTrending(limit = 20): Promise<Song[]> {
  *   - Piped/Invidious public instances are dead/blocked/returning 500s
  *   - YouTube's own watch page always returns a valid signed stream URL for the device's IP
  *   - CapacitorHttp makes native HTTP calls (not WebView), so the IP is stable and consistent
+
+/**
+ * Extracts a direct audio stream URL from a YouTube Video ID.
+ * 
+ * Strategy:
+ *   1. Primary: YouTube Music InnerTube Player API (multi-client Opus/AAC format extraction)
+ *   2. Secondary Fallback: Fetch the YouTube watch page and parse ytInitialPlayerResponse
  */
 export async function fetchAudioStreamFromYouTubeId(videoId: string): Promise<{ streamUrl: string; duration?: number } | null> {
   if (!videoId) return null;
   const cleanId = videoId.replace('yt_', '').replace('/watch?v=', '').trim();
   if (!cleanId || cleanId.length !== 11) return null;
 
+  // 1. Primary: InnerTube Player API resolver
+  try {
+    const innerTubeRes = await resolveInnerTubeAudioStream(cleanId);
+    if (innerTubeRes && innerTubeRes.streamUrl) {
+      return {
+        streamUrl: innerTubeRes.streamUrl,
+        duration: innerTubeRes.duration,
+      };
+    }
+  } catch {}
+
+  // 2. Secondary: Watch page scraper fallback
   try {
     const { universalGetText } = await import('../../core/utils/http');
 
-    // Fetch the YouTube watch page — CapacitorHttp uses native Android OkHttp,
-    // so the IP of this request matches the IP used when audio is streamed
     const pageHtml = await universalGetText(
       `https://www.youtube.com/watch?v=${cleanId}`,
       {
@@ -319,12 +337,10 @@ export async function fetchAudioStreamFromYouTubeId(videoId: string): Promise<{ 
 
     if (!pageHtml || typeof pageHtml !== 'string') return null;
 
-    // Extract ytInitialPlayerResponse JSON blob from the page
     const startMarker = 'ytInitialPlayerResponse = ';
     const startIdx = pageHtml.indexOf(startMarker);
     if (startIdx === -1) return null;
 
-    // Walk forward to find the matching closing brace of the JSON object
     let depth = 0;
     let i = startIdx + startMarker.length;
     const jsonStart = i;
@@ -341,7 +357,6 @@ export async function fetchAudioStreamFromYouTubeId(videoId: string): Promise<{ 
     const streamingData = playerResponse?.streamingData;
     if (!streamingData) return null;
 
-    // Duration from video details
     const durationMs = parseInt(
       playerResponse?.videoDetails?.lengthSeconds ||
       streamingData?.adaptiveFormats?.[0]?.approxDurationMs || '0',
@@ -349,13 +364,9 @@ export async function fetchAudioStreamFromYouTubeId(videoId: string): Promise<{ 
     );
     const duration = durationMs > 1000 ? Math.round(durationMs) : (durationMs > 0 ? durationMs * 1000 : undefined);
 
-    // serverAbrStreamingUrl is the signed googlevideo.com URL for this device's IP
-    // Append itag=140 (AAC 128kbps m4a) to get audio-only stream
     const abrBase = streamingData.serverAbrStreamingUrl;
     if (abrBase && typeof abrBase === 'string') {
-      // Build audio stream URL: remove sabr/rqh params that are ABR-specific, add itag=140
       let audioUrl = abrBase;
-      // Replace or add itag parameter for audio-only (itag 140 = audio/mp4 AAC 128kbps)
       if (audioUrl.includes('&itag=')) {
         audioUrl = audioUrl.replace(/&itag=\d+/, '&itag=140');
       } else if (audioUrl.includes('?itag=')) {
@@ -363,7 +374,6 @@ export async function fetchAudioStreamFromYouTubeId(videoId: string): Promise<{ 
       } else {
         audioUrl = audioUrl + '&itag=140';
       }
-      // Remove ABR-only params that cause 403 on direct requests
       audioUrl = audioUrl.replace(/[&?]sabr=[^&]*/g, '').replace(/[&?]rqh=[^&]*/g, '');
 
       return { streamUrl: audioUrl, duration: duration || undefined };

@@ -132,39 +132,46 @@ export async function cacheSongForOfflineBackup(song: Song, streamUrl?: string):
       let targetUrl: string | null =
         streamUrl || (song.previewUrl && !song.previewUrl.startsWith('blob:') ? song.previewUrl : null);
 
-      // 1. Resolve authentic 320kbps stream if missing or short preview
-      if (
-        !targetUrl ||
-        isPreviewAudioUrl(targetUrl) ||
-        targetUrl.includes('youtube') ||
-        targetUrl.includes('googlevideo')
-      ) {
+      // 1. Resolve authentic high quality stream if missing or preview
+      if (!targetUrl || isPreviewAudioUrl(targetUrl)) {
         try {
           const resolved = await resolveFullTrack(song.title, song.artist, 'high', song.duration);
           if (resolved?.streamUrl && !isPreviewAudioUrl(resolved.streamUrl)) {
             targetUrl = resolved.streamUrl;
           }
         } catch {}
+
+        // Fallback to YouTube InnerTube stream resolver
+        if (!targetUrl || isPreviewAudioUrl(targetUrl)) {
+          try {
+            const { resolveYouTubeFullAudioStream } = await import('../data/api/youtubeMusicApi');
+            const ytStream = await resolveYouTubeFullAudioStream(song.title, song.artist, song.duration);
+            if (ytStream?.streamUrl && !isPreviewAudioUrl(ytStream.streamUrl)) {
+              targetUrl = ytStream.streamUrl;
+            }
+          } catch {}
+        }
       }
 
       if (!targetUrl || isPreviewAudioUrl(targetUrl)) {
         return false;
       }
 
-      const highQualityUrl = formatMediaUrlWithQuality(targetUrl, 'high');
+      const isGooglevideo = targetUrl.includes('googlevideo.com') || targetUrl.includes('youtube');
+      const fetchUrl = isGooglevideo ? targetUrl : formatMediaUrlWithQuality(targetUrl, 'high');
 
       // 2. Fetch audio blob progressively
       let blob: Blob | null = null;
       try {
-        const res = await fetch(highQualityUrl, { mode: 'cors' });
+        const res = await fetch(fetchUrl, { mode: 'cors' });
         if (res.ok) {
           blob = await res.blob();
         }
       } catch {
         try {
-          const arrayBuf = await universalGet<ArrayBuffer>(highQualityUrl);
+          const arrayBuf = await universalGet<ArrayBuffer>(fetchUrl);
           if (arrayBuf) {
-            blob = new Blob([arrayBuf], { type: 'audio/mp4' });
+            blob = new Blob([arrayBuf], { type: isGooglevideo ? 'audio/webm' : 'audio/mp4' });
           }
         } catch {}
       }
@@ -383,6 +390,56 @@ export async function getOfflineSongStream(
     });
   } catch {
     return null;
+  }
+}
+
+/**
+ * Downloads a single track explicitly for offline playback.
+ */
+export async function downloadSongForOffline(song: Song): Promise<boolean> {
+  return cacheSongForOfflineBackup(song);
+}
+
+/**
+ * Downloads an entire playlist for offline listening.
+ */
+export async function downloadPlaylistForOffline(
+  playlist: Playlist,
+  onProgress?: (completed: number, total: number) => void
+): Promise<{ success: number; failed: number }> {
+  let success = 0;
+  let failed = 0;
+  const tracks = playlist.tracks || [];
+  const total = tracks.length;
+
+  for (let i = 0; i < total; i++) {
+    const track = tracks[i];
+    const ok = await cacheSongForOfflineBackup(track);
+    if (ok) success++;
+    else failed++;
+    if (onProgress) onProgress(i + 1, total);
+  }
+
+  return { success, failed };
+}
+
+/**
+ * Removes a specific downloaded song from local offline storage.
+ */
+export async function removeDownloadedSong(songId: string): Promise<boolean> {
+  try {
+    const db = await openDatabase();
+    const tx = db.transaction(STORE_NAME, 'readwrite');
+    const store = tx.objectStore(STORE_NAME);
+    await new Promise<void>((resolve, reject) => {
+      const req = store.delete(songId);
+      req.onsuccess = () => resolve();
+      req.onerror = () => reject(req.error);
+    });
+    cachedSongIds.delete(songId);
+    return true;
+  } catch {
+    return false;
   }
 }
 

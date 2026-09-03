@@ -1,4 +1,3 @@
-import { useEffect, useRef, useState } from 'react';
 import type { Screen } from '../../data/models';
 import { useApp } from '../../state/AppContext';
 import { resetHomeScrollPosition } from '../../screens/HomeScreen';
@@ -110,23 +109,6 @@ export function BottomNav() {
   const tabIndex = NAV_TABS.findIndex((t) => t.id === current);
   const activeIndex = tabIndex >= 0 ? tabIndex : 0;
 
-  // Track animation state for fluid liquid morphing physics
-  const prevIndexRef = useRef<number>(activeIndex);
-  const [morphClass, setMorphClass] = useState<string>('');
-
-  useEffect(() => {
-    if (prevIndexRef.current !== activeIndex) {
-      const isMovingForward = activeIndex > prevIndexRef.current;
-      setMorphClass(isMovingForward ? 'morph-forward' : 'morph-backward');
-      prevIndexRef.current = activeIndex;
-
-      const timer = setTimeout(() => {
-        setMorphClass('');
-      }, 420);
-      return () => clearTimeout(timer);
-    }
-  }, [activeIndex]);
-
   const handleTabClick = (id: string) => {
     if (id === 'home' && current === 'home') {
       resetHomeScrollPosition();
@@ -152,9 +134,9 @@ export function BottomNav() {
       <div className="bottom-nav-island">
         {/* Sliding Liquid-Glass Capsule Indicator with Spring Physics */}
         <div
-          className={`bottom-nav-active-capsule ${morphClass}`}
+          className="bottom-nav-active-capsule"
           style={{
-            transform: `translateX(calc(${activeIndex} * 100%))`,
+            transform: `translate3d(${activeIndex * 100}%, 0, 0)`,
           }}
           aria-hidden="true"
         />
