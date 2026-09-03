@@ -227,7 +227,7 @@ body.tv-mode #root {
   white-space: nowrap;
 }
 
-/* ─── Scrollable Content Area ─── */
+/* ─── Scrollable Content Area (Hardware Accelerated) ─── */
 
 .scroll-area {
   overflow-y: auto;
@@ -237,6 +237,9 @@ body.tv-mode #root {
   scrollbar-width: none;
   -ms-overflow-style: none;
   overscroll-behavior-y: contain;
+  -webkit-overflow-scrolling: touch;
+  transform: translateZ(0);
+  will-change: scroll-position;
 }
 
 .scroll-area::-webkit-scrollbar { display: none; }
@@ -250,9 +253,19 @@ body.tv-mode #root {
   padding-bottom: var(--space-2);
   -webkit-overflow-scrolling: touch;
   overscroll-behavior-x: contain;
+  transform: translateZ(0);
 }
 
 .scroll-x::-webkit-scrollbar { display: none; }
+
+/* ─── Off-Screen Virtual Skipping for 60-120fps on Low-End Devices ─── */
+.song-card,
+.playlist-shelf-card,
+.album-card,
+.artist-card {
+  content-visibility: auto;
+  contain-intrinsic-size: 0 68px;
+}
 
 .playlist-shelf-card:active {
   transform: scale(0.96);

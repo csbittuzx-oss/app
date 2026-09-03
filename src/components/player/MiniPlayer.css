@@ -35,6 +35,9 @@
   cursor: pointer;
   user-select: none;
   -webkit-user-select: none;
+  transform: translateZ(0);
+  will-change: transform;
+  backface-visibility: hidden;
 
   /* Semi-Opaque Frosted Pearl / Milky Liquid Glass (Dark Theme) */
   background: linear-gradient(

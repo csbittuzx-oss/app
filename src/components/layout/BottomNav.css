@@ -84,6 +84,9 @@
   padding: 4px;
   box-sizing: border-box;
   overflow: hidden;
+  transform: translateZ(0);
+  will-change: transform;
+  backface-visibility: hidden;
 
   /* Semi-Opaque Frosted Pearl / Milky Liquid Glass (Dark Theme) */
   background: linear-gradient(

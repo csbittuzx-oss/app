@@ -1,3 +1,4 @@
+import React from 'react';
 import type { Album } from '../../data/models';
 import { useApp } from '../../state/AppContext';
 import { CONFIG } from '../../config';
@@ -9,7 +10,7 @@ interface AlbumCardProps {
   onClick?: (album: Album) => void;
 }
 
-export function AlbumCard({ album, size = 144, onClick }: AlbumCardProps) {
+function AlbumCardComponent({ album, size = 144, onClick }: AlbumCardProps) {
   const { nav: { navigate } } = useApp();
 
   const handleClick = () => {
@@ -29,11 +30,12 @@ export function AlbumCard({ album, size = 144, onClick }: AlbumCardProps) {
     >
       <div style={{ position: 'relative' }}>
         <img
-          src={resizeImageUrl(album.artwork, 544, 544)}
+          src={resizeImageUrl(album.artwork, 240, 240)}
           alt={`${album.title} album cover`}
           width={size}
           height={size}
           loading="lazy"
+          decoding="async"
           onError={(e) => { (e.target as HTMLImageElement).src = CONFIG.ARTWORK_PLACEHOLDER; }}
           style={{
             borderRadius: 'var(--radius-lg)',
@@ -67,3 +69,5 @@ export function AlbumCard({ album, size = 144, onClick }: AlbumCardProps) {
     </div>
   );
 }
+
+export const AlbumCard = React.memo(AlbumCardComponent);

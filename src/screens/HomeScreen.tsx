@@ -639,8 +639,10 @@ export function HomeScreen({ isVisible = true }: { isVisible?: boolean }) {
                     }}
                   >
                     <img
-                      src={resizeImageUrl(song.artworkLg || song.artwork, 544, 544)}
+                      src={resizeImageUrl(song.artworkLg || song.artwork, 240, 240)}
                       alt={song.title}
+                      loading="lazy"
+                      decoding="async"
                       style={{
                         width: '100%',
                         height: '100%',
@@ -767,8 +769,10 @@ export function HomeScreen({ isVisible = true }: { isVisible?: boolean }) {
                     }}
                   >
                     <img
-                      src={resizeImageUrl(art, 544, 544)}
+                      src={resizeImageUrl(art, 240, 240)}
                       alt={playlist.title}
+                      loading="lazy"
+                      decoding="async"
                       style={{ width: '100%', height: '100%', objectFit: 'cover' }}
                       onError={(e) => {
                         (e.target as HTMLImageElement).src = CONFIG.ARTWORK_PLACEHOLDER;
@@ -1002,8 +1006,10 @@ export function HomeScreen({ isVisible = true }: { isVisible?: boolean }) {
                       </div>
                     ) : (
                       <img
-                        src={resizeImageUrl(playlist.artwork || thumbs[0], 544, 544)}
+                        src={resizeImageUrl(playlist.artwork || thumbs[0], 240, 240)}
                         alt={playlist.title}
+                        loading="lazy"
+                        decoding="async"
                         style={{ width: '100%', height: '100%', objectFit: 'cover' }}
                         onError={(e) => {
                           (e.target as HTMLImageElement).src = CONFIG.ARTWORK_PLACEHOLDER;

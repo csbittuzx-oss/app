@@ -1,3 +1,4 @@
+import React from 'react';
 import type { Artist } from '../../data/models';
 import { useApp } from '../../state/AppContext';
 import { getArtistProfileImageSync, getArtistAvatarPlaceholder } from '../../services/ArtistProfileService';
@@ -9,7 +10,7 @@ interface ArtistCardProps {
   onClick?: (artist: Artist) => void;
 }
 
-export function ArtistCard({ artist, size = 80, onClick }: ArtistCardProps) {
+function ArtistCardComponent({ artist, size = 80, onClick }: ArtistCardProps) {
   const { nav: { navigate }, isFavoriteArtist } = useApp();
 
   const handleClick = () => {
@@ -19,7 +20,7 @@ export function ArtistCard({ artist, size = 80, onClick }: ArtistCardProps) {
 
   const isFollowed = isFavoriteArtist(artist.id);
   const rawPhotoUrl = artist.profileImage || artist.image || getArtistProfileImageSync(artist.name);
-  const photoUrl = resizeImageUrl(rawPhotoUrl, 544, 544);
+  const photoUrl = resizeImageUrl(rawPhotoUrl, 160, 160);
 
   return (
     <div
@@ -41,6 +42,7 @@ export function ArtistCard({ artist, size = 80, onClick }: ArtistCardProps) {
           width={size}
           height={size}
           loading="lazy"
+          decoding="async"
           onError={(e) => {
             (e.target as HTMLImageElement).src = getArtistAvatarPlaceholder(artist.name);
           }}
@@ -83,3 +85,5 @@ export function ArtistCard({ artist, size = 80, onClick }: ArtistCardProps) {
     </div>
   );
 }
+
+export const ArtistCard = React.memo(ArtistCardComponent);

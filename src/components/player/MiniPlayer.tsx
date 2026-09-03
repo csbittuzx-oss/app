@@ -31,11 +31,12 @@ export function MiniPlayer() {
         {/* Artwork */}
         <img
           key={currentSong.id}
-          src={resizeImageUrl(currentSong.artworkLg || currentSong.artwork, 544, 544)}
+          src={resizeImageUrl(currentSong.artworkLg || currentSong.artwork, 160, 160)}
           alt={`${currentSong.album} artwork`}
           width={42}
           height={42}
           loading="eager"
+          decoding="async"
           className="mini-player-art"
           onError={(e) => { (e.target as HTMLImageElement).src = CONFIG.ARTWORK_PLACEHOLDER; }}
         />

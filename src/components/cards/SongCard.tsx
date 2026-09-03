@@ -56,7 +56,7 @@ function EqBars() {
   );
 }
 
-export function SongCard({
+function SongCardComponent({
   song,
   queue,
   index = 0,
@@ -348,11 +348,12 @@ export function SongCard({
         {/* Artwork */}
         <div style={{ position: 'relative', flexShrink: 0 }}>
           <img
-            src={resizeImageUrl(song.artworkLg || song.artwork, 544, 544)}
+            src={resizeImageUrl(song.artworkLg || song.artwork, 160, 160)}
             alt={`${song.album} artwork`}
             width={compact ? 44 : 52}
             height={compact ? 44 : 52}
             loading="lazy"
+            decoding="async"
             onError={(e) => { (e.target as HTMLImageElement).src = CONFIG.ARTWORK_PLACEHOLDER; }}
             style={{
               borderRadius: 'var(--radius-md)',
@@ -453,7 +454,7 @@ interface AlbumStyleCardProps {
   size?: number;
 }
 
-export function SongSquareCard({ song, queue, index = 0, size = 144 }: AlbumStyleCardProps) {
+function SongSquareCardComponent({ song, queue, index = 0, size = 144 }: AlbumStyleCardProps) {
   const { playSong, state: playerState } = usePlayer();
   const { addRecentlyPlayed } = useApp();
   const isCurrentSong = playerState.currentSong?.id === song.id;
@@ -476,11 +477,12 @@ export function SongSquareCard({ song, queue, index = 0, size = 144 }: AlbumStyl
     >
       <div style={{ position: 'relative' }}>
         <img
-          src={resizeImageUrl(song.artworkLg || song.artwork, 544, 544)}
+          src={resizeImageUrl(song.artworkLg || song.artwork, 240, 240)}
           alt={`${song.album} artwork`}
           width={size}
           height={size}
           loading="lazy"
+          decoding="async"
           onError={(e) => { (e.target as HTMLImageElement).src = CONFIG.ARTWORK_PLACEHOLDER; }}
           style={{
             borderRadius: 'var(--radius-lg)',
@@ -514,3 +516,6 @@ export function SongSquareCard({ song, queue, index = 0, size = 144 }: AlbumStyl
     </div>
   );
 }
+
+export const SongSquareCard = React.memo(SongSquareCardComponent);
+export const SongCard = React.memo(SongCardComponent);

@@ -9,13 +9,13 @@ interface PlaylistShelfCardProps {
   size?: number;
 }
 
-export const PlaylistShelfCard: React.FC<PlaylistShelfCardProps> = ({
+const PlaylistShelfCardComponent: React.FC<PlaylistShelfCardProps> = ({
   playlist,
   onClick,
   size = 148,
 }) => {
   const rawArtwork = playlist.artwork || (playlist.tracks[0]?.artwork) || CONFIG.ARTWORK_PLACEHOLDER;
-  const artworkSrc = resizeImageUrl(rawArtwork, 544, 544);
+  const artworkSrc = resizeImageUrl(rawArtwork, 240, 240);
 
   return (
     <div
@@ -59,6 +59,7 @@ export const PlaylistShelfCard: React.FC<PlaylistShelfCardProps> = ({
           width={size}
           height={size}
           loading="lazy"
+          decoding="async"
           onError={(e) => {
             (e.target as HTMLImageElement).src = CONFIG.ARTWORK_PLACEHOLDER;
           }}
@@ -142,3 +143,5 @@ export const PlaylistShelfCard: React.FC<PlaylistShelfCardProps> = ({
     </div>
   );
 };
+
+export const PlaylistShelfCard = React.memo(PlaylistShelfCardComponent);
