@@ -18,7 +18,6 @@ export function SettingsScreen() {
   const [updateModalInfo, setUpdateModalInfo] = useState<AppUpdateInfo | null>(null);
   const [selectedLangs, setSelectedLangs] = useState<string[]>(state.musicLanguages || ['Hindi', 'International']);
 
-  const isDark = state.theme === 'dark';
   const audioQuality: AudioQuality = state.config.audioQuality || 'high';
   const autoUpdate = state.config.autoUpdate ?? true;
 
@@ -96,61 +95,6 @@ export function SettingsScreen() {
         </header>
 
         <div style={{ padding: '0 20px', display: 'flex', flexDirection: 'column', gap: 24 }}>
-
-          {/* ── 1. Appearance / Dark Theme ── */}
-          <section aria-label="Appearance">
-            <h2 style={{
-              margin: '0 0 10px',
-              fontSize: 'var(--text-xs)',
-              fontWeight: 700,
-              color: 'var(--color-text-muted)',
-              textTransform: 'uppercase',
-              letterSpacing: '0.08em',
-            }}>
-              Appearance
-            </h2>
-            <div style={{
-              background: 'var(--color-surface)',
-              border: '1px solid var(--color-border)',
-              borderRadius: 'var(--radius-lg)',
-              padding: '14px 16px',
-              display: 'flex',
-              alignItems: 'center',
-              justifyContent: 'space-between',
-            }}>
-              <div style={{ display: 'flex', alignItems: 'center', gap: 14 }}>
-                <div style={{
-                  width: 40,
-                  height: 40,
-                  borderRadius: 'var(--radius-md)',
-                  background: 'var(--color-surface-2)',
-                  display: 'flex',
-                  alignItems: 'center',
-                  justifyContent: 'center',
-                  color: 'var(--color-accent)',
-                  flexShrink: 0,
-                }}>
-                  <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                    <path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z" />
-                  </svg>
-                </div>
-                <div>
-                  <p style={{ margin: 0, fontWeight: 600, fontSize: 'var(--text-md)', color: 'var(--color-text-primary)' }}>
-                    Dark Theme
-                  </p>
-                  <p style={{ margin: '2px 0 0', fontSize: 'var(--text-xs)', color: 'var(--color-text-secondary)' }}>
-                    {isDark ? 'Dark OLED mode enabled' : 'Light mode enabled (Default)'}
-                  </p>
-                </div>
-              </div>
-              <ToggleSwitch
-                id="theme-switch-toggle"
-                checked={isDark}
-                onChange={() => dispatch({ type: 'SET_THEME', payload: isDark ? 'light' : 'dark' })}
-                label="Switch Dark Theme"
-              />
-            </div>
-          </section>
 
           {/* ── 2. Audio Quality ── */}
           <section aria-label="Audio Quality">
