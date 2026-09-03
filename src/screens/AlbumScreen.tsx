@@ -12,13 +12,14 @@ import { formatDuration } from '../core/utils';
 import { CONFIG } from '../config';
 import { resizeImageUrl } from '../core/utils/imageUtils';
 
-export function AlbumScreen() {
+export function AlbumScreen({ params: propParams }: { params?: Record<string, unknown> } = {}) {
   const { nav: { nav, goBack } } = useApp();
   const { playSong } = usePlayer();
 
-  const albumId = String(nav.params?.albumId || '');
-  const albumTitle = String(nav.params?.albumTitle || 'Album');
-  const albumArtist = String(nav.params?.albumArtist || '');
+  const effectiveParams = propParams || nav.params;
+  const albumId = String(effectiveParams?.albumId || '');
+  const albumTitle = String(effectiveParams?.albumTitle || 'Album');
+  const albumArtist = String(effectiveParams?.albumArtist || '');
 
   const [tracks, setTracks] = useState<Song[]>([]);
   const [albumWiki, setAlbumWiki] = useState<LastFmAlbumInfo | null>(null);

@@ -102,38 +102,21 @@ const NAV_TABS = [
 // ─── Liquid Glass BottomNav Component ─────────────────────────────────────────
 
 export function BottomNav() {
-  const { nav: { nav, history, navigate } } = useApp();
-
-  // Resolve current active tab:
-  // If user is on a detail screen (e.g. playlist, album, artist, downloads),
-  // trace back in navigation history to identify the originating tab (e.g. library, search, home).
-  let resolvedTab: string = nav.screen === 'profile' ? 'settings' : nav.screen;
-  const isDirectMainTab = NAV_TABS.some((t) => t.id === resolvedTab);
-
-  if (!isDirectMainTab && history && history.length > 0) {
-    for (let i = history.length - 1; i >= 0; i--) {
-      const s = history[i].screen === 'profile' ? 'settings' : history[i].screen;
-      if (NAV_TABS.some((t) => t.id === s)) {
-        resolvedTab = s;
-        break;
-      }
-    }
-  }
+  const { nav: { activeTab, navigate } } = useApp();
 
   // Resolve current active tab index (0: Home, 1: Search, 2: Library, 3: Settings)
-  const tabIndex = NAV_TABS.findIndex((t) => t.id === resolvedTab);
+  const tabIndex = NAV_TABS.findIndex((t) => t.id === activeTab);
   const activeIndex = tabIndex >= 0 ? tabIndex : 0;
 
   const handleTabClick = (id: string) => {
-    if (id === 'home' && nav.screen === 'home') {
+    if (id === 'home' && activeTab === 'home') {
       resetHomeScrollPosition();
       const homeScroll = document.querySelector('.scroll-area');
       if (homeScroll) {
         homeScroll.scrollTo({ top: 0, behavior: 'smooth' });
       }
-    } else {
-      navigate(id as Screen);
     }
+    navigate(id as Screen);
   };
 
   return (
@@ -158,7 +141,7 @@ export function BottomNav() {
 
         {/* Navigation Tab Buttons */}
         {NAV_TABS.map((tab) => {
-          const isActive = resolvedTab === tab.id;
+          const isActive = activeTab === tab.id;
           const { Icon, id, label } = tab;
 
           return (

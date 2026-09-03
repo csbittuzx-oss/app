@@ -13,12 +13,13 @@ import { enrichSpotifyTracksArtwork } from '../data/api/spotifyApi';
 import { resizeImageUrl } from '../core/utils/imageUtils';
 import type { Playlist } from '../data/models';
 
-export function PlaylistScreen() {
+export function PlaylistScreen({ params: propParams }: { params?: Record<string, unknown> } = {}) {
   const { nav: { nav, goBack }, state, updatePlaylistTracks } = useApp();
   const { playSong } = usePlayer();
 
-  const playlistId = String(nav.params?.playlistId || '');
-  const playlistParam = nav.params?.playlist as Playlist | undefined;
+  const effectiveParams = propParams || nav.params;
+  const playlistId = String(effectiveParams?.playlistId || '');
+  const playlistParam = effectiveParams?.playlist as Playlist | undefined;
   const [offlinePlaylist, setOfflinePlaylist] = useState<Playlist | null>(null);
 
   useEffect(() => {

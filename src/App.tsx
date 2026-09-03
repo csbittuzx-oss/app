@@ -16,34 +16,138 @@ import { ArtistScreen } from './screens/ArtistScreen';
 import { AlbumScreen } from './screens/AlbumScreen';
 import { PlaylistScreen } from './screens/PlaylistScreen';
 
-// ─── Screen Router ────────────────────────────────────────────────────────────
+// ─── Screen Router (Parallel Multi-Stack Tab Viewports) ──────────────────────
 
 function ScreenRouter() {
-  const { nav: { nav } } = useApp();
-  const screen = nav.screen;
+  const { nav: { activeTab, tabStacks } } = useApp();
 
-  const isHome = screen === 'home';
+  const homeStack = tabStacks.home;
+  const searchStack = tabStacks.search;
+  const libraryStack = tabStacks.library;
+  const settingsStack = tabStacks.settings;
+
+  const renderChildScreen = (item: { screen: string; params?: Record<string, unknown> } | undefined) => {
+    if (!item) return null;
+    switch (item.screen) {
+      case 'playlist':
+        return <PlaylistScreen params={item.params} />;
+      case 'album':
+        return <AlbumScreen params={item.params} />;
+      case 'artist':
+        return <ArtistScreen params={item.params} />;
+      case 'downloads':
+        return <DownloadsScreen />;
+      case 'queue':
+        return <QueueScreen />;
+      case 'settings':
+      case 'profile':
+        return <SettingsScreen />;
+      default:
+        return null;
+    }
+  };
 
   return (
     <div style={{ flex: 1, display: 'flex', flexDirection: 'column', height: '100%', width: '100%', position: 'relative', overflow: 'hidden' }}>
-      {/* Home Screen - persistent wrapper preserves scroll offset and feed state seamlessly */}
+      {/* ─── 1. HOME TAB VIEWPORT ─── */}
       <div style={{
-        display: isHome ? 'flex' : 'none',
+        display: activeTab === 'home' ? 'flex' : 'none',
         flexDirection: 'column',
         height: '100%',
         width: '100%',
         flex: 1,
+        position: 'relative',
       }}>
-        <HomeScreen isVisible={isHome} />
+        <div style={{
+          display: homeStack.length <= 1 ? 'flex' : 'none',
+          flexDirection: 'column',
+          height: '100%',
+          width: '100%',
+          flex: 1,
+        }}>
+          <HomeScreen isVisible={activeTab === 'home' && homeStack.length <= 1} />
+        </div>
+        {homeStack.length > 1 && (
+          <div style={{ display: 'flex', flexDirection: 'column', height: '100%', width: '100%', flex: 1 }}>
+            {renderChildScreen(homeStack[homeStack.length - 1])}
+          </div>
+        )}
       </div>
 
-      {screen === 'search' && <SearchScreen />}
-      {screen === 'library' && <LibraryScreen />}
-      {screen === 'downloads' && <DownloadsScreen />}
-      {(screen === 'settings' || screen === 'profile') && <SettingsScreen />}
-      {screen === 'artist' && <ArtistScreen />}
-      {screen === 'album' && <AlbumScreen />}
-      {screen === 'playlist' && <PlaylistScreen />}
+      {/* ─── 2. SEARCH TAB VIEWPORT (Persistent query, suggestions & results) ─── */}
+      <div style={{
+        display: activeTab === 'search' ? 'flex' : 'none',
+        flexDirection: 'column',
+        height: '100%',
+        width: '100%',
+        flex: 1,
+        position: 'relative',
+      }}>
+        <div style={{
+          display: searchStack.length <= 1 ? 'flex' : 'none',
+          flexDirection: 'column',
+          height: '100%',
+          width: '100%',
+          flex: 1,
+        }}>
+          <SearchScreen />
+        </div>
+        {searchStack.length > 1 && (
+          <div style={{ display: 'flex', flexDirection: 'column', height: '100%', width: '100%', flex: 1 }}>
+            {renderChildScreen(searchStack[searchStack.length - 1])}
+          </div>
+        )}
+      </div>
+
+      {/* ─── 3. LIBRARY TAB VIEWPORT (Persistent playlists, downloads & stacks) ─── */}
+      <div style={{
+        display: activeTab === 'library' ? 'flex' : 'none',
+        flexDirection: 'column',
+        height: '100%',
+        width: '100%',
+        flex: 1,
+        position: 'relative',
+      }}>
+        <div style={{
+          display: libraryStack.length <= 1 ? 'flex' : 'none',
+          flexDirection: 'column',
+          height: '100%',
+          width: '100%',
+          flex: 1,
+        }}>
+          <LibraryScreen />
+        </div>
+        {libraryStack.length > 1 && (
+          <div style={{ display: 'flex', flexDirection: 'column', height: '100%', width: '100%', flex: 1 }}>
+            {renderChildScreen(libraryStack[libraryStack.length - 1])}
+          </div>
+        )}
+      </div>
+
+      {/* ─── 4. SETTINGS TAB VIEWPORT ─── */}
+      <div style={{
+        display: activeTab === 'settings' ? 'flex' : 'none',
+        flexDirection: 'column',
+        height: '100%',
+        width: '100%',
+        flex: 1,
+        position: 'relative',
+      }}>
+        <div style={{
+          display: settingsStack.length <= 1 ? 'flex' : 'none',
+          flexDirection: 'column',
+          height: '100%',
+          width: '100%',
+          flex: 1,
+        }}>
+          <SettingsScreen />
+        </div>
+        {settingsStack.length > 1 && (
+          <div style={{ display: 'flex', flexDirection: 'column', height: '100%', width: '100%', flex: 1 }}>
+            {renderChildScreen(settingsStack[settingsStack.length - 1])}
+          </div>
+        )}
+      </div>
     </div>
   );
 }

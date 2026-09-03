@@ -319,6 +319,15 @@ function generateId(): string {
 
 // ─── Context ─────────────────────────────────────────────────────────────────
 
+export type MainTab = 'home' | 'search' | 'library' | 'settings';
+
+export interface TabStacks {
+  home: NavState[];
+  search: NavState[];
+  library: NavState[];
+  settings: NavState[];
+}
+
 export interface NavState {
   screen: Screen;
   params?: Record<string, unknown>;
@@ -329,6 +338,8 @@ export interface AppContextValue {
   dispatch: React.Dispatch<AppAction>;
   nav: {
     nav: NavState;
+    activeTab: MainTab;
+    tabStacks: TabStacks;
     history: NavState[];
     navigate: (screen: Screen, params?: Record<string, unknown>) => void;
     goBack: () => boolean;
@@ -363,28 +374,99 @@ const AppContext = createContext<AppContextValue | null>(null);
 
 export function AppProvider({ children }: { children: ReactNode }) {
   const [state, dispatch] = useReducer(appReducer, initialState);
-  const [history, setHistory] = useState<NavState[]>([{ screen: 'home' }]);
-  const historyRef = useRef<NavState[]>([{ screen: 'home' }]);
 
-  const currentNav = history[history.length - 1] || { screen: 'home' };
+  // ── Multi-Stack Tab Navigation ──
+  const [activeTab, setActiveTab] = useState<MainTab>('home');
+  const [tabStacks, setTabStacks] = useState<TabStacks>({
+    home: [{ screen: 'home' }],
+    search: [{ screen: 'search' }],
+    library: [{ screen: 'library' }],
+    settings: [{ screen: 'settings' }],
+  });
+
+  const activeTabRef = useRef<MainTab>('home');
+  activeTabRef.current = activeTab;
+
+  const tabStacksRef = useRef<TabStacks>({
+    home: [{ screen: 'home' }],
+    search: [{ screen: 'search' }],
+    library: [{ screen: 'library' }],
+    settings: [{ screen: 'settings' }],
+  });
+  tabStacksRef.current = tabStacks;
+
+  const currentStack = tabStacks[activeTab] || [{ screen: 'home' }];
+  const currentNav = currentStack[currentStack.length - 1] || { screen: activeTab };
 
   const navigate = (screen: Screen, params?: Record<string, unknown>) => {
-    const last = historyRef.current[historyRef.current.length - 1];
-    if (last && last.screen === screen && JSON.stringify(last.params || {}) === JSON.stringify(params || {})) {
+    const targetTab: MainTab | null =
+      screen === 'home' ? 'home' :
+      screen === 'search' ? 'search' :
+      screen === 'library' ? 'library' :
+      (screen === 'settings' || screen === 'profile') ? 'settings' :
+      null;
+
+    if (targetTab !== null) {
+      if (activeTabRef.current === targetTab) {
+        // Tapping the currently active tab: pop to root if deep in stack
+        const currentTabStack = tabStacksRef.current[targetTab];
+        if (currentTabStack.length > 1) {
+          const newStacks: TabStacks = {
+            ...tabStacksRef.current,
+            [targetTab]: [{ screen: targetTab }],
+          };
+          tabStacksRef.current = newStacks;
+          setTabStacks(newStacks);
+        }
+      } else {
+        // Switching to another tab: preserve that tab's entire navigation stack and UI state!
+        activeTabRef.current = targetTab;
+        setActiveTab(targetTab);
+      }
       return;
     }
-    const next = [...historyRef.current, { screen, params }];
-    historyRef.current = next;
-    setHistory(next);
+
+    // Navigating to a subscreen (playlist, album, artist, downloads, queue) on the active tab
+    const curTab = activeTabRef.current;
+    const curTabStack = tabStacksRef.current[curTab];
+    const lastItem = curTabStack[curTabStack.length - 1];
+
+    if (lastItem && lastItem.screen === screen && JSON.stringify(lastItem.params || {}) === JSON.stringify(params || {})) {
+      return;
+    }
+
+    const nextStack = [...curTabStack, { screen, params }];
+    const newStacks: TabStacks = {
+      ...tabStacksRef.current,
+      [curTab]: nextStack,
+    };
+    tabStacksRef.current = newStacks;
+    setTabStacks(newStacks);
   };
 
   const goBack = (): boolean => {
-    if (historyRef.current.length > 1) {
-      const next = historyRef.current.slice(0, -1);
-      historyRef.current = next;
-      setHistory(next);
+    const curTab = activeTabRef.current;
+    const curTabStack = tabStacksRef.current[curTab];
+
+    if (curTabStack.length > 1) {
+      // Pop the current detail screen from the active tab's stack
+      const nextStack = curTabStack.slice(0, -1);
+      const newStacks: TabStacks = {
+        ...tabStacksRef.current,
+        [curTab]: nextStack,
+      };
+      tabStacksRef.current = newStacks;
+      setTabStacks(newStacks);
       return true;
     }
+
+    // If active tab is at root (length === 1) and not home, navigate back to home
+    if (curTab !== 'home') {
+      activeTabRef.current = 'home';
+      setActiveTab('home');
+      return true;
+    }
+
     return false;
   };
 
@@ -435,7 +517,9 @@ export function AppProvider({ children }: { children: ReactNode }) {
     dispatch,
     nav: {
       nav: currentNav,
-      history,
+      activeTab,
+      tabStacks,
+      history: currentStack,
       navigate,
       goBack,
     },

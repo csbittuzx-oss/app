@@ -12,11 +12,13 @@ import { formatNumber } from '../core/utils';
 
 import { resizeImageUrl } from '../core/utils/imageUtils';
 
-export function ArtistScreen() {
+export function ArtistScreen({ params: propParams }: { params?: Record<string, unknown> } = {}) {
   const { nav: { nav, goBack }, isFavoriteArtist, toggleFavoriteArtist } = useApp();
   const { playSong: _playSong } = usePlayer();
-  const artistName = String(nav.params?.artistName || '');
-  const initialArtist = nav.params?.artist as Artist | undefined;
+
+  const effectiveParams = propParams || nav.params;
+  const artistName = String(effectiveParams?.artistName || '');
+  const initialArtist = effectiveParams?.artist as Artist | undefined;
 
   const [artist, setArtist] = useState<Artist | null>(initialArtist || null);
   const [topTracks, setTopTracks] = useState<Song[]>([]);
