@@ -110,24 +110,22 @@ export function BottomNav() {
   const activeIndex = tabIndex >= 0 ? tabIndex : 0;
 
   // Spring & Liquid Morph State Tracking
-  const [isMorphing, setIsMorphing] = useState(false);
   const prevIndexRef = useRef(activeIndex);
+  const isFirstRender = useRef(true);
   const [slideDirection, setSlideDirection] = useState<'right' | 'left' | 'none'>('none');
-  const [slideDistance, setSlideDistance] = useState(1);
+  const [morphKey, setMorphKey] = useState(0);
 
   useEffect(() => {
+    if (isFirstRender.current) {
+      isFirstRender.current = false;
+      prevIndexRef.current = activeIndex;
+      return;
+    }
     if (prevIndexRef.current !== activeIndex) {
-      const dist = Math.abs(activeIndex - prevIndexRef.current);
       const dir = activeIndex > prevIndexRef.current ? 'right' : 'left';
       setSlideDirection(dir);
-      setSlideDistance(dist);
-      setIsMorphing(true);
+      setMorphKey((k) => k + 1);
       prevIndexRef.current = activeIndex;
-
-      const timer = setTimeout(() => {
-        setIsMorphing(false);
-      }, 420);
-      return () => clearTimeout(timer);
     }
   }, [activeIndex]);
 
@@ -148,28 +146,29 @@ export function BottomNav() {
       className="bottom-nav-root"
       aria-label="Main navigation"
     >
-      {/* Smooth Frosted Glass Background Blur Layer (starts from bottom nav top down to screen bottom) */}
+      {/* Smooth Frosted Glass Background Blur Layer */}
       <div className="bottom-nav-blur-underlay" aria-hidden="true" />
 
       {/* Floating Liquid Glass Island */}
-      <div
-        className={`bottom-nav-island ${isMorphing ? `is-morphing-${slideDirection}` : ''}`}
-        style={{
-          '--active-tab-index': activeIndex,
-          '--slide-distance': slideDistance,
-        } as React.CSSProperties}
-      >
-        {/* Sliding Liquid-Glass Capsule Indicator with Spring Physics */}
+      <div className="bottom-nav-island">
+        {/* Sliding Liquid-Glass Capsule Indicator with Spring Physics (Persistently Mounted) */}
         <div
-          className={`bottom-nav-active-capsule ${isMorphing ? 'is-animating' : ''}`}
+          className="bottom-nav-active-capsule"
           style={{
             transform: `translate3d(${activeIndex * 100}%, 0, 0)`,
           }}
           aria-hidden="true"
         >
-          {/* Inner Liquid Glow & Specular Light Lens */}
-          <div className="bottom-nav-capsule-glass-glow" />
-          <div className="bottom-nav-capsule-specular-lens" />
+          {/* Inner Liquid Glass Body with Fluid Inertial Stretch & Specular Highlights */}
+          <div
+            key={morphKey}
+            className={`bottom-nav-capsule-glass-body ${
+              slideDirection !== 'none' ? `is-stretching-${slideDirection}` : ''
+            }`}
+          >
+            <div className="bottom-nav-capsule-glass-glow" />
+            <div className="bottom-nav-capsule-specular-lens" />
+          </div>
         </div>
 
         {/* Navigation Tab Buttons */}
