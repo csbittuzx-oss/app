@@ -504,9 +504,15 @@ export function SettingsScreen() {
                 <img
                   src="/logo.png"
                   alt="Soundwave Logo"
-                  width={60}
-                  height={60}
-                  style={{ borderRadius: 'var(--radius-lg)', objectFit: 'cover', border: '1px solid var(--color-border)' }}
+                  width={64}
+                  height={64}
+                  style={{
+                    borderRadius: '50%',
+                    objectFit: 'cover',
+                    background: 'var(--color-surface-2)',
+                    border: '2px solid var(--color-border)',
+                    boxShadow: '0 4px 16px rgba(0,0,0,0.15)',
+                  }}
                 />
                 <div>
                   <h3 style={{ margin: 0, fontFamily: 'var(--font-display)', fontSize: 'var(--text-xl)', color: 'var(--color-text-primary)' }}>

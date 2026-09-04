@@ -76,17 +76,19 @@ export function UpdateModal({ updateInfo, isOpen, onClose }: UpdateModalProps) {
         <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
           <div style={{ display: 'flex', alignItems: 'center', gap: 14 }}>
             <img
-              src="/favicon.png"
+              src="/logo.png"
               alt="Soundwave"
               width={52}
               height={52}
               style={{
                 width: 52,
                 height: 52,
-                borderRadius: '14px',
+                borderRadius: '50%',
                 objectFit: 'cover',
                 display: 'block',
                 flexShrink: 0,
+                background: 'var(--color-surface-2)',
+                border: '1.5px solid var(--color-border)',
                 boxShadow: '0 4px 14px rgba(0, 0, 0, 0.25)',
               }}
               onError={(e) => {

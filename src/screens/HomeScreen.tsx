@@ -517,9 +517,11 @@ export function HomeScreen({ isVisible = true }: { isVisible?: boolean }) {
             width={40}
             height={40}
             style={{
-              borderRadius: 'var(--radius-md, 10px)',
+              borderRadius: '50%',
               objectFit: 'cover',
-              border: '1px solid var(--color-border)',
+              background: 'var(--color-surface-2)',
+              border: '1.5px solid var(--color-border)',
+              boxShadow: '0 2px 8px rgba(0,0,0,0.12)',
             }}
           />
           <div>
