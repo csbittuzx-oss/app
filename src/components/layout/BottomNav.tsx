@@ -1,3 +1,4 @@
+import { useState, useEffect, useRef } from 'react';
 import type { Screen } from '../../data/models';
 import { useApp } from '../../state/AppContext';
 import { resetHomeScrollPosition } from '../../screens/HomeScreen';
@@ -108,6 +109,28 @@ export function BottomNav() {
   const tabIndex = NAV_TABS.findIndex((t) => t.id === activeTab);
   const activeIndex = tabIndex >= 0 ? tabIndex : 0;
 
+  // Spring & Liquid Morph State Tracking
+  const [isMorphing, setIsMorphing] = useState(false);
+  const prevIndexRef = useRef(activeIndex);
+  const [slideDirection, setSlideDirection] = useState<'right' | 'left' | 'none'>('none');
+  const [slideDistance, setSlideDistance] = useState(1);
+
+  useEffect(() => {
+    if (prevIndexRef.current !== activeIndex) {
+      const dist = Math.abs(activeIndex - prevIndexRef.current);
+      const dir = activeIndex > prevIndexRef.current ? 'right' : 'left';
+      setSlideDirection(dir);
+      setSlideDistance(dist);
+      setIsMorphing(true);
+      prevIndexRef.current = activeIndex;
+
+      const timer = setTimeout(() => {
+        setIsMorphing(false);
+      }, 420);
+      return () => clearTimeout(timer);
+    }
+  }, [activeIndex]);
+
   const handleTabClick = (id: string) => {
     if (id === 'home' && activeTab === 'home') {
       resetHomeScrollPosition();
@@ -129,15 +152,25 @@ export function BottomNav() {
       <div className="bottom-nav-blur-underlay" aria-hidden="true" />
 
       {/* Floating Liquid Glass Island */}
-      <div className="bottom-nav-island">
+      <div
+        className={`bottom-nav-island ${isMorphing ? `is-morphing-${slideDirection}` : ''}`}
+        style={{
+          '--active-tab-index': activeIndex,
+          '--slide-distance': slideDistance,
+        } as React.CSSProperties}
+      >
         {/* Sliding Liquid-Glass Capsule Indicator with Spring Physics */}
         <div
-          className="bottom-nav-active-capsule"
+          className={`bottom-nav-active-capsule ${isMorphing ? 'is-animating' : ''}`}
           style={{
             transform: `translate3d(${activeIndex * 100}%, 0, 0)`,
           }}
           aria-hidden="true"
-        />
+        >
+          {/* Inner Liquid Glow & Specular Light Lens */}
+          <div className="bottom-nav-capsule-glass-glow" />
+          <div className="bottom-nav-capsule-specular-lens" />
+        </div>
 
         {/* Navigation Tab Buttons */}
         {NAV_TABS.map((tab) => {

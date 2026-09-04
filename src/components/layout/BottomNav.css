@@ -1,9 +1,9 @@
 /* ══════════════════════════════════════════════════════════════════════════════
-   SOUNDWAVE — Semi-Opaque Frosted Pearl Liquid Glass Bottom Navigation
-   • Medium Opacity Frosted Glass (0.90 - 0.93 opacity)
-   • Soft Milky/Pearl Surface with Subtle Refraction
-   • Diffused Background Content — Zero Confusing Overlap
-   • Ultra-Sharp Navigation Icons, Contrast Labels & Neutral Active Pill
+   SOUNDWAVE — Premium Liquid Glass Bottom Navigation & Fluid Spring Morph
+   • Floating Translucent Frosted Glass Island
+   • Large Smooth Rounded Liquid-Glass Pill / Bubble with Soft Refraction
+   • Fluid Spring & Liquid Deformation Interaction (No Flickering / Sudden Jumps)
+   • High Visual Contrast for Active vs Clean Inactive Items
    • Edge-to-Edge Android Safe Area Compliance
    ══════════════════════════════════════════════════════════════════════════════ */
 
@@ -30,30 +30,30 @@
   bottom: 0; /* Extends to the very bottom edge of the screen */
   pointer-events: none;
   z-index: 0;
-  backdrop-filter: blur(24px) saturate(170%);
-  -webkit-backdrop-filter: blur(24px) saturate(170%);
+  backdrop-filter: blur(28px) saturate(180%);
+  -webkit-backdrop-filter: blur(28px) saturate(180%);
   background: linear-gradient(
     to bottom,
     rgba(10, 10, 18, 0) 0%,
-    rgba(10, 10, 18, 0.05) 20%,
-    rgba(10, 10, 18, 0.3) 48%,
-    rgba(10, 10, 18, 0.72) 76%,
-    rgba(10, 10, 18, 0.94) 100%
+    rgba(10, 10, 18, 0.06) 18%,
+    rgba(10, 10, 18, 0.32) 46%,
+    rgba(10, 10, 18, 0.74) 74%,
+    rgba(10, 10, 18, 0.95) 100%
   );
   mask-image: linear-gradient(
     to bottom,
     rgba(0, 0, 0, 0) 0%,
-    rgba(0, 0, 0, 0.04) 18%,
-    rgba(0, 0, 0, 0.25) 42%,
-    rgba(0, 0, 0, 0.65) 68%,
+    rgba(0, 0, 0, 0.04) 16%,
+    rgba(0, 0, 0, 0.28) 42%,
+    rgba(0, 0, 0, 0.7) 68%,
     rgba(0, 0, 0, 1) 90%
   );
   -webkit-mask-image: linear-gradient(
     to bottom,
     rgba(0, 0, 0, 0) 0%,
-    rgba(0, 0, 0, 0.04) 18%,
-    rgba(0, 0, 0, 0.25) 42%,
-    rgba(0, 0, 0, 0.65) 68%,
+    rgba(0, 0, 0, 0.04) 16%,
+    rgba(0, 0, 0, 0.28) 42%,
+    rgba(0, 0, 0, 0.7) 68%,
     rgba(0, 0, 0, 1) 90%
   );
 }
@@ -62,10 +62,10 @@
   background: linear-gradient(
     to bottom,
     rgba(248, 249, 252, 0) 0%,
-    rgba(248, 249, 252, 0.05) 20%,
-    rgba(248, 249, 252, 0.3) 48%,
-    rgba(248, 249, 252, 0.72) 76%,
-    rgba(248, 249, 252, 0.95) 100%
+    rgba(248, 249, 252, 0.06) 18%,
+    rgba(248, 249, 252, 0.32) 46%,
+    rgba(248, 249, 252, 0.74) 74%,
+    rgba(248, 249, 252, 0.96) 100%
   );
 }
 
@@ -76,7 +76,7 @@
   pointer-events: auto;
   width: calc(100% - 24px);
   max-width: 410px;
-  height: 62px;
+  height: 64px;
   margin: 4px 12px calc(10px + env(safe-area-inset-bottom, 0px)) 12px;
   border-radius: 9999px;
   display: flex;
@@ -88,75 +88,75 @@
   will-change: transform;
   backface-visibility: hidden;
 
-  /* Semi-Opaque Frosted Pearl / Milky Liquid Glass (Dark Theme) */
+  /* Translucent Frosted Glass with Soft Milky Depth (Dark Theme) */
   background: linear-gradient(
     145deg,
-    rgba(38, 42, 64, 0.88) 0%,
-    rgba(26, 28, 46, 0.92) 50%,
-    rgba(18, 20, 36, 0.94) 100%
+    rgba(34, 38, 60, 0.88) 0%,
+    rgba(24, 26, 44, 0.92) 50%,
+    rgba(16, 18, 32, 0.95) 100%
   );
-  backdrop-filter: blur(28px) saturate(180%) contrast(102%);
-  -webkit-backdrop-filter: blur(28px) saturate(180%) contrast(102%);
+  backdrop-filter: blur(32px) saturate(190%) contrast(104%);
+  -webkit-backdrop-filter: blur(32px) saturate(190%) contrast(104%);
 
-  /* Thin Soft Translucent Border & Top Specular Highlight */
-  border: 1px solid rgba(255, 255, 255, 0.16);
-  border-top: 1px solid rgba(255, 255, 255, 0.32);
-  border-bottom: 1px solid rgba(0, 0, 0, 0.3);
+  /* Soft Translucent Perimeter Highlight & Shadow */
+  border: 1px solid rgba(255, 255, 255, 0.18);
+  border-top: 1.2px solid rgba(255, 255, 255, 0.38);
+  border-bottom: 1px solid rgba(0, 0, 0, 0.35);
 
   /* Gentle Floating Shadow & Soft Inner Volumetric Light */
   box-shadow:
-    0 14px 34px -6px rgba(0, 0, 0, 0.6),
-    0 4px 14px -2px rgba(0, 0, 0, 0.4),
-    inset 0 1px 1.5px 0 rgba(255, 255, 255, 0.25),
-    inset 0 0 14px 0 rgba(255, 255, 255, 0.04);
+    0 16px 36px -6px rgba(0, 0, 0, 0.65),
+    0 4px 16px -2px rgba(0, 0, 0, 0.42),
+    inset 0 1.5px 2px 0 rgba(255, 255, 255, 0.28),
+    inset 0 0 16px 0 rgba(255, 255, 255, 0.05);
   
   user-select: none;
   -webkit-user-select: none;
 }
 
 [data-theme="light"] .bottom-nav-island {
-  /* Semi-Opaque Frosted Pearl / Milky Liquid Glass (Light Theme) */
+  /* Translucent Frosted Pearl Liquid Glass (Light Theme) */
   background: linear-gradient(
     145deg,
-    rgba(255, 255, 255, 0.94) 0%,
-    rgba(248, 250, 255, 0.91) 50%,
-    rgba(240, 244, 252, 0.94) 100%
+    rgba(255, 255, 255, 0.95) 0%,
+    rgba(248, 250, 255, 0.92) 50%,
+    rgba(240, 244, 252, 0.95) 100%
   );
-  backdrop-filter: blur(28px) saturate(180%) contrast(102%);
-  -webkit-backdrop-filter: blur(28px) saturate(180%) contrast(102%);
+  backdrop-filter: blur(32px) saturate(190%) contrast(104%);
+  -webkit-backdrop-filter: blur(32px) saturate(190%) contrast(104%);
 
   border: 1px solid rgba(255, 255, 255, 0.95);
-  border-top: 1px solid #FFFFFF;
+  border-top: 1.5px solid #FFFFFF;
   border-bottom: 1px solid rgba(0, 0, 0, 0.08);
 
   box-shadow:
-    0 12px 30px -4px rgba(15, 23, 42, 0.14),
-    0 4px 12px -2px rgba(15, 23, 42, 0.08),
+    0 14px 32px -4px rgba(15, 23, 42, 0.16),
+    0 4px 14px -2px rgba(15, 23, 42, 0.09),
     inset 0 1.5px 2px 0 #FFFFFF,
-    inset 0 0 14px 0 rgba(255, 255, 255, 0.6);
+    inset 0 0 16px 0 rgba(255, 255, 255, 0.65);
 }
 
-/* Subtle Glass Surface Top Reflection Beam */
+/* Glass Surface Top Specular Horizon Highlight */
 .bottom-nav-island::before {
   content: '';
   position: absolute;
   top: 0;
-  left: 10%;
-  right: 10%;
+  left: 8%;
+  right: 8%;
   height: 1px;
   background: linear-gradient(
     90deg,
     transparent 0%,
-    rgba(255, 255, 255, 0.5) 45%,
-    rgba(255, 255, 255, 0.8) 50%,
-    rgba(255, 255, 255, 0.5) 55%,
+    rgba(255, 255, 255, 0.45) 30%,
+    rgba(255, 255, 255, 0.85) 50%,
+    rgba(255, 255, 255, 0.45) 70%,
     transparent 100%
   );
   pointer-events: none;
   z-index: 4;
 }
 
-/* ── 4. Sliding Liquid-Glass Capsule (Active Tab Pill) ── */
+/* ── 4. Sliding Liquid-Glass Capsule / Active Bubble Indicator ── */
 .bottom-nav-active-capsule {
   position: absolute;
   top: 4px;
@@ -168,58 +168,125 @@
   z-index: 1;
   box-sizing: border-box;
 
-  /* Neutral Frosted Liquid Glass Active Indicator (Dark Theme) */
+  /* Translucent Frosted Liquid-Glass Appearance (Dark Theme) */
   background: linear-gradient(
     135deg,
-    rgba(255, 255, 255, 0.2) 0%,
-    rgba(255, 255, 255, 0.1) 100%
+    rgba(255, 255, 255, 0.26) 0%,
+    rgba(255, 255, 255, 0.16) 45%,
+    rgba(255, 255, 255, 0.10) 100%
   );
-  border: 1px solid rgba(255, 255, 255, 0.28);
-  border-top: 1px solid rgba(255, 255, 255, 0.6);
-  border-bottom: 1px solid rgba(255, 255, 255, 0.12);
+  backdrop-filter: blur(18px) saturate(200%) contrast(108%);
+  -webkit-backdrop-filter: blur(18px) saturate(200%) contrast(108%);
+
+  /* Smooth Rounded Edges with Soft Refraction Highlight (No Hard Border) */
+  border: 1px solid rgba(255, 255, 255, 0.24);
+  border-top: 1.2px solid rgba(255, 255, 255, 0.6);
+  border-bottom: 1px solid rgba(255, 255, 255, 0.08);
+
+  /* Subtle Soft Ambient Glow & Glass Dispersion Shadow */
   box-shadow:
-    0 2px 8px rgba(0, 0, 0, 0.3),
-    inset 0 1px 1.5px rgba(255, 255, 255, 0.5);
+    0 6px 20px -3px rgba(0, 0, 0, 0.42),
+    0 2px 8px -1px rgba(0, 0, 0, 0.28),
+    0 0 16px 2px rgba(255, 255, 255, 0.10),
+    inset 0 1.5px 2px 0 rgba(255, 255, 255, 0.62),
+    inset 0 -1px 2px 0 rgba(0, 0, 0, 0.22);
 
   will-change: transform;
+  transform-origin: center center;
   transition:
-    transform 320ms cubic-bezier(0.22, 1, 0.36, 1),
+    transform 380ms cubic-bezier(0.24, 1.18, 0.38, 1.05),
     background 240ms ease,
     box-shadow 240ms ease;
 }
 
 [data-theme="light"] .bottom-nav-active-capsule {
-  /* Neutral Frosted Pearl Active Indicator (Light Theme) */
+  /* Translucent Frosted Pearl Active Indicator (Light Theme) */
   background: linear-gradient(
     135deg,
-    #FFFFFF 0%,
-    #F8FAFC 100%
+    rgba(255, 255, 255, 0.98) 0%,
+    rgba(245, 248, 255, 0.94) 50%,
+    rgba(238, 244, 255, 0.96) 100%
   );
-  border: 1px solid rgba(0, 0, 0, 0.06);
-  border-top: 1px solid #FFFFFF;
-  border-bottom: 1px solid rgba(0, 0, 0, 0.08);
+  border: 1px solid rgba(255, 255, 255, 0.92);
+  border-top: 1.5px solid #FFFFFF;
+  border-bottom: 1px solid rgba(0, 0, 0, 0.06);
   box-shadow:
-    0 3px 10px rgba(15, 23, 42, 0.12),
-    0 1px 3px rgba(15, 23, 42, 0.06),
-    inset 0 1px 1.5px #FFFFFF;
+    0 6px 18px -3px rgba(15, 23, 42, 0.14),
+    0 2px 6px -1px rgba(15, 23, 42, 0.08),
+    0 0 14px 2px rgba(255, 255, 255, 0.85),
+    inset 0 1.5px 2px #FFFFFF,
+    inset 0 -1px 2px rgba(0, 0, 0, 0.04);
 }
 
-/* Inner Specular Highlight Lens */
-.bottom-nav-active-capsule::after {
-  content: '';
+/* Inner Liquid Light Glow */
+.bottom-nav-capsule-glass-glow {
+  position: absolute;
+  inset: 0;
+  border-radius: 9999px;
+  background: radial-gradient(
+    circle at 50% 30%,
+    rgba(255, 255, 255, 0.2) 0%,
+    rgba(255, 255, 255, 0.04) 65%,
+    transparent 100%
+  );
+  pointer-events: none;
+}
+
+/* Top Specular Light Lens (Real Optical Glass Reflection) */
+.bottom-nav-capsule-specular-lens {
   position: absolute;
   top: 2px;
-  left: 14%;
-  right: 14%;
-  height: 44%;
+  left: 12%;
+  right: 12%;
+  height: 46%;
   border-radius: 9999px;
   background: linear-gradient(
     to bottom,
     rgba(255, 255, 255, 0.75) 0%,
+    rgba(255, 255, 255, 0.2) 50%,
     rgba(255, 255, 255, 0) 100%
   );
   opacity: 0.95;
   pointer-events: none;
+}
+
+/* Fluid Liquid Stretch Deformation on Navigation Switching */
+.bottom-nav-island.is-morphing-right .bottom-nav-active-capsule.is-animating {
+  animation: liquidMorphRight 380ms cubic-bezier(0.24, 1.18, 0.38, 1.05) forwards;
+}
+
+.bottom-nav-island.is-morphing-left .bottom-nav-active-capsule.is-animating {
+  animation: liquidMorphLeft 380ms cubic-bezier(0.24, 1.18, 0.38, 1.05) forwards;
+}
+
+@keyframes liquidMorphRight {
+  0% {
+    transform: translate3d(calc(var(--active-tab-index) * 100%), 0, 0) scale(1, 1);
+  }
+  30% {
+    transform: translate3d(calc(var(--active-tab-index) * 100%), 0, 0) scaleX(1.16) scaleY(0.92);
+  }
+  70% {
+    transform: translate3d(calc(var(--active-tab-index) * 100%), 0, 0) scaleX(0.96) scaleY(1.03);
+  }
+  100% {
+    transform: translate3d(calc(var(--active-tab-index) * 100%), 0, 0) scale(1, 1);
+  }
+}
+
+@keyframes liquidMorphLeft {
+  0% {
+    transform: translate3d(calc(var(--active-tab-index) * 100%), 0, 0) scale(1, 1);
+  }
+  30% {
+    transform: translate3d(calc(var(--active-tab-index) * 100%), 0, 0) scaleX(1.16) scaleY(0.92);
+  }
+  70% {
+    transform: translate3d(calc(var(--active-tab-index) * 100%), 0, 0) scaleX(0.96) scaleY(1.03);
+  }
+  100% {
+    transform: translate3d(calc(var(--active-tab-index) * 100%), 0, 0) scale(1, 1);
+  }
 }
 
 /* ── 5. Navigation Tab Item Buttons ── */
@@ -240,8 +307,8 @@
   cursor: pointer;
   outline: none;
   -webkit-tap-highlight-color: transparent;
-  color: #94A3B8;
-  transition: color 240ms ease, transform 180ms cubic-bezier(0.34, 1.56, 0.64, 1);
+  color: rgba(255, 255, 255, 0.65);
+  transition: color 240ms ease, transform 200ms cubic-bezier(0.34, 1.56, 0.64, 1);
   min-height: 48px;
   box-sizing: border-box;
 }
@@ -270,21 +337,29 @@
   width: 26px;
   height: 26px;
   position: relative;
-  transition: transform 320ms cubic-bezier(0.34, 1.56, 0.64, 1);
+  transition: transform 340ms cubic-bezier(0.34, 1.56, 0.64, 1);
 }
 
 .bottom-nav-tab.is-active .bottom-nav-icon-box {
-  transform: translateY(-1.5px) scale(1.08);
+  transform: translateY(-2px) scale(1.12);
 }
 
 .bottom-nav-icon-box svg {
   display: block;
   width: 22px;
   height: 22px;
-  transition: stroke 240ms ease, fill 240ms ease;
+  transition: stroke 240ms ease, fill 240ms ease, filter 240ms ease;
 }
 
-/* ── 7. Text Label Styling ── */
+.bottom-nav-tab.is-active .bottom-nav-icon-box svg {
+  filter: drop-shadow(0 2px 8px rgba(255, 255, 255, 0.35));
+}
+
+[data-theme="light"] .bottom-nav-tab.is-active .bottom-nav-icon-box svg {
+  filter: drop-shadow(0 2px 6px rgba(15, 23, 42, 0.2));
+}
+
+/* ── 7. Text Label Styling (Strong Visual Hierarchy) ── */
 .bottom-nav-label {
   font-family: var(--font-body, 'Poppins', sans-serif);
   font-size: 10.5px;
@@ -295,12 +370,15 @@
 }
 
 .bottom-nav-tab.is-active .bottom-nav-label {
-  font-weight: 650;
+  font-weight: 700;
   color: #FFFFFF;
   transform: translateY(0.5px);
+  text-shadow: 0 1px 6px rgba(0, 0, 0, 0.5);
 }
 
 [data-theme="light"] .bottom-nav-tab.is-active .bottom-nav-label {
   color: #0F172A;
-  font-weight: 650;
+  font-weight: 700;
+  text-shadow: none;
 }
+
