@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect, useRef, useCallback, useMemo } from 'react';
 import { usePlayer } from '../../state/PlayerContext';
 import { useApp } from '../../state/AppContext';
 import { getLyrics } from '../../data/api/lyricsApi';
@@ -12,7 +12,11 @@ import { resizeImageUrl } from '../../core/utils/imageUtils';
 // ─── SVG Icons ────────────────────────────────────────────────────────────────
 
 const icons = {
-  close: <svg width="24" height="24" viewBox="0 0 24 24" fill="none" aria-hidden="true"><polyline points="6 9 12 15 18 9" stroke="currentColor" strokeWidth="1.75" strokeLinecap="round" strokeLinejoin="round"/></svg>,
+  close: (
+    <svg width="24" height="24" viewBox="0 0 24 24" fill="none" aria-hidden="true">
+      <polyline points="6 9 12 15 18 9" stroke="currentColor" strokeWidth="1.75" strokeLinecap="round" strokeLinejoin="round" />
+    </svg>
+  ),
   menu: (
     <svg width="22" height="22" viewBox="0 0 24 24" fill="none" aria-hidden="true">
       <line x1="4" y1="6" x2="20" y2="6" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" />
@@ -20,25 +24,238 @@ const icons = {
       <line x1="4" y1="18" x2="20" y2="18" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" />
     </svg>
   ),
-  prev: <svg width="24" height="24" viewBox="0 0 24 24" fill="none" aria-hidden="true"><polygon points="19 20 9 12 19 4 19 20" fill="currentColor"/><line x1="5" y1="19" x2="5" y2="5" stroke="currentColor" strokeWidth="2" strokeLinecap="round"/></svg>,
-  next: <svg width="24" height="24" viewBox="0 0 24 24" fill="none" aria-hidden="true"><polygon points="5 4 15 12 5 20 5 4" fill="currentColor"/><line x1="19" y1="5" x2="19" y2="19" stroke="currentColor" strokeWidth="2" strokeLinecap="round"/></svg>,
-  play: <svg width="28" height="28" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><polygon points="5 3 19 12 5 21 5 3"/></svg>,
-  pause: <svg width="28" height="28" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><rect x="6" y="4" width="4" height="16" rx="1"/><rect x="14" y="4" width="4" height="16" rx="1"/></svg>,
-  heart: (filled: boolean) => <svg width="22" height="22" viewBox="0 0 24 24" fill={filled ? 'var(--color-accent)' : 'none'} aria-hidden="true"><path d="M20.84 4.61a5.5 5.5 0 00-7.78 0L12 5.67l-1.06-1.06a5.5 5.5 0 00-7.78 7.78l1.06 1.06L12 21.23l7.78-7.78 1.06-1.06a5.5 5.5 0 000-7.78z" stroke={filled ? 'var(--color-accent)' : 'currentColor'} strokeWidth="1.75"/></svg>,
-  shuffle: (on: boolean) => <svg width="20" height="20" viewBox="0 0 24 24" fill="none" style={{ color: on ? 'var(--color-accent)' : 'currentColor' }} aria-hidden="true"><polyline points="16 3 21 3 21 8" stroke="currentColor" strokeWidth="1.75" strokeLinecap="round" strokeLinejoin="round"/><line x1="4" y1="20" x2="21" y2="3" stroke="currentColor" strokeWidth="1.75" strokeLinecap="round" strokeLinejoin="round"/><polyline points="21 16 21 21 16 21" stroke="currentColor" strokeWidth="1.75" strokeLinecap="round" strokeLinejoin="round"/><line x1="15" y1="9" x2="21" y2="15" stroke="currentColor" strokeWidth="1.75" strokeLinecap="round" strokeLinejoin="round"/><line x1="4" y1="4" x2="9" y2="9" stroke="currentColor" strokeWidth="1.75" strokeLinecap="round" strokeLinejoin="round"/></svg>,
+  prev: (
+    <svg width="24" height="24" viewBox="0 0 24 24" fill="none" aria-hidden="true">
+      <polygon points="19 20 9 12 19 4 19 20" fill="currentColor" />
+      <line x1="5" y1="19" x2="5" y2="5" stroke="currentColor" strokeWidth="2" strokeLinecap="round" />
+    </svg>
+  ),
+  next: (
+    <svg width="24" height="24" viewBox="0 0 24 24" fill="none" aria-hidden="true">
+      <polygon points="5 4 15 12 5 20 5 4" fill="currentColor" />
+      <line x1="19" y1="5" x2="19" y2="19" stroke="currentColor" strokeWidth="2" strokeLinecap="round" />
+    </svg>
+  ),
+  play: (
+    <svg width="28" height="28" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true">
+      <polygon points="5 3 19 12 5 21 5 3" />
+    </svg>
+  ),
+  pause: (
+    <svg width="28" height="28" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true">
+      <rect x="6" y="4" width="4" height="16" rx="1" />
+      <rect x="14" y="4" width="4" height="16" rx="1" />
+    </svg>
+  ),
+  heart: (filled: boolean) => (
+    <svg width="22" height="22" viewBox="0 0 24 24" fill={filled ? 'var(--color-accent)' : 'none'} aria-hidden="true">
+      <path
+        d="M20.84 4.61a5.5 5.5 0 00-7.78 0L12 5.67l-1.06-1.06a5.5 5.5 0 00-7.78 7.78l1.06 1.06L12 21.23l7.78-7.78 1.06-1.06a5.5 5.5 0 000-7.78z"
+        stroke={filled ? 'var(--color-accent)' : 'currentColor'}
+        strokeWidth="1.75"
+      />
+    </svg>
+  ),
+  shuffle: (on: boolean) => (
+    <svg width="20" height="20" viewBox="0 0 24 24" fill="none" style={{ color: on ? 'var(--color-accent)' : 'currentColor' }} aria-hidden="true">
+      <polyline points="16 3 21 3 21 8" stroke="currentColor" strokeWidth="1.75" strokeLinecap="round" strokeLinejoin="round" />
+      <line x1="4" y1="20" x2="21" y2="3" stroke="currentColor" strokeWidth="1.75" strokeLinecap="round" strokeLinejoin="round" />
+      <polyline points="21 16 21 21 16 21" stroke="currentColor" strokeWidth="1.75" strokeLinecap="round" strokeLinejoin="round" />
+      <line x1="15" y1="9" x2="21" y2="15" stroke="currentColor" strokeWidth="1.75" strokeLinecap="round" strokeLinejoin="round" />
+      <line x1="4" y1="4" x2="9" y2="9" stroke="currentColor" strokeWidth="1.75" strokeLinecap="round" strokeLinejoin="round" />
+    </svg>
+  ),
   repeat: (mode: string) => (
     <svg width="20" height="20" viewBox="0 0 24 24" fill="none" style={{ color: mode !== 'off' ? 'var(--color-accent)' : 'currentColor' }} aria-hidden="true">
-      <polyline points="17 1 21 5 17 9" stroke="currentColor" strokeWidth="1.75" strokeLinecap="round" strokeLinejoin="round"/>
-      <path d="M3 11V9a4 4 0 014-4h14" stroke="currentColor" strokeWidth="1.75" strokeLinecap="round" strokeLinejoin="round"/>
-      <polyline points="7 23 3 19 7 15" stroke="currentColor" strokeWidth="1.75" strokeLinecap="round" strokeLinejoin="round"/>
-      <path d="M21 13v2a4 4 0 01-4 4H3" stroke="currentColor" strokeWidth="1.75" strokeLinecap="round" strokeLinejoin="round"/>
+      <polyline points="17 1 21 5 17 9" stroke="currentColor" strokeWidth="1.75" strokeLinecap="round" strokeLinejoin="round" />
+      <path d="M3 11V9a4 4 0 014-4h14" stroke="currentColor" strokeWidth="1.75" strokeLinecap="round" strokeLinejoin="round" />
+      <polyline points="7 23 3 19 7 15" stroke="currentColor" strokeWidth="1.75" strokeLinecap="round" strokeLinejoin="round" />
+      <path d="M21 13v2a4 4 0 01-4 4H3" stroke="currentColor" strokeWidth="1.75" strokeLinecap="round" strokeLinejoin="round" />
       {mode === 'one' && <text x="12" y="14" textAnchor="middle" fontSize="7" fill="var(--color-accent)" fontWeight="bold">1</text>}
     </svg>
   ),
-  queue: <svg width="20" height="20" viewBox="0 0 24 24" fill="none" aria-hidden="true"><line x1="8" y1="6" x2="21" y2="6" stroke="currentColor" strokeWidth="1.75" strokeLinecap="round"/><line x1="8" y1="12" x2="21" y2="12" stroke="currentColor" strokeWidth="1.75" strokeLinecap="round"/><line x1="8" y1="18" x2="21" y2="18" stroke="currentColor" strokeWidth="1.75" strokeLinecap="round"/><circle cx="3" cy="6" r="1.5" fill="currentColor"/><circle cx="3" cy="12" r="1.5" fill="currentColor"/><circle cx="3" cy="18" r="1.5" fill="currentColor"/></svg>,
-  lyrics: <svg width="20" height="20" viewBox="0 0 24 24" fill="none" aria-hidden="true"><path d="M21 15a2 2 0 01-2 2H7l-4 4V5a2 2 0 012-2h14a2 2 0 012 2z" stroke="currentColor" strokeWidth="1.75" strokeLinecap="round" strokeLinejoin="round"/></svg>,
-  loading: <svg width="24" height="24" viewBox="0 0 24 24" fill="none" aria-hidden="true" style={{ animation: 'spin 0.8s linear infinite' }}><circle cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="2.5" strokeOpacity="0.25"/><path d="M12 2a10 10 0 0110 10" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round"/></svg>,
+  queue: (
+    <svg width="20" height="20" viewBox="0 0 24 24" fill="none" aria-hidden="true">
+      <line x1="8" y1="6" x2="21" y2="6" stroke="currentColor" strokeWidth="1.75" strokeLinecap="round" />
+      <line x1="8" y1="12" x2="21" y2="12" stroke="currentColor" strokeWidth="1.75" strokeLinecap="round" />
+      <line x1="8" y1="18" x2="21" y2="18" stroke="currentColor" strokeWidth="1.75" strokeLinecap="round" />
+      <circle cx="3" cy="6" r="1.5" fill="currentColor" />
+      <circle cx="3" cy="12" r="1.5" fill="currentColor" />
+      <circle cx="3" cy="18" r="1.5" fill="currentColor" />
+    </svg>
+  ),
+  lyrics: (
+    <svg width="20" height="20" viewBox="0 0 24 24" fill="none" aria-hidden="true">
+      <path d="M21 15a2 2 0 01-2 2H7l-4 4V5a2 2 0 012-2h14a2 2 0 012 2z" stroke="currentColor" strokeWidth="1.75" strokeLinecap="round" strokeLinejoin="round" />
+    </svg>
+  ),
+  loading: (
+    <svg width="24" height="24" viewBox="0 0 24 24" fill="none" aria-hidden="true" style={{ animation: 'spin 0.8s linear infinite', pointerEvents: 'none' }}>
+      <circle cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="2.5" strokeOpacity="0.25" />
+      <path d="M12 2a10 10 0 0110 10" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" />
+    </svg>
+  ),
 };
+
+// ─── Memoized Isolated Progress Bar Component ────────────────────────────────
+
+interface PlayerProgressBarProps {
+  currentTime: number;
+  duration: number;
+  progress: number;
+  songDuration?: number;
+  seek: (p: number) => void;
+}
+
+const PlayerProgressBar = React.memo(function PlayerProgressBar({
+  currentTime,
+  duration,
+  progress,
+  songDuration,
+  seek,
+}: PlayerProgressBarProps) {
+  const [isDragging, setIsDragging] = useState(false);
+  const [dragProgress, setDragProgress] = useState(0);
+  const isDraggingRef = useRef(false);
+  const dragProgressRef = useRef(0);
+  const progressRef = useRef<HTMLDivElement>(null);
+
+  const effectiveDuration = (duration && !isNaN(duration) && isFinite(duration) && duration > 0)
+    ? duration
+    : (songDuration || 0);
+
+  const displayProgress = isDragging
+    ? dragProgress
+    : (effectiveDuration > 0 ? Math.min(1, Math.max(0, currentTime / effectiveDuration)) : (progress || 0));
+
+  const getPointerProgress = useCallback((clientX: number) => {
+    if (!progressRef.current) return 0;
+    const rect = progressRef.current.getBoundingClientRect();
+    if (rect.width <= 0) return 0;
+    return Math.max(0, Math.min(1, (clientX - rect.left) / rect.width));
+  }, []);
+
+  const handleProgressStart = (e: React.MouseEvent | React.TouchEvent) => {
+    e.stopPropagation();
+    const clientX = 'touches' in e ? e.touches[0].clientX : e.clientX;
+    const p = getPointerProgress(clientX);
+    dragProgressRef.current = p;
+    setDragProgress(p);
+    setIsDragging(true);
+    isDraggingRef.current = true;
+  };
+
+  useEffect(() => {
+    if (!isDragging) return;
+
+    const handlePointerMove = (e: MouseEvent | TouchEvent) => {
+      if (!isDraggingRef.current) return;
+      const clientX = 'touches' in e && e.touches.length ? e.touches[0].clientX : (e as MouseEvent).clientX;
+      if (clientX !== undefined) {
+        const p = getPointerProgress(clientX);
+        dragProgressRef.current = p;
+        setDragProgress(p);
+      }
+    };
+
+    const handlePointerUp = (e: MouseEvent | TouchEvent) => {
+      if (isDraggingRef.current) {
+        isDraggingRef.current = false;
+        setIsDragging(false);
+        const clientX = 'changedTouches' in e && e.changedTouches.length ? e.changedTouches[0].clientX : (e as MouseEvent).clientX;
+        const finalP = clientX !== undefined ? getPointerProgress(clientX) : dragProgressRef.current;
+        seek(finalP);
+      }
+    };
+
+    window.addEventListener('mousemove', handlePointerMove, { passive: true });
+    window.addEventListener('touchmove', handlePointerMove, { passive: true });
+    window.addEventListener('mouseup', handlePointerUp);
+    window.addEventListener('touchend', handlePointerUp);
+    window.addEventListener('touchcancel', handlePointerUp);
+
+    return () => {
+      window.removeEventListener('mousemove', handlePointerMove);
+      window.removeEventListener('touchmove', handlePointerMove);
+      window.removeEventListener('mouseup', handlePointerUp);
+      window.removeEventListener('touchend', handlePointerUp);
+      window.removeEventListener('touchcancel', handlePointerUp);
+    };
+  }, [isDragging, getPointerProgress, seek]);
+
+  const displayTime = isDragging ? dragProgress * effectiveDuration : currentTime;
+  const remainingTime = Math.max(0, effectiveDuration - displayTime);
+
+  return (
+    <div
+      style={{ marginBottom: 16 }}
+      onTouchStart={(e) => e.stopPropagation()}
+      onMouseDown={(e) => e.stopPropagation()}
+    >
+      <div
+        ref={progressRef}
+        id="player-progress-bar"
+        role="slider"
+        aria-label="Playback position"
+        aria-valuemin={0}
+        aria-valuemax={100}
+        aria-valuenow={Math.round(displayProgress * 100)}
+        style={{
+          height: 4,
+          background: 'var(--color-surface-2)',
+          borderRadius: 2,
+          cursor: 'pointer',
+          position: 'relative',
+          touchAction: 'none',
+        }}
+        onMouseDown={handleProgressStart}
+        onTouchStart={handleProgressStart}
+        onClick={(e) => {
+          e.stopPropagation();
+          if (!isDragging) {
+            const p = getPointerProgress(e.clientX);
+            seek(p);
+          }
+        }}
+      >
+        <div
+          style={{
+            height: '100%',
+            width: `${displayProgress * 100}%`,
+            background: 'var(--color-accent)',
+            borderRadius: 2,
+            transition: isDragging ? 'none' : 'width 200ms linear',
+          }}
+        />
+        {/* Scrubber thumb */}
+        <div
+          style={{
+            position: 'absolute',
+            top: '50%',
+            left: `${displayProgress * 100}%`,
+            transform: 'translate(-50%, -50%)',
+            width: isDragging ? 16 : 12,
+            height: isDragging ? 16 : 12,
+            borderRadius: '50%',
+            background: 'var(--color-accent)',
+            transition: isDragging ? 'none' : 'left 200ms linear, width 200ms var(--ease-standard), height 200ms var(--ease-standard)',
+            boxShadow: 'var(--shadow-sm)',
+          }}
+        />
+      </div>
+      <div style={{ display: 'flex', justifyContent: 'space-between', marginTop: 6 }}>
+        <span style={{ fontSize: 'var(--text-xs)', color: 'var(--color-text-muted)' }}>
+          {formatDuration(displayTime)}
+        </span>
+        <span style={{ fontSize: 'var(--text-xs)', color: 'var(--color-text-muted)' }}>
+          {effectiveDuration > 0 ? `-${formatDuration(remainingTime)}` : '0:00'}
+        </span>
+      </div>
+    </div>
+  );
+});
+
+// ─── Main FullPlayer Component ────────────────────────────────────────────────
 
 export function FullPlayer() {
   const { state, playSong, togglePlay, next, previous, seek, seekToTime, toggleShuffle, toggleRepeat, closeFullPlayer, openQueue } = usePlayer();
@@ -70,11 +287,6 @@ export function FullPlayer() {
   const [lyrics, setLyrics] = useState<Lyrics | null>(null);
   const [lyricsLoading, setLyricsLoading] = useState(false);
   const [lyricsError, setLyricsError] = useState(false);
-  const [isDragging, setIsDragging] = useState(false);
-  const [dragProgress, setDragProgress] = useState(0);
-  const dragProgressRef = useRef(0);
-  const isDraggingRef = useRef(false);
-  const progressRef = useRef<HTMLDivElement>(null);
   const lineRefs = useRef<(HTMLParagraphElement | null)[]>([]);
   const lyricsContainerRef = useRef<HTMLDivElement | null>(null);
   const isUserScrollingRef = useRef(false);
@@ -279,9 +491,9 @@ export function FullPlayer() {
       });
   }, [currentSong?.id, showLyrics]);
 
-  // Compute active lyric line index based on playback timestamp
-  const activeLineIndex = React.useMemo(() => {
-    if (!lyrics || !lyrics.synced || lyrics.lines.length === 0) return -1;
+  // Compute active lyric line index based on playback timestamp (only if showLyrics === true)
+  const activeLineIndex = useMemo(() => {
+    if (!showLyrics || !lyrics || !lyrics.synced || lyrics.lines.length === 0) return -1;
     let active = -1;
     for (let i = 0; i < lyrics.lines.length; i++) {
       const lineTime = lyrics.lines[i].time ?? 0;
@@ -292,11 +504,11 @@ export function FullPlayer() {
       }
     }
     return active;
-  }, [lyrics, currentTime]);
+  }, [showLyrics, lyrics, currentTime]);
 
   // Auto-scroll the active lyric line to viewport center smoothly without whole list jumping
   useEffect(() => {
-    if (activeLineIndex >= 0 && lyricsContainerRef.current && !isUserScrollingRef.current) {
+    if (showLyrics && activeLineIndex >= 0 && lyricsContainerRef.current && !isUserScrollingRef.current) {
       const container = lyricsContainerRef.current;
       const activeEl = lineRefs.current[activeLineIndex];
       if (activeEl) {
@@ -307,7 +519,7 @@ export function FullPlayer() {
         });
       }
     }
-  }, [activeLineIndex]);
+  }, [showLyrics, activeLineIndex]);
 
   const handleLyricsUserScroll = () => {
     isUserScrollingRef.current = true;
@@ -318,71 +530,6 @@ export function FullPlayer() {
   };
 
   if (!currentSong) return null;
-
-  const effectiveDuration = (duration && !isNaN(duration) && isFinite(duration) && duration > 0)
-    ? duration
-    : (currentSong?.duration || 0);
-
-  const displayProgress = isDragging
-    ? dragProgress
-    : (effectiveDuration > 0 ? Math.min(1, Math.max(0, currentTime / effectiveDuration)) : (progress || 0));
-
-  const getPointerProgress = React.useCallback((clientX: number) => {
-    if (!progressRef.current) return 0;
-    const rect = progressRef.current.getBoundingClientRect();
-    if (rect.width <= 0) return 0;
-    return Math.max(0, Math.min(1, (clientX - rect.left) / rect.width));
-  }, []);
-
-  const handleProgressStart = (e: React.MouseEvent | React.TouchEvent) => {
-    const clientX = 'touches' in e ? e.touches[0].clientX : e.clientX;
-    const p = getPointerProgress(clientX);
-    dragProgressRef.current = p;
-    setDragProgress(p);
-    setIsDragging(true);
-    isDraggingRef.current = true;
-  };
-
-  useEffect(() => {
-    if (!isDragging) return;
-
-    const handlePointerMove = (e: MouseEvent | TouchEvent) => {
-      if (!isDraggingRef.current) return;
-      const clientX = 'touches' in e && e.touches.length ? e.touches[0].clientX : (e as MouseEvent).clientX;
-      if (clientX !== undefined) {
-        const p = getPointerProgress(clientX);
-        dragProgressRef.current = p;
-        setDragProgress(p);
-      }
-    };
-
-    const handlePointerUp = (e: MouseEvent | TouchEvent) => {
-      if (isDraggingRef.current) {
-        isDraggingRef.current = false;
-        setIsDragging(false);
-        const clientX = 'changedTouches' in e && e.changedTouches.length ? e.changedTouches[0].clientX : (e as MouseEvent).clientX;
-        const finalP = clientX !== undefined ? getPointerProgress(clientX) : dragProgressRef.current;
-        seek(finalP);
-      }
-    };
-
-    window.addEventListener('mousemove', handlePointerMove, { passive: true });
-    window.addEventListener('touchmove', handlePointerMove, { passive: true });
-    window.addEventListener('mouseup', handlePointerUp);
-    window.addEventListener('touchend', handlePointerUp);
-    window.addEventListener('touchcancel', handlePointerUp);
-
-    return () => {
-      window.removeEventListener('mousemove', handlePointerMove);
-      window.removeEventListener('touchmove', handlePointerMove);
-      window.removeEventListener('mouseup', handlePointerUp);
-      window.removeEventListener('touchend', handlePointerUp);
-      window.removeEventListener('touchcancel', handlePointerUp);
-    };
-  }, [isDragging, getPointerProgress, seek]);
-
-  const displayTime = isDragging ? dragProgress * effectiveDuration : currentTime;
-  const remainingTime = Math.max(0, effectiveDuration - displayTime);
 
   return (
     <div
@@ -395,9 +542,12 @@ export function FullPlayer() {
       onMouseMove={handleRootTouchMove}
       onMouseUp={handleRootTouchEnd}
       style={{
-        position: 'fixed', inset: 0, zIndex: 200,
+        position: 'fixed',
+        inset: 0,
+        zIndex: 200,
         background: isDark ? artworkTheme.gradient : 'var(--color-bg)',
-        display: 'flex', flexDirection: 'column',
+        display: 'flex',
+        flexDirection: 'column',
         paddingTop: 'env(safe-area-inset-top, 0px)',
         paddingBottom: 'env(safe-area-inset-bottom, 0px)',
         transform: isClosing
@@ -419,18 +569,34 @@ export function FullPlayer() {
       }}
     >
       {/* Background artwork dynamic atmospheric glow */}
-      <div style={{
-        position: 'absolute', inset: 0, zIndex: -1,
-        background: isDark
-          ? artworkTheme.ambientGlow
-          : `radial-gradient(ellipse at 50% 30%, rgba(245,158,11,0.08) 0%, transparent 65%)`,
-        transition: 'background 650ms cubic-bezier(0.2, 0.8, 0.2, 1)',
-        pointerEvents: 'none',
-      }} aria-hidden="true" />
+      <div
+        style={{
+          position: 'absolute',
+          inset: 0,
+          zIndex: -1,
+          background: isDark
+            ? artworkTheme.ambientGlow
+            : `radial-gradient(ellipse at 50% 30%, rgba(245,158,11,0.08) 0%, transparent 65%)`,
+          transition: 'background 650ms cubic-bezier(0.2, 0.8, 0.2, 1)',
+          pointerEvents: 'none',
+        }}
+        aria-hidden="true"
+      />
 
       {/* ── Header ── */}
       <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '12px 20px 8px' }}>
-        <button id="full-player-close-btn" aria-label="Collapse player" onClick={closeFullPlayer} className="btn-icon" style={{ minWidth: 44, minHeight: 44 }}>
+        <button
+          id="full-player-close-btn"
+          aria-label="Collapse player"
+          onClick={(e) => {
+            e.stopPropagation();
+            closeFullPlayer();
+          }}
+          onTouchStart={(e) => e.stopPropagation()}
+          onMouseDown={(e) => e.stopPropagation()}
+          className="btn-icon"
+          style={{ minWidth: 44, minHeight: 44 }}
+        >
           {icons.close}
         </button>
         <div style={{ textAlign: 'center' }}>
@@ -441,7 +607,12 @@ export function FullPlayer() {
         <button
           id="full-player-menu-btn"
           aria-label="Track options menu"
-          onClick={() => setShowMenuSheet(true)}
+          onClick={(e) => {
+            e.stopPropagation();
+            setShowMenuSheet(true);
+          }}
+          onTouchStart={(e) => e.stopPropagation()}
+          onMouseDown={(e) => e.stopPropagation()}
           className="btn-icon"
           style={{ minWidth: 44, minHeight: 44, color: 'var(--color-text-primary)' }}
         >
@@ -551,8 +722,8 @@ export function FullPlayer() {
                     }}
                   >
                     <svg width="24" height="24" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true">
-                      <rect x="6" y="5" width="4" height="14" rx="1.5"/>
-                      <rect x="14" y="5" width="4" height="14" rx="1.5"/>
+                      <rect x="6" y="5" width="4" height="14" rx="1.5" />
+                      <rect x="14" y="5" width="4" height="14" rx="1.5" />
                     </svg>
                   </div>
                 </div>
@@ -594,13 +765,15 @@ export function FullPlayer() {
                     >
                       {artworkOffsetX < 0 ? icons.next : icons.prev}
                     </div>
-                    <span style={{
-                      fontSize: 'var(--text-xs)',
-                      fontWeight: 700,
-                      letterSpacing: '0.08em',
-                      textTransform: 'uppercase',
-                      textShadow: '0 2px 8px rgba(0,0,0,0.6)',
-                    }}>
+                    <span
+                      style={{
+                        fontSize: 'var(--text-xs)',
+                        fontWeight: 700,
+                        letterSpacing: '0.08em',
+                        textTransform: 'uppercase',
+                        textShadow: '0 2px 8px rgba(0,0,0,0.6)',
+                      }}
+                    >
                       {artworkOffsetX < 0 ? 'Next' : 'Previous'}
                     </span>
                   </div>
@@ -629,17 +802,19 @@ export function FullPlayer() {
               )}
               {lyricsError && !lyricsLoading && (
                 <div style={{ textAlign: 'center', padding: '48px 20px', display: 'flex', flexDirection: 'column', alignItems: 'center' }}>
-                  <div style={{
-                    width: 56,
-                    height: 56,
-                    borderRadius: '50%',
-                    background: 'var(--color-surface-2)',
-                    display: 'flex',
-                    alignItems: 'center',
-                    justifyContent: 'center',
-                    color: 'var(--color-text-muted)',
-                    marginBottom: 16,
-                  }}>
+                  <div
+                    style={{
+                      width: 56,
+                      height: 56,
+                      borderRadius: '50%',
+                      background: 'var(--color-surface-2)',
+                      display: 'flex',
+                      alignItems: 'center',
+                      justifyContent: 'center',
+                      color: 'var(--color-text-muted)',
+                      marginBottom: 16,
+                    }}
+                  >
                     <svg width="26" height="26" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.75">
                       <path d="M9 18V5l12-2v13" />
                       <circle cx="6" cy="18" r="3" />
@@ -741,24 +916,32 @@ export function FullPlayer() {
         {/* ── Song Meta ── */}
         <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 12 }}>
           <div style={{ flex: 1, minWidth: 0, marginRight: 12 }}>
-            <h2 style={{
-              margin: 0,
-              fontSize: 'clamp(1.1rem, 4.2vw, 1.25rem)',
-              fontWeight: 700,
-              lineHeight: 1.25,
-              letterSpacing: '-0.015em',
-              color: 'var(--color-text-primary)',
-              overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap',
-              fontFamily: 'var(--font-body)',
-            }}>
+            <h2
+              style={{
+                margin: 0,
+                fontSize: 'clamp(1.1rem, 4.2vw, 1.25rem)',
+                fontWeight: 700,
+                lineHeight: 1.25,
+                letterSpacing: '-0.015em',
+                color: 'var(--color-text-primary)',
+                overflow: 'hidden',
+                textOverflow: 'ellipsis',
+                whiteSpace: 'nowrap',
+                fontFamily: 'var(--font-body)',
+              }}
+            >
               {currentSong.title}
             </h2>
-            <p style={{
-              margin: '3px 0 0',
-              fontSize: 'var(--text-sm)',
-              color: 'var(--color-text-secondary)',
-              overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap',
-            }}>
+            <p
+              style={{
+                margin: '3px 0 0',
+                fontSize: 'var(--text-sm)',
+                color: 'var(--color-text-secondary)',
+                overflow: 'hidden',
+                textOverflow: 'ellipsis',
+                whiteSpace: 'nowrap',
+              }}
+            >
               {currentSong.artist}
             </p>
           </div>
@@ -766,7 +949,12 @@ export function FullPlayer() {
             id="full-player-heart-btn"
             aria-label={liked ? 'Remove from favorites' : 'Add to favorites'}
             aria-pressed={liked}
-            onClick={() => toggleFavorite(currentSong)}
+            onClick={(e) => {
+              e.stopPropagation();
+              toggleFavorite(currentSong);
+            }}
+            onTouchStart={(e) => e.stopPropagation()}
+            onMouseDown={(e) => e.stopPropagation()}
             className="btn-icon"
             style={{ minWidth: 48, minHeight: 48, color: liked ? 'var(--color-accent)' : 'var(--color-text-secondary)' }}
           >
@@ -801,6 +989,8 @@ export function FullPlayer() {
                   playSong(toPlay, queue, queueIndex);
                 }
               }}
+              onTouchStart={(e) => e.stopPropagation()}
+              onMouseDown={(e) => e.stopPropagation()}
               style={{
                 background: 'var(--color-error)',
                 color: '#FFFFFF',
@@ -817,60 +1007,14 @@ export function FullPlayer() {
           </div>
         )}
 
-        {/* ── Progress Bar ── */}
-        <div style={{ marginBottom: 16 }}>
-          <div
-            ref={progressRef}
-            id="player-progress-bar"
-            role="slider"
-            aria-label="Playback position"
-            aria-valuemin={0}
-            aria-valuemax={100}
-            aria-valuenow={Math.round(displayProgress * 100)}
-            style={{
-              height: 4, background: 'var(--color-surface-2)', borderRadius: 2,
-              cursor: 'pointer', position: 'relative',
-              touchAction: 'none',
-            }}
-            onMouseDown={handleProgressStart}
-            onTouchStart={handleProgressStart}
-            onClick={(e) => {
-              if (!isDragging) {
-                const p = getPointerProgress(e.clientX);
-                seek(p);
-              }
-            }}
-          >
-            <div style={{
-              height: '100%',
-              width: `${displayProgress * 100}%`,
-              background: 'var(--color-accent)',
-              borderRadius: 2,
-              transition: isDragging ? 'none' : 'width 200ms linear',
-            }} />
-            {/* Scrubber thumb */}
-            <div style={{
-              position: 'absolute',
-              top: '50%',
-              left: `${displayProgress * 100}%`,
-              transform: 'translate(-50%, -50%)',
-              width: isDragging ? 16 : 12,
-              height: isDragging ? 16 : 12,
-              borderRadius: '50%',
-              background: 'var(--color-accent)',
-              transition: isDragging ? 'none' : 'left 200ms linear, width 200ms var(--ease-standard), height 200ms var(--ease-standard)',
-              boxShadow: 'var(--shadow-sm)',
-            }} />
-          </div>
-          <div style={{ display: 'flex', justifyContent: 'space-between', marginTop: 6 }}>
-            <span style={{ fontSize: 'var(--text-xs)', color: 'var(--color-text-muted)' }}>
-              {formatDuration(displayTime)}
-            </span>
-            <span style={{ fontSize: 'var(--text-xs)', color: 'var(--color-text-muted)' }}>
-              {effectiveDuration > 0 ? `-${formatDuration(remainingTime)}` : '0:00'}
-            </span>
-          </div>
-        </div>
+        {/* ── Progress Bar (Memoized sub-component) ── */}
+        <PlayerProgressBar
+          currentTime={currentTime}
+          duration={duration}
+          progress={progress}
+          songDuration={currentSong.duration}
+          seek={seek}
+        />
 
         {/* ── Main Controls ── */}
         <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 20 }}>
@@ -879,7 +1023,12 @@ export function FullPlayer() {
             id="player-shuffle-btn"
             aria-label={shuffle ? 'Disable shuffle' : 'Enable shuffle'}
             aria-pressed={shuffle}
-            onClick={toggleShuffle}
+            onClick={(e) => {
+              e.stopPropagation();
+              toggleShuffle();
+            }}
+            onTouchStart={(e) => e.stopPropagation()}
+            onMouseDown={(e) => e.stopPropagation()}
             className="btn-icon"
             style={{ minWidth: 48, minHeight: 48, color: shuffle ? 'var(--color-accent)' : 'var(--color-text-secondary)' }}
           >
@@ -890,7 +1039,12 @@ export function FullPlayer() {
           <button
             id="player-prev-btn"
             aria-label="Previous track"
-            onClick={() => previous()}
+            onClick={(e) => {
+              e.stopPropagation();
+              previous(true);
+            }}
+            onTouchStart={(e) => e.stopPropagation()}
+            onMouseDown={(e) => e.stopPropagation()}
             className="btn-icon"
             style={{ minWidth: 52, minHeight: 52, color: 'var(--color-text-primary)' }}
           >
@@ -901,19 +1055,36 @@ export function FullPlayer() {
           <button
             id="player-play-btn"
             aria-label={isPlaying ? 'Pause' : 'Play'}
-            onClick={togglePlay}
+            onClick={(e) => {
+              e.stopPropagation();
+              togglePlay();
+            }}
+            onTouchStart={(e) => e.stopPropagation()}
+            onMouseDown={(e) => {
+              e.stopPropagation();
+              (e.currentTarget as HTMLButtonElement).style.transform = 'scale(0.93)';
+            }}
+            onMouseUp={(e) => {
+              (e.currentTarget as HTMLButtonElement).style.transform = 'scale(1)';
+            }}
+            onTouchEnd={(e) => {
+              (e.currentTarget as HTMLButtonElement).style.transform = 'scale(1)';
+            }}
             style={{
-              width: 68, height: 68, borderRadius: '50%',
+              width: 68,
+              height: 68,
+              borderRadius: '50%',
               background: 'var(--color-accent)',
-              border: 'none', cursor: 'pointer',
-              display: 'flex', alignItems: 'center', justifyContent: 'center',
+              border: 'none',
+              cursor: 'pointer',
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center',
               color: 'var(--color-accent-on)',
               boxShadow: 'var(--shadow-accent)',
               transition: 'transform 150ms var(--ease-spring)',
               flexShrink: 0,
             }}
-            onMouseDown={(e) => { (e.currentTarget as HTMLButtonElement).style.transform = 'scale(0.93)'; }}
-            onMouseUp={(e) => { (e.currentTarget as HTMLButtonElement).style.transform = 'scale(1)'; }}
           >
             {isLoading ? icons.loading : isPlaying ? icons.pause : icons.play}
           </button>
@@ -922,7 +1093,12 @@ export function FullPlayer() {
           <button
             id="player-next-btn"
             aria-label="Next track"
-            onClick={next}
+            onClick={(e) => {
+              e.stopPropagation();
+              next();
+            }}
+            onTouchStart={(e) => e.stopPropagation()}
+            onMouseDown={(e) => e.stopPropagation()}
             className="btn-icon"
             style={{ minWidth: 52, minHeight: 52, color: 'var(--color-text-primary)' }}
           >
@@ -933,7 +1109,12 @@ export function FullPlayer() {
           <button
             id="player-repeat-btn"
             aria-label={`Repeat mode: ${repeat}`}
-            onClick={toggleRepeat}
+            onClick={(e) => {
+              e.stopPropagation();
+              toggleRepeat();
+            }}
+            onTouchStart={(e) => e.stopPropagation()}
+            onMouseDown={(e) => e.stopPropagation()}
             className="btn-icon"
             style={{ minWidth: 48, minHeight: 48, color: repeat !== 'off' ? 'var(--color-accent)' : 'var(--color-text-secondary)' }}
           >
@@ -947,10 +1128,17 @@ export function FullPlayer() {
             id="player-lyrics-btn"
             aria-label={showLyrics ? 'Hide lyrics' : 'Show lyrics'}
             aria-pressed={showLyrics}
-            onClick={() => setShowLyrics(!showLyrics)}
+            onClick={(e) => {
+              e.stopPropagation();
+              setShowLyrics(!showLyrics);
+            }}
+            onTouchStart={(e) => e.stopPropagation()}
+            onMouseDown={(e) => e.stopPropagation()}
             className="btn-ghost"
             style={{
-              fontSize: 'var(--text-xs)', gap: 6, fontWeight: 500,
+              fontSize: 'var(--text-xs)',
+              gap: 6,
+              fontWeight: 500,
               color: showLyrics ? 'var(--color-accent)' : 'var(--color-text-secondary)',
               background: showLyrics ? 'var(--color-accent-dim)' : 'transparent',
               padding: '8px 16px',
@@ -962,9 +1150,20 @@ export function FullPlayer() {
           <button
             id="player-queue-sec-btn"
             aria-label="View queue"
-            onClick={openQueue}
+            onClick={(e) => {
+              e.stopPropagation();
+              openQueue();
+            }}
+            onTouchStart={(e) => e.stopPropagation()}
+            onMouseDown={(e) => e.stopPropagation()}
             className="btn-ghost"
-            style={{ fontSize: 'var(--text-xs)', gap: 6, fontWeight: 500, color: 'var(--color-text-secondary)', padding: '8px 16px' }}
+            style={{
+              fontSize: 'var(--text-xs)',
+              gap: 6,
+              fontWeight: 500,
+              color: 'var(--color-text-secondary)',
+              padding: '8px 16px',
+            }}
           >
             {icons.queue}
             Queue

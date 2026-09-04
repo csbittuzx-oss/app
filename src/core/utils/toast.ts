@@ -1,31 +1,31 @@
-export type ToastType = 'success' | 'danger' | 'info';
+export type ToastType = 'success' | 'danger' | 'error' | 'warning' | 'info';
 
 export interface ToastPayload {
   id: string;
   message: string;
   type: ToastType;
+  duration?: number;
 }
 
 type ToastListener = (toast: ToastPayload | null) => void;
 const listeners = new Set<ToastListener>();
 
-let currentTimeout: ReturnType<typeof setTimeout> | null = null;
-
-export function showToast(message: string, type: ToastType = 'success', _duration = 2000) {
-  if (currentTimeout) clearTimeout(currentTimeout);
+export function showToast(message: string, type: ToastType = 'success', duration = 2500) {
   const payload: ToastPayload = {
-    id: String(Date.now()),
+    id: `${Date.now()}-${Math.random().toString(36).substring(2, 7)}`,
     message,
     type,
+    duration,
   };
   listeners.forEach((l) => l(payload));
-  // Every toast auto hides after 2 seconds
-  currentTimeout = setTimeout(() => {
-    listeners.forEach((l) => l(null));
-  }, 2000);
+}
+
+export function dismissToast() {
+  listeners.forEach((l) => l(null));
 }
 
 export function subscribeToast(listener: ToastListener): () => void {
   listeners.add(listener);
   return () => listeners.delete(listener);
 }
+
