@@ -26,6 +26,7 @@ import android.support.v4.media.session.PlaybackStateCompat;
 import androidx.core.app.NotificationCompat;
 import androidx.core.app.NotificationManagerCompat;
 import androidx.core.app.ServiceCompat;
+import androidx.core.content.ContextCompat;
 import androidx.media.app.NotificationCompat.MediaStyle;
 
 import java.io.InputStream;
@@ -407,7 +408,12 @@ public class MediaPlaybackService extends Service {
     private void registerNoisyReceiver() {
         if (!isBecomingNoisyRegistered) {
             try {
-                registerReceiver(becomingNoisyReceiver, new IntentFilter(AudioManager.ACTION_AUDIO_BECOMING_NOISY));
+                ContextCompat.registerReceiver(
+                    this,
+                    becomingNoisyReceiver,
+                    new IntentFilter(AudioManager.ACTION_AUDIO_BECOMING_NOISY),
+                    ContextCompat.RECEIVER_NOT_EXPORTED
+                );
                 isBecomingNoisyRegistered = true;
             } catch (Exception ignored) {}
         }
@@ -423,30 +429,43 @@ public class MediaPlaybackService extends Service {
     }
 
     private Bitmap downloadBitmap(String urlStr) {
+        HttpURLConnection connection = null;
+        InputStream input = null;
         try {
             URL url = new URL(urlStr);
-            HttpURLConnection connection = (HttpURLConnection) url.openConnection();
+            connection = (HttpURLConnection) url.openConnection();
             connection.setDoInput(true);
             connection.setInstanceFollowRedirects(true);
             connection.setRequestProperty("User-Agent", "Mozilla/5.0 (Linux; Android 10)");
             connection.setConnectTimeout(5000);
             connection.setReadTimeout(5000);
             connection.connect();
-            InputStream input = connection.getInputStream();
-            Bitmap bitmap = BitmapFactory.decodeStream(input);
-            if (bitmap != null) {
-                // Ensure max dimensions of 512x512 to avoid Binder transaction limit
-                int maxDim = 512;
-                if (bitmap.getWidth() > maxDim || bitmap.getHeight() > maxDim) {
-                    float ratio = Math.min((float) maxDim / bitmap.getWidth(), (float) maxDim / bitmap.getHeight());
-                    int width = Math.round(ratio * bitmap.getWidth());
-                    int height = Math.round(ratio * bitmap.getHeight());
-                    return Bitmap.createScaledBitmap(bitmap, width, height, true);
+
+            if (connection.getResponseCode() == HttpURLConnection.HTTP_OK) {
+                input = connection.getInputStream();
+                Bitmap bitmap = BitmapFactory.decodeStream(input);
+                if (bitmap != null) {
+                    // Ensure max dimensions of 512x512 to avoid Binder transaction limit
+                    int maxDim = 512;
+                    if (bitmap.getWidth() > maxDim || bitmap.getHeight() > maxDim) {
+                        float ratio = Math.min((float) maxDim / bitmap.getWidth(), (float) maxDim / bitmap.getHeight());
+                        int width = Math.round(ratio * bitmap.getWidth());
+                        int height = Math.round(ratio * bitmap.getHeight());
+                        return Bitmap.createScaledBitmap(bitmap, width, height, true);
+                    }
                 }
+                return bitmap;
             }
-            return bitmap;
+            return null;
         } catch (Exception e) {
             return null;
+        } finally {
+            if (input != null) {
+                try { input.close(); } catch (Exception ignored) {}
+            }
+            if (connection != null) {
+                try { connection.disconnect(); } catch (Exception ignored) {}
+            }
         }
     }
 
@@ -466,6 +485,15 @@ public class MediaPlaybackService extends Service {
     @Override
     public void onDestroy() {
         stopPlayback();
+        if (mediaSession != null) {
+            try {
+                mediaSession.release();
+            } catch (Exception ignored) {}
+            mediaSession = null;
+        }
+        try {
+            executor.shutdownNow();
+        } catch (Exception ignored) {}
         super.onDestroy();
     }
 }

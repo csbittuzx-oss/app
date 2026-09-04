@@ -520,7 +520,7 @@ export function SettingsScreen() {
                   </h3>
                   <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8, marginTop: 4 }}>
                     <span style={{ fontSize: 'var(--text-xs)', color: 'var(--color-text-secondary)', fontWeight: 600 }}>
-                      Version 1.2.1
+                      Version {CURRENT_APP_VERSION}
                     </span>
                     <span style={{
                       fontSize: '10.5px',

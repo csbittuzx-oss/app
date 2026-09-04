@@ -156,7 +156,11 @@ public class LocalImportServer {
             String line;
             while ((line = reader.readLine()) != null && !line.isEmpty()) {
                 if (line.toLowerCase().startsWith("content-length:")) {
-                    contentLength = Integer.parseInt(line.substring(15).trim());
+                    try {
+                        contentLength = Integer.parseInt(line.substring(15).trim());
+                    } catch (NumberFormatException ignored) {
+                        contentLength = 0;
+                    }
                 }
             }
 
@@ -189,7 +193,12 @@ public class LocalImportServer {
                     return;
                 }
 
-                // Read POST body
+                if (contentLength <= 0 || contentLength > 64 * 1024) {
+                    sendResponse(out, 400, "Bad Request", "application/json", "{\"error\":\"Invalid payload size\"}");
+                    return;
+                }
+
+                // Read POST body safely bounded to max 64KB
                 char[] buf = new char[contentLength];
                 int read = 0;
                 while (read < contentLength) {
@@ -197,7 +206,7 @@ public class LocalImportServer {
                     if (r == -1) break;
                     read += r;
                 }
-                String body = new String(buf);
+                String body = new String(buf, 0, read);
 
                 try {
                     JSONObject json = new JSONObject(body);

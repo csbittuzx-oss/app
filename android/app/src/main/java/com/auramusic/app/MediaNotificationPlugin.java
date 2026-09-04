@@ -30,12 +30,18 @@ public class MediaNotificationPlugin extends Plugin {
     private MediaPlaybackService playbackService;
     private boolean isBound = false;
 
+    private Runnable pendingUpdateRunnable = null;
+
     private final ServiceConnection serviceConnection = new ServiceConnection() {
         @Override
         public void onServiceConnected(ComponentName className, IBinder service) {
             MediaPlaybackService.LocalBinder binder = (MediaPlaybackService.LocalBinder) service;
             playbackService = binder.getService();
             isBound = true;
+            if (pendingUpdateRunnable != null) {
+                pendingUpdateRunnable.run();
+                pendingUpdateRunnable = null;
+            }
         }
 
         @Override
@@ -105,6 +111,12 @@ public class MediaNotificationPlugin extends Plugin {
 
         if (playbackService != null) {
             playbackService.updateTrack(title, artist, album, artworkUrl, playing, duration, position);
+        } else if (playing) {
+            pendingUpdateRunnable = () -> {
+                if (playbackService != null) {
+                    playbackService.updateTrack(title, artist, album, artworkUrl, true, duration, position);
+                }
+            };
         }
 
         call.resolve();
@@ -112,6 +124,7 @@ public class MediaNotificationPlugin extends Plugin {
 
     @PluginMethod
     public void clear(PluginCall call) {
+        pendingUpdateRunnable = null;
         if (playbackService != null) {
             playbackService.stopPlayback();
         }
@@ -120,6 +133,11 @@ public class MediaNotificationPlugin extends Plugin {
 
     @Override
     protected void handleOnDestroy() {
+        if (instance == this) {
+            instance = null;
+        }
+        pendingUpdateRunnable = null;
+        playbackService = null;
         if (isBound && getContext() != null) {
             try {
                 getContext().unbindService(serviceConnection);

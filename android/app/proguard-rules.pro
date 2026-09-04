@@ -21,6 +21,7 @@
 -keep class com.auramusic.app.MediaActionReceiver { *; }
 -keep class com.auramusic.app.MediaPlaybackService { *; }
 -keep class com.auramusic.app.MainActivity { *; }
+-keep class com.auramusic.app.data.** { *; }
 
 # Preserve Coroutine, Reflection, and Serialized Names if any
 -keepattributes *Annotation*,Signature,InnerClasses,EnclosingMethod
